@@ -43,6 +43,8 @@ public enum LaunchVisibility
 }
 ```
 
+`StageId`는 연구 단계가 아니라 발사 목표 ID다. 연구 단계 자체는 엔진 프리셋 연구와 새 엔진 개발만 가진다.
+
 ### GameState
 
 ```csharp
@@ -56,6 +58,7 @@ public sealed class GameState
     public int funds = 2200;
     public int quarterlyFunding = 600;
 
+    public int developedEnginePresetCount = 1;
     public EnginePresetState[] enginePresets;
     public StageLaunchState engineTest;
     public StageLaunchState rocket;
@@ -76,6 +79,7 @@ public sealed class GameState
 public sealed class EnginePresetState
 {
     public string presetId;
+    public bool developed;
     public int level;
     public int fuelCapacity;
     public int cooling;
@@ -206,6 +210,8 @@ public sealed class SimRunData
 ### ResearchManager
 
 - 엔진 프리셋별 일반·집중 연구
+- 새 엔진 프리셋 개발
+- 개발된 프리셋 수 관리
 - 엔진 프리셋 레벨 상한 처리
 - 단계 해금 검사
 - 엔진 프리셋 스탯 갱신
@@ -261,7 +267,9 @@ ScriptableObject 권장:
 - 시작 자금
 - 분기 연구비
 - 하한·상한
+- 시작 엔진 프리셋 개수 1
 - 엔진 프리셋 최대 개수 10
+- 새 엔진 개발 비용과 소요 시간, 미정이면 별도 값으로 분리
 - 엔진 프리셋 공통 연구 비용과 공통 설치 비용
 - 등급 보상
 - 확률 하한·상한
@@ -270,6 +278,7 @@ ScriptableObject 권장:
 
 ```text
 maxPresetCount
+startingPresetCount
 presetId
 displayName
 normalResearchCost
@@ -290,8 +299,8 @@ displayName
 launchCost
 unlockRequiredPreviousStage
 unlockRequiredGrade
-designSceneName
-simulationSceneName
+designScreenPrefabId
+simulationScreenPrefabId
 ```
 
 ### LaunchVisibilityConfig
@@ -339,6 +348,9 @@ designFitToleranceByProgress
 
 ```pseudo
 function ExecuteResearch(enginePreset, statId, mode):
+    if not enginePreset.developed:
+        return Locked
+
     cost = GetEngineResearchCost(enginePreset.id, mode)
 
     if funds < cost:
@@ -356,6 +368,35 @@ function ExecuteResearch(enginePreset, statId, mode):
     CheckStageUnlocks()
     EndQuarter()
 ```
+
+### 새로운 엔진 개발
+
+```pseudo
+function DevelopNewEnginePreset():
+    if developedEnginePresetCount >= maxPresetCount:
+        return MaxPresetReached
+
+    cost = GetNewEngineDevelopmentCost()
+    duration = GetNewEngineDevelopmentDuration()
+
+    if funds < cost:
+        return NotEnoughFunds
+
+    funds -= cost
+    totalFundsSpent += cost
+
+    next = enginePresets[developedEnginePresetCount]
+    next.developed = true
+    next.level = 0
+    ResetStatsToBase(next)
+
+    developedEnginePresetCount += 1
+
+    if duration > 0:
+        EndQuarter(duration)
+```
+
+새 엔진 개발의 비용과 시간은 아직 확정되지 않았다. 연구 비용과 공유하지 말고 별도 밸런스 값으로 둔다.
 
 ### 설계 진입
 
@@ -522,7 +563,17 @@ ApplyRewardsAndStageRecord();
 - 결과 화면 중복 호출
 - 애니메이션 이벤트 중복
 
-## 11. 저장 정책
+## 11. UI 프리팹 정책
+
+운영, 설계, 발사 확인, 결과 보고서 UI는 프리팹 기반으로 만든다.
+
+- 화면 루트 프리팹: 운영 화면, 설계 화면, 발사 확인 모달, 결과 보고서
+- 반복 항목 프리팹: 엔진 프리셋 카드, 발사 목표 카드, 스탯 행, 버튼 행
+- 런타임에는 프리팹 인스턴스를 생성하고 데이터만 바인딩
+- 모든 UI를 코드에서 직접 생성하는 방식은 정식 구현 경로에서 사용하지 않음
+- 임시 디버그 UI만 예외적으로 코드 생성 허용
+
+## 12. 저장 정책
 
 게임잼 버전은 중간 저장을 제공하지 않는다. 그러나 화면 전환 사이 상태 보존은 필요하다.
 
@@ -534,7 +585,7 @@ ApplyRewardsAndStageRecord();
 
 권장 방식은 `GameSession` 하나를 `01_Main` 안에서 유지하는 것이다. 영구 저장 시스템은 만들지 않는다.
 
-## 12. 입력
+## 13. 입력
 
 메인 UI:
 
@@ -556,7 +607,7 @@ ApplyRewardsAndStageRecord();
 - Esc: 일시정지
 - 결과 개입 입력 없음
 
-## 13. 오류 처리
+## 14. 오류 처리
 
 - `SimRunData` 없이 발사 결과 화면에 진입하면 연구 화면으로 복귀
 - `DesignData` 없이 설계 화면에 진입하면 연구 화면으로 복귀
@@ -565,7 +616,7 @@ ApplyRewardsAndStageRecord();
 - 카메라가 누락되어도 기본 카메라 사용
 - 결과 보고서 데이터가 누락되면 등급과 경제 변화만 표시
 
-## 14. 성능 기준
+## 15. 성능 기준
 
 - 1080p에서 안정적 실행
 - 폭발 파편 수를 제한

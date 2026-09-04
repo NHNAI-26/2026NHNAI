@@ -21,7 +21,7 @@
 
 - **Outcome:** Engine presets are authored as ScriptableObjects holding **physical-unit** values. Rocket design and launch consume those values with no conversion layer. Cooling drives a real heat-accumulation model. The GDD's `0~100` stat scale is abandoned.
 - **Primary audience:** designers (authoring/balancing), design & launch implementers, players.
-- **In scope:** physical-unit SO data model, 10-slot cap, heat model, design-stage consumption, editor test-fill tool.
+- **In scope:** physical-unit SO data model, 10-slot cap, runtime developed-slot filtering, heat model, design-stage consumption, editor test-fill tool.
 - **Out of scope:** minigame implementation, runtime preset-editing UI, runtime slot persistence, GDD 06 formula redesign.
 - **Material unresolved items:** OI-005, OI-006, OI-007, OI-010, OI-011, OI-012, OI-013, OI-016, OI-017.
 - **Active question IDs:** none — interview finished.
@@ -63,6 +63,7 @@ This plan decides the unit system, the heat model, SO structure and constraints,
 | Heat driven by actual applied output, not preset maximum | UD-016 | active |
 | Ignition reliability stored as a percentage | UD-013 | active |
 | Max 10 preset slots | UD-002, UD-008 | active |
+| New games expose one developed preset; later presets are unlocked by new engine development | latest GDD correction | active |
 | Unlimited engine count per rocket | UD-014 | active |
 | Mixing different presets on one rocket | UD-015 | active |
 | Editor tool that fills test preset values | UD-009 | active |
@@ -73,7 +74,7 @@ This plan decides the unit system, the heat model, SO structure and constraints,
 | Excluded item | Source IDs | Why |
 | --- | --- | --- |
 | The four research minigames | UD-005 | User scoped this pass to "SO first" |
-| Runtime preset-editing UI | UD-005 | Data + read + test tool only |
+| Runtime preset-stat editing UI | UD-005 | Data + read + test tool only |
 | Runtime slot persistence | UD-008, OI-010 | Slot model decided; storage medium deferred |
 | A fifth management resource | SF-013, UD-006 | GDD 18 §4 forbids it; price is display-only |
 | Staging, part catalog, gimbal | SF-002 | GDD 07 §5 "deliberately not built" |
@@ -86,9 +87,9 @@ This plan decides the unit system, the heat model, SO structure and constraints,
 
 1. A designer creates an `EngineStatsSO` asset and enters price plus four stats in physical units.
 2. The editor tool fills test preset values in one action (UD-009).
-3. Presets are registered into a slot list capped at 10.
+3. Presets are registered into a slot list capped at 10, but a new game exposes only slot 0 (`Engine01`).
 4. The player enters the rocket design stage.
-5. The design stage reads the slots and offers the available engines.
+5. The design stage reads only developed slots. `New Engine Development` exposes the next slot in order, up to 10.
 6. The player attaches **any number** of engines (UD-014), **mixing presets freely** (UD-015).
 7. `RocketPart` uses the SO's physical values directly for thrust, fuel, burn rate, heat, and cooling.
 8. On launch, ignition is rolled per engine against its reliability percentage; surviving engines apply thrust and accumulate temperature.

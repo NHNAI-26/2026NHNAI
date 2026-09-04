@@ -34,7 +34,7 @@
   로켓 표면에 놓으면 즉시 부착, 바닥에 놓으면 바닥 배치. 붙은 엔진을 클릭하면 이동·회전 버튼이 뜨고,
   회전한 자세대로 추력이 나간다.
 - **주 사용자:** 개발자 본인(조작 검증), ARTEMIS: 2026 플레이어(설계 단계).
-- **In scope:** 좌측 프리셋 패널 UI, 호버 스탯 표시(2단계, 다른 세션 SO 기반), 드래그 부착/바닥 배치,
+- **In scope:** 프리팹 기반 좌측 프리셋 패널 UI, 호버 스탯 표시(2단계, 다른 세션 SO 기반), 드래그 부착/바닥 배치,
   선택 시 이동·회전 버튼, **부품 자세를 따르는 추력 모델 전환**, 기존 우클릭 궤도 회전 유지,
   UI·3D 입력 분리, GDD 07 §5 및 `docs/rocket-simulation.md` 개정.
 - **Out of scope:** 엔진 스탯 SO 데이터 모델 자체(다른 세션), 발사 확률 계산, 엔진 ON/OFF 타임라인,
@@ -81,7 +81,7 @@
 
 | 항목 | 근거 ID | 상태 | 단계 | 비고 |
 | --- | --- | --- | --- | --- |
-| 좌측 엔진 프리셋 패널 UI | UD-002, UD-003 | active | 1 | UGUI, AR-001 방식 |
+| 좌측 엔진 프리셋 패널 UI | UD-002, UD-003 | active | 1 | UGUI, 화면 루트와 반복 항목 프리팹 기반 |
 | 프리셋 드래그 → 로켓 부착 / 바닥 배치 | UD-007, UD-010 | active | 1 | 드롭 지점이 분기를 정함 |
 | 부착 엔진 클릭 선택 → 이동·회전 버튼 | UD-004 | active | 1 | 이동 버튼 동작은 OI-003 |
 | 제한 없는 부품 자세 회전 + 추력 추종 | UD-008, UD-011 | active | 1 | 잠금 규칙·테스트·GDD 조항 개정 포함 |
@@ -169,7 +169,7 @@
 | technical | `activeInputHandler: 1` — 레거시 `UnityEngine.Input` 불가 | SF-018 | Input System 또는 EventSystem 경유 | active |
 | technical | `RocketBuilder`가 `Physics.Raycast` 직접 호출, UI 차단 없음 | SF-009 | 입력 분리 필수 | active |
 | dependency | SO 타입·필드·경로는 다른 세션에서 확정. 2단계는 그 전에 시작 안 함 | UD-009, UD-012 | 1단계는 SO 없이 완결 | active |
-| process | 씬 편집은 최후 수단. 연구 UI는 코드 생성 + 런타임 스폰 | SF-007, 프로젝트 CLAUDE.md | 같은 패턴 권장 | active |
+| process | 정식 UI는 프리팹 기반. 코드 생성 UGUI는 임시 디버그 화면에만 허용 | 최신 GDD 11/18 | 메인/설계 UI는 프리팹 인스턴스에 데이터 바인딩 | active |
 | process | `07_로켓_설계.md`에 미커밋 수정분 존재 | SF-015 | 사용자 변경분 보존 | active |
 
 ## Success Evidence
@@ -208,7 +208,7 @@
 | SF-004 | sourced fact | GDD 07 §5에 **부품 카탈로그** 미구현 + **"부품 자세는 로켓 기준"** | `07_로켓_설계.md` §5 | active | RK-001, RK-002, R-009 |
 | SF-005 | sourced fact | GDD 07 §3·GDD 11 §7 모두 "힘 방향 조정"을 허용 입력으로 명시 | 두 문서 | active | R-009 |
 | SF-006 | sourced fact | `RocketEngine.prefab` 존재 (`thrust=1200`, `fuel=100`, `burnRate=20`) | 프리팹 4964-4967행 | active | AR-003 |
-| SF-007 | sourced fact | 연구 화면은 UGUI를 코드로 생성하고 `[RuntimeInitializeOnLoadMethod]`로 스폰 | `ResearchOperationUIController.cs:43-90` | active | AR-001 |
+| SF-007 | sourced fact | 이전 연구 프로토타입은 UGUI를 코드로 생성하고 `[RuntimeInitializeOnLoadMethod]`로 스폰했다. 최신 GDD는 정식 UI에서 이 방식을 대체한다 | `ResearchOperationUIController.cs:43-90`; GDD 11/18 | active | AR-001 superseded |
 | SF-008 | sourced fact | `Border.Simulation`은 `autoReferenced: true`라 UGUI/TMP 사용 가능 | `Border.Simulation.asmdef` | active | AR-001, R-012 |
 | SF-009 | sourced fact | `RocketBuilder`가 `Physics.Raycast` 직접 호출, UI 차단 코드 전무 | `RocketBuilder.cs:87,102` + 전체 grep | active | R-006, RK-003 |
 | SF-010 | sourced fact | 엔진 스탯은 GDD 4종, 0~100 | `07_로켓_설계.md` §6 | active | R-003, R-012 |
@@ -223,7 +223,7 @@
 | SF-019 | sourced fact | 선행 spec R-018/R-019가 Q-011 대기로 `blocked` | 해당 문서 §6 | active | RK-006 |
 | SF-020 | sourced fact | `rocket-simulation.md`가 부품 추종 추력을 **의도적 배제 결정**으로 기록 | 해당 문서 | active | RK-007, R-009 |
 | SF-021 | sourced fact | `EndDrag`가 이미 `_overRocket`으로 부착/복귀를 분기 | `RocketBuilder.cs:129-138` | active | R-013, AR-008 |
-| AR-001 | agent recommendation | 패널은 코드 생성 UGUI + 런타임 스폰(연구 UI 패턴) | 씬 편집 회피, 검증된 패턴 | proposed | R-002 |
+| AR-001 | agent recommendation | 패널은 프리팹으로 만들고 런타임에는 개발된 프리셋 목록만 바인딩한다 | 최신 사용자 수정이 정식 화면의 전체 코드 생성을 거부 | active | R-002 |
 | AR-002 | agent recommendation | `EventSystem.current.IsPointerOverGameObject()`로 UI 위 입력 차단 | 현재 차단 전무 | proposed | R-006, RK-003 |
 | AR-003 | agent recommendation | 프리셋 드래그는 프리팹 인스턴스화 후 기존 드래그 상태 재사용 | 배치 로직 중복 방지 | proposed | R-004, R-013 |
 | AR-004 | agent recommendation | 회전을 추력 방향 조정으로만 정의 | 최소 변경안이었음 | superseded (rev 2) | UD-008이 자세 회전 선택 |

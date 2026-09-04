@@ -34,7 +34,7 @@ Related documents: `docs/specs/rocket-prototype-revision-spec.md` (prior prototy
   stats, drags it out, drops it on the rocket surface to attach immediately or on the ground to place it there,
   then clicks an attached engine to get move and rotate buttons. A rotated engine thrusts along its own axis.
 - **Primary users:** the developer (verifying the interaction), ARTEMIS: 2026 players (design stage).
-- **In scope:** left preset panel UI, hover stat display (phase 2, backed by the other session's SO), drag to
+- **In scope:** prefab-based left preset panel UI, hover stat display (phase 2, backed by the other session's SO), drag to
   attach or ground-place, selection with move/rotate buttons, **switch to a part-orientation-following thrust
   model**, keep the existing right-drag orbit camera, separate UI input from 3D input, revise GDD 07 §5 and
   `docs/rocket-simulation.md`.
@@ -85,7 +85,7 @@ The engine stat data structure (SO fields, preset count, price) belongs to
 
 | Scope item | Source IDs | Status | Phase | Notes |
 | --- | --- | --- | --- | --- |
-| Left engine preset panel UI | UD-002, UD-003 | active | 1 | UGUI, built per AR-001 |
+| Left engine preset panel UI | UD-002, UD-003 | active | 1 | UGUI, prefab-based root and repeated entry prefabs |
 | Preset drag → attach to rocket / place on ground | UD-007, UD-010 | active | 1 | Drop target chooses the branch |
 | Click an attached engine → move and rotate buttons | UD-004 | active | 1 | Move button behaviour is OI-003 |
 | Unrestricted part rotation with thrust following orientation | UD-008, UD-011 | active | 1 | Includes revising the locked rule, test and GDD clause |
@@ -176,7 +176,7 @@ The engine stat data structure (SO fields, preset count, price) belongs to
 | technical | `activeInputHandler: 1` — legacy `UnityEngine.Input` throws at runtime | SF-018 | Mouse input via Input System or EventSystem only | active |
 | technical | `RocketBuilder` calls `Physics.Raycast` directly with no UI guard | SF-009 | Input separation is mandatory once a panel exists | active |
 | dependency | SO type, fields and asset paths are settled in the other session; phase 2 does not start before that | UD-009, UD-012 | Phase 1 must be complete without the SO | active |
-| process | Scene edits are a last resort; the research UI builds its UGUI in code and spawns at runtime | SF-007, project CLAUDE.md | Same pattern preferred | active |
+| process | Production UI must be prefab-based; code-generated UGUI is allowed only for temporary debug screens | Latest GDD 11 and GDD 18 | Main/design UI should bind data to prefab instances | active |
 | process | `docs/artemis-2026-gdd/07_로켓_설계.md` has an uncommitted working-tree edit | SF-015 | Preserve the user's change when editing that file | active |
 
 ## Success Evidence
@@ -215,7 +215,7 @@ The engine stat data structure (SO fields, preset count, price) belongs to
 | SF-004 | sourced fact | GDD 07 §5 lists **part catalogue** as a deliberate omission and states **"part orientation follows the rocket"** | `docs/artemis-2026-gdd/07_로켓_설계.md` §5 | active | RK-001, RK-002, R-009 |
 | SF-005 | sourced fact | GDD 07 §3 and GDD 11 §7 both list "thrust direction adjustment" as allowed | `07_로켓_설계.md` §3, `11_UI_UX_화면설계.md` §7 | active | R-009 |
 | SF-006 | sourced fact | `RocketEngine.prefab` exists with `thrust=1200`, `fuel=100`, `burnRate=20` | `Assets/03. Prefabs/Simulation/RocketEngine.prefab:4964-4967` | active | AR-003 |
-| SF-007 | sourced fact | The research screen builds all UGUI **in code** and spawns via `[RuntimeInitializeOnLoadMethod]` | `Assets/01. Scripts/Research/ResearchOperationUIController.cs:43-90` | active | AR-001 |
+| SF-007 | sourced fact | The previous research prototype built UGUI **in code** and spawned via `[RuntimeInitializeOnLoadMethod]`; latest GDD now supersedes this for production UI | `Assets/01. Scripts/Research/ResearchOperationUIController.cs:43-90`; GDD 11/18 | active | AR-001 superseded |
 | SF-008 | sourced fact | `Border.Simulation.asmdef` references only `Border` and `Unity.InputSystem` but is `autoReferenced: true`, so UGUI/TMP are available | `Assets/01. Scripts/Simulation/Border.Simulation.asmdef` | active | AR-001, R-012 |
 | SF-009 | sourced fact | `RocketBuilder` calls `Physics.Raycast` directly; no `IsPointerOverGameObject` guard exists anywhere in the project | `RocketBuilder.cs:87,102`, repo-wide grep | active | R-006, RK-003 |
 | SF-010 | sourced fact | Engine stats are the four GDD 06/07 values (`FuelCapacity`/`Cooling`/`MaxOutput`/`IgnitionReliability`), range 0-100 | `07_로켓_설계.md` §6 | active | R-003, R-012 |
@@ -230,7 +230,7 @@ The engine stat data structure (SO fields, preset count, price) belongs to
 | SF-019 | sourced fact | The prior spec's R-018/R-019 (integration into the main game) are `blocked` on its Q-011 | that document §6 | active | RK-006 |
 | SF-020 | sourced fact | `docs/rocket-simulation.md` records part-following thrust as a **deliberately rejected** option — "a side engine would spin the rocket and the game becomes something else" | `docs/rocket-simulation.md` | active | RK-007, R-009 |
 | SF-021 | sourced fact | `EndDrag` already branches on `_overRocket` between attach and revert — UD-010's three-way branch extends this point | `RocketBuilder.cs:129-138` | active | R-013, AR-008 |
-| AR-001 | agent recommendation | Build the preset panel as **code-generated UGUI spawned at runtime**, following `ResearchOperationUIController` | Project CLAUDE.md makes scene edits a last resort; the pattern is already proven (SF-007) | proposed | R-002 |
+| AR-001 | agent recommendation | Build the preset panel from prefabs and bind the developed preset list at runtime | Latest user correction rejects all-code UI generation for production screens | active | R-002 |
 | AR-002 | agent recommendation | Guard `RocketBuilder`'s click handling with `EventSystem.current.IsPointerOverGameObject()` | No UI guard exists today (SF-009) | proposed | R-006, RK-003 |
 | AR-003 | agent recommendation | Preset drag instantiates `RocketEngine.prefab` and hands it to the existing drag state | A separate placement path would duplicate raycast and collider handling | proposed | R-004, R-013 |
 | AR-004 | agent recommendation | Define rotation as thrust-direction only and keep part orientation fixed | Was the minimal-change option | superseded (rev 2) | UD-008 chose part rotation |

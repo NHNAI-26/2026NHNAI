@@ -4,20 +4,20 @@
 
 | 파일 | 바이트 | SHA-256 |
 |---|---:|---|
-| `00_README.md` | 5928 | `46f6ae23596e4fcf602418bb76dcfaa100dcf0ac27697733f403a57152139e7e` |
-| `01_게임_비전_및_범위.md` | 6670 | `eee767bd40431cfa7ce7165f4e694eb456c1c13cd59a7ccb3ee078cae0d5b9e7` |
-| `02_전체_플레이_흐름.md` | 6388 | `f08b23be6cf98a2567e18e767d3b0c56ac92702cc1bfa84ca4bfdfd2c29a0b47` |
-| `03_시간_연구비_경제.md` | 6357 | `b215a4f27e5422ae73c1a3dd769be8760489cc6a819a9b67a98f7cebd80f36cc` |
-| `04_연구_진행도_단계해금.md` | 7674 | `3341442d89c702dc2016acdfe42483553be1a214743df65a1f080758cef3f987` |
+| `00_README.md` | 6003 | `fec8c0f10be00fe1ff03950fc38ca2a67a0300704e9bba66e9c2b61ecd4aed15` |
+| `01_게임_비전_및_범위.md` | 7042 | `b53ea5c1c8cd3ca4f20bba248d202d54c303a7f5cad031f931aeaddda7ead2cf` |
+| `02_전체_플레이_흐름.md` | 6580 | `2b9536d511f86cf6a36ba7155ad68b2fee3da577481ab75aab0afde19b8d772b` |
+| `03_시간_연구비_경제.md` | 6627 | `b9c38614d5899ea0894b5d617df6044c4b361e0f3a8d0fcf1c85645929c84250` |
+| `04_연구_진행도_단계해금.md` | 8929 | `d4375756a6e0205587a273ae30c7e5eee375fbe78f4b8cf160720a68626e4cfa` |
 | `05_테스트공개성_설계보정_확률.md` | 8636 | `3bc94611a6e055c3540a47133301222fbd8dd5576f7dc5acea07d52f612b413d` |
-| `06_엔진_연구.md` | 24108 | `15fbe5da927723a9016f88d51e5b3e5fc4a988b6a3546d11500dc93fceedb348` |
-| `07_로켓_설계.md` | 10952 | `ca8186804747dfa58e4b1ba3f6ddee71b32f7671076c26fdce46ee339a4d778b` |
+| `06_엔진_연구.md` | 25540 | `3a938eab01ec9f7cf1b35c98f3c09bdc98e2d207dbec140cc1cc02b37ef8e567` |
+| `07_로켓_설계.md` | 12621 | `93ce0a1be83d4500bab5e048b837bba3b13fc07481f6278b3ba9cde664736a9d` |
 | `08_로켓_발사.md` | 9736 | `6741affc1207035c97139212ed2d2aef855067d997fb83c3730a6e8b7dcfc422` |
-| `11_UI_UX_화면설계.md` | 10377 | `aa2021dbcfa4cf8e12165f30e500e9c55000df11e7f6373278fdb233f0d73e5e` |
-| `12_밸런스_데이터표.md` | 9132 | `a71663b9f2df4e75f9b84323064dd1197977945a5020f92e7828b259f0b7fbc1` |
-| `13_기술구조_Unity.md` | 13513 | `a68cad396b94cc8ad6c6b86c6899ed85d33d67e5edbc65d73f268059f4c89891` |
+| `11_UI_UX_화면설계.md` | 11338 | `f8bdc9adaf5f9cca885c877e6165f9edc7d51aceef1df4bdcea60e647725daed` |
+| `12_밸런스_데이터표.md` | 9406 | `29a4f5edbb700b9cdcb8d2fbecf81c0a4ef254e4e6bdcc6907d77b3735fa49f1` |
+| `13_기술구조_Unity.md` | 15267 | `239d792f16ec177c772415399d72b5db1415f0d6176ae87f4149dc42f8521652` |
 | `14_아트_VFX_사운드.md` | 5,331 | `d61d43ae303b1401fcc345a592dc2e6e0f0925c063cc37c83be76f5c0dbc32bf` |
-| `15_48시간_제작계획.md` | 6876 | `4261b82770b3d3dad269a4b5ed6d0adf363d28f795c53092238bec9d4b2fe422` |
-| `16_QA_완료기준.md` | 8157 | `b5f7e8432403743473fa4bd4741dc2ef50ca6cbed2a3bf52d58a9cc43968b2e0` |
-| `17_AI_구현_인수인계.md` | 10489 | `a2bffa93f504049b96d1c2abe5b0e5d99b1ed6a00de59d23aadca43e1cde7310` |
-| `18_확정사항_및_변경금지선.md` | 6525 | `e178c6f8b4c6c227a2f998f5fc37df40c40369bd0138bb6f1e561701d5dfe001` |
+| `15_48시간_제작계획.md` | 6991 | `28153a1c885b1769d97498110ca60d6de8740edf2573666875d27ed39a69ef3d` |
+| `16_QA_완료기준.md` | 9087 | `4c1ea8c06bcd6948dfb4c6dd045da06afb2cefaf65de5f5fc037297543539c34` |
+| `17_AI_구현_인수인계.md` | 11513 | `1a3f93e20806ed527b0ebc9b344ab177b35b2d1340f07004247c9acb9fa5a200` |
+| `18_확정사항_및_변경금지선.md` | 7430 | `f9050689d4583019975b11a598acc2e27d8da64db3c0df2c5e8f43219c20f469` |
