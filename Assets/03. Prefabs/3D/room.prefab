@@ -1454,6 +1454,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 24.374
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: 7dc9dba02e53244bca93bd7e4db6c7df, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 33421bde4f51a4426846fff0af045d91, type: 2}
     - target: {fileID: 919132149155446097, guid: 7dc9dba02e53244bca93bd7e4db6c7df, type: 3}
       propertyPath: m_Name
       value: Right Small Table (1)
@@ -1532,6 +1536,10 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: bba9dd4a3a9094623b20825aef24acfc, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 9067dd09bc13544a48988ce64d8eae9c, type: 2}
     - target: {fileID: 919132149155446097, guid: bba9dd4a3a9094623b20825aef24acfc, type: 3}
       propertyPath: m_Name
       value: Center Drawer Cabinet (2)
@@ -1688,6 +1696,10 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: bb434183169d848bcaaaec2fe79733b6, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 73d5183d3eaa54781b54c00ef96b29a3, type: 2}
     - target: {fileID: 919132149155446097, guid: bb434183169d848bcaaaec2fe79733b6, type: 3}
       propertyPath: m_Name
       value: Left Workbench

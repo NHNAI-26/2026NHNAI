@@ -17,6 +17,7 @@ namespace Border.Research
         [SerializeField] private GameObject operationScreenPrefab;
         [SerializeField] private Button enginePresetCardPrefab;
         [SerializeField] private ResearchEnginePreviewController enginePreview;
+        [SerializeField] private Transform researchLabRoot;
 
         private readonly EngineCardView[] engineCards = new EngineCardView[EngineCount];
 
@@ -373,6 +374,7 @@ namespace Border.Research
         {
             EnsureSelectedEnginePresetUnlocked();
             selectedStage = model.GetCurrentLaunchTarget();
+            ShowResearchLab();
             ShowEnginePreview();
             dateText.text = $"날짜\n{model.Year} Q{model.Quarter}";
             remainingTurnsText.text = $"남은 분기\n{model.RemainingTurns}";
@@ -479,6 +481,7 @@ namespace Border.Research
         {
             RequestedScreenName = ResearchFlowSession.DesignScreenName;
             HideEnginePreview();
+            HideResearchLab();
 
             if (activeDesignController != null)
             {
@@ -491,6 +494,8 @@ namespace Border.Research
                 return;
             }
 
+            RequestedScreenName = ResearchFlowSession.ResearchScreenName;
+            ShowResearchLab();
             statusText.text = "설계 단계 진입 실패. 시뮬레이션 설계 호스트를 찾을 수 없습니다.";
             Refresh();
         }
@@ -509,6 +514,7 @@ namespace Border.Research
                 canvasTransform.gameObject.SetActive(true);
             }
 
+            ShowResearchLab();
             if (initialized)
             {
                 Refresh();
@@ -582,6 +588,24 @@ namespace Border.Research
             }
         }
 
+        private void ShowResearchLab()
+        {
+            ResolveResearchLabRoot();
+            if (researchLabRoot != null)
+            {
+                researchLabRoot.gameObject.SetActive(true);
+            }
+        }
+
+        private void HideResearchLab()
+        {
+            ResolveResearchLabRoot();
+            if (researchLabRoot != null)
+            {
+                researchLabRoot.gameObject.SetActive(false);
+            }
+        }
+
         private void ResolveEnginePreview()
         {
             if (enginePreview != null)
@@ -599,6 +623,23 @@ namespace Border.Research
             {
                 enginePreview = preview;
                 return;
+            }
+        }
+
+        private void ResolveResearchLabRoot()
+        {
+            if (researchLabRoot != null)
+            {
+                return;
+            }
+
+            foreach (Transform candidate in FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (candidate.name == "Engine Research Lab")
+                {
+                    researchLabRoot = candidate;
+                    return;
+                }
             }
         }
 
