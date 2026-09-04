@@ -1,0 +1,21 @@
+{
+    "name": "Border.Simulation.EditModeTests",
+    "rootNamespace": "Border.Simulation.Tests",
+    "references": [
+        "Border.Simulation"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}
