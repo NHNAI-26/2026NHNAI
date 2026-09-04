@@ -9,6 +9,7 @@ namespace Border.Research
 
         private ResearchPrototypeModel model;
         private ResearchStageId selectedStage;
+        private ResearchDesignEntryData? pendingDesignEntry;
         private Vector2 scrollPosition;
         private GUIStyle titleStyle;
         private GUIStyle headerStyle;
@@ -54,7 +55,7 @@ namespace Border.Research
             GUILayout.Space(10);
             DrawForecast();
             GUILayout.Space(10);
-            DrawPendingTest();
+            DrawDesignEntry();
             GUILayout.Space(10);
             DrawLog();
 
@@ -65,7 +66,7 @@ namespace Border.Research
         private void DrawHeader()
         {
             GUILayout.Label("ARTEMIS: 2026 연구 단계 프로토타입", titleStyle);
-            GUILayout.Label("연구비를 써서 진행도를 올리고, 발사창을 보고 시뮬레이션 인계 데이터를 만든다.", bodyStyle);
+            GUILayout.Label("연구비를 써서 진행도를 올리고, 발사창을 보고 설계 단계로 들어간다.", bodyStyle);
             GUILayout.Space(8);
 
             GUILayout.BeginHorizontal();
@@ -76,6 +77,7 @@ namespace Border.Research
             if (GUILayout.Button("초기화", buttonStyle, GUILayout.Width(90)))
             {
                 model.Reset();
+                pendingDesignEntry = null;
             }
 
             GUILayout.EndHorizontal();
@@ -118,7 +120,7 @@ namespace Border.Research
 
             string bestGrade = stage.HasBestGrade ? stage.BestGrade.ToString() : "-";
             GUILayout.Label($"시험 조건: 진행도 {config.MinimumTestProgress}+ | 최고 등급: {bestGrade} | 시도: {stage.AttemptCount}", smallStyle);
-            GUILayout.Label($"현재 성공률: {model.CalculateSuccessChance(selectedStage)}%", smallStyle);
+            GUILayout.Label($"연구 기준 성공률: {model.CalculateSuccessChance(selectedStage)}%", smallStyle);
             GUILayout.Space(8);
 
             GUI.enabled = stage.Unlocked && !model.DeadlineReached;
@@ -126,16 +128,25 @@ namespace Border.Research
             if (GUILayout.Button($"일반 연구  -{config.NormalResearchCost} / +{ResearchPrototypeModel.NormalResearchGain}", buttonStyle, GUILayout.Height(36)))
             {
                 model.ExecuteResearch(selectedStage, false);
+                pendingDesignEntry = null;
             }
 
             if (GUILayout.Button($"집중 연구  -{config.FocusedResearchCost} / +{ResearchPrototypeModel.FocusedResearchGain}", buttonStyle, GUILayout.Height(36)))
             {
                 model.ExecuteResearch(selectedStage, true);
+                pendingDesignEntry = null;
             }
 
-            if (GUILayout.Button($"시뮬레이션 인계  -{config.TestCost}", buttonStyle, GUILayout.Height(36)))
+            if (GUILayout.Button($"설계 진입  비용 {config.TestCost} 필요", buttonStyle, GUILayout.Height(36)))
             {
-                model.CreateTestPreview(selectedStage);
+                if (model.TryEnterDesign(selectedStage, out ResearchDesignEntryData data) == ResearchActionResult.Success)
+                {
+                    pendingDesignEntry = data;
+                }
+                else
+                {
+                    pendingDesignEntry = null;
+                }
             }
 
             GUILayout.EndHorizontal();
@@ -143,6 +154,7 @@ namespace Border.Research
             if (GUILayout.Button("대기: 한 분기 넘기기", buttonStyle, GUILayout.Height(32)))
             {
                 model.WaitQuarter();
+                pendingDesignEntry = null;
             }
 
             GUI.enabled = true;
@@ -165,24 +177,21 @@ namespace Border.Research
             GUILayout.EndVertical();
         }
 
-        private void DrawPendingTest()
+        private void DrawDesignEntry()
         {
-            if (!model.PendingTestPreview.HasValue)
+            if (!pendingDesignEntry.HasValue)
             {
                 return;
             }
 
-            ResearchTestPreview preview = model.PendingTestPreview.Value;
+            ResearchDesignEntryData data = pendingDesignEntry.Value;
             GUILayout.BeginVertical(boxStyle);
-            GUILayout.Label("시뮬레이션 인계 데이터", headerStyle);
-            GUILayout.Label($"단계: {preview.StageId} | 환경: {model.GetEnvironmentDisplayName(preview.EnvironmentId)}", bodyStyle);
-            GUILayout.Label($"성공 {preview.SuccessChance}% / 부분 {preview.PartialChance}% / 실패 {preview.FailureChance}%", bodyStyle);
-            GUILayout.Label($"고정 난수: {preview.Roll} | 더미 결과: {preview.Grade}", bodyStyle);
-            if (GUILayout.Button("개발용: 더미 시뮬레이션 결과 적용", buttonStyle, GUILayout.Height(34)))
-            {
-                model.ApplyPendingTestResult();
-            }
-
+            GUILayout.Label("설계 진입 데이터", headerStyle);
+            GUILayout.Label($"단계: {data.StageId} | 날짜: {data.Year} Q{data.Quarter} | 환경: {model.GetEnvironmentDisplayName(data.EnvironmentId)}", bodyStyle);
+            GUILayout.Label($"맵 시드: {data.MapSeed} | 목표 경로: {data.TargetPathId}", bodyStyle);
+            GUILayout.Label($"진행도: {data.CurrentProgress}/100 | 이전 단계 평균: {data.PrerequisiteAverage:0.0} | 경험 보정: +{data.ExperienceBonus}%p", bodyStyle);
+            GUILayout.Label($"연구 기준 성공률: {model.CalculateSuccessChance(data.StageId)}%", bodyStyle);
+            GUILayout.Label("비용, 분기, 발사 횟수, 결과는 아직 변하지 않습니다.", smallStyle);
             GUILayout.EndVertical();
         }
 

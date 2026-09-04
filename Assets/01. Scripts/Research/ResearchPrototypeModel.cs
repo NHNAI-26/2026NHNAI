@@ -96,33 +96,39 @@ namespace Border.Research
         public int StageModifier { get; }
     }
 
-    public readonly struct ResearchTestPreview
+    public readonly struct ResearchDesignEntryData
     {
-        public ResearchTestPreview(
+        public ResearchDesignEntryData(
             ResearchStageId stageId,
+            int year,
+            int quarter,
             ResearchEnvironmentId environmentId,
-            int successChance,
-            int partialChance,
-            int failureChance,
-            int roll,
-            ResearchGrade grade)
+            int mapSeed,
+            string targetPathId,
+            int currentProgress,
+            double prerequisiteAverage,
+            int experienceBonus)
         {
             StageId = stageId;
+            Year = year;
+            Quarter = quarter;
             EnvironmentId = environmentId;
-            SuccessChance = successChance;
-            PartialChance = partialChance;
-            FailureChance = failureChance;
-            Roll = roll;
-            Grade = grade;
+            MapSeed = mapSeed;
+            TargetPathId = targetPathId;
+            CurrentProgress = currentProgress;
+            PrerequisiteAverage = prerequisiteAverage;
+            ExperienceBonus = experienceBonus;
         }
 
         public ResearchStageId StageId { get; }
+        public int Year { get; }
+        public int Quarter { get; }
         public ResearchEnvironmentId EnvironmentId { get; }
-        public int SuccessChance { get; }
-        public int PartialChance { get; }
-        public int FailureChance { get; }
-        public int Roll { get; }
-        public ResearchGrade Grade { get; }
+        public int MapSeed { get; }
+        public string TargetPathId { get; }
+        public int CurrentProgress { get; }
+        public double PrerequisiteAverage { get; }
+        public int ExperienceBonus { get; }
     }
 
     public sealed class ResearchPrototypeModel
@@ -179,7 +185,6 @@ namespace Border.Research
         public bool DeadlineReached => RemainingTurns <= 0;
         public string LastMessage { get; private set; }
         public ResearchStageState[] Stages { get; }
-        public ResearchTestPreview? PendingTestPreview { get; private set; }
 
         public void Reset()
         {
@@ -189,7 +194,6 @@ namespace Border.Research
             RemainingTurns = MaxTurns;
             Funds = InitialFunds;
             QuarterlyFunding = InitialQuarterlyFunding;
-            PendingTestPreview = null;
             LastMessage = "2018 Q1. 연구 판단을 시작합니다.";
 
             for (int i = 0; i < Stages.Length; i++)
@@ -243,7 +247,6 @@ namespace Border.Research
 
             Funds -= cost;
             stage.Progress = Math.Min(100, stage.Progress + (focused ? FocusedResearchGain : NormalResearchGain));
-            PendingTestPreview = null;
             CheckUnlocks();
             AdvanceQuarter();
             LastMessage = $"{config.DisplayName} {(focused ? "집중" : "일반")} 연구 완료.";
@@ -252,14 +255,14 @@ namespace Border.Research
 
         public ResearchActionResult WaitQuarter()
         {
-            PendingTestPreview = null;
             AdvanceQuarter();
             LastMessage = "한 분기 대기. 발사창을 기다렸습니다.";
             return DeadlineReached ? ResearchActionResult.DeadlineReached : ResearchActionResult.Success;
         }
 
-        public ResearchActionResult CreateTestPreview(ResearchStageId stageId)
+        public ResearchActionResult TryEnterDesign(ResearchStageId stageId, out ResearchDesignEntryData data)
         {
+            data = default;
             ResearchStageState stage = GetStage(stageId);
             ResearchStageConfig config = GetStageConfig(stageId);
 
@@ -281,44 +284,20 @@ namespace Border.Research
                 return ResearchActionResult.NotEnoughFunds;
             }
 
-            Funds -= config.TestCost;
             ResearchEnvironmentId environmentId = GetCurrentEnvironment();
-            int successChance = CalculateSuccessChance(stageId);
-            int partialChance = Math.Min(15, 95 - successChance);
-            int failureChance = 100 - successChance - partialChance;
-            int roll = rng.Next(1, 101);
-            ResearchGrade grade = ResolveGrade(successChance, roll);
-            PendingTestPreview = new ResearchTestPreview(stageId, environmentId, successChance, partialChance, failureChance, roll, grade);
-            LastMessage = $"{config.DisplayName} 시뮬레이션 인계 데이터 생성. 실제 비행 장면에서 결과 적용.";
-            return ResearchActionResult.Success;
-        }
+            int mapSeed = CreateDesignMapSeed(stageId);
+            data = new ResearchDesignEntryData(
+                stageId,
+                Year,
+                Quarter,
+                environmentId,
+                mapSeed,
+                CreateTargetPathId(stageId, mapSeed),
+                stage.Progress,
+                GetPrerequisiteAverage(stageId),
+                Math.Min(stage.AttemptCount * 3, 9));
 
-        public ResearchActionResult ApplyPendingTestResult()
-        {
-            if (!PendingTestPreview.HasValue)
-            {
-                LastMessage = "적용할 시뮬레이션 결과가 없습니다.";
-                return ResearchActionResult.ProgressTooLow;
-            }
-
-            ResearchTestPreview preview = PendingTestPreview.Value;
-            ResearchStageState stage = GetStage(preview.StageId);
-            GetGradeReward(preview.Grade, out int progressGain, out int immediateFunding, out int quarterlyFundingDelta);
-
-            stage.Progress = Math.Min(100, stage.Progress + progressGain);
-            stage.AttemptCount++;
-            if (!stage.HasBestGrade || preview.Grade < stage.BestGrade)
-            {
-                stage.BestGrade = preview.Grade;
-                stage.HasBestGrade = true;
-            }
-
-            Funds += immediateFunding;
-            QuarterlyFunding = Math.Max(MinQuarterlyFunding, Math.Min(MaxQuarterlyFunding, QuarterlyFunding + quarterlyFundingDelta));
-            PendingTestPreview = null;
-            CheckUnlocks();
-            AdvanceQuarter();
-            LastMessage = $"{GetStageConfig(preview.StageId).DisplayName} 더미 결과 {preview.Grade} 적용.";
+            LastMessage = $"{config.DisplayName} 설계 진입 준비 완료. 비용과 시간은 아직 소비하지 않습니다.";
             return ResearchActionResult.Success;
         }
 
@@ -531,52 +510,23 @@ namespace Border.Research
             }
         }
 
-        private static ResearchGrade ResolveGrade(int successChance, int roll)
+        private int CreateDesignMapSeed(ResearchStageId stageId)
         {
-            if (roll <= successChance)
+            unchecked
             {
-                int margin = successChance - roll;
-                if (margin >= 50)
-                {
-                    return ResearchGrade.S;
-                }
-
-                return margin >= 20 ? ResearchGrade.A : ResearchGrade.B;
+                int hash = 17;
+                hash = hash * 31 + Seed;
+                hash = hash * 31 + Year;
+                hash = hash * 31 + Quarter;
+                hash = hash * 31 + (int)stageId;
+                return hash == int.MinValue ? int.MaxValue : Math.Abs(hash);
             }
-
-            return roll <= Math.Min(successChance + 15, 95) ? ResearchGrade.C : ResearchGrade.F;
         }
 
-        private static void GetGradeReward(ResearchGrade grade, out int progressGain, out int immediateFunding, out int quarterlyFundingDelta)
+        private static string CreateTargetPathId(ResearchStageId stageId, int mapSeed)
         {
-            switch (grade)
-            {
-                case ResearchGrade.S:
-                    progressGain = 18;
-                    immediateFunding = 900;
-                    quarterlyFundingDelta = 150;
-                    break;
-                case ResearchGrade.A:
-                    progressGain = 14;
-                    immediateFunding = 600;
-                    quarterlyFundingDelta = 100;
-                    break;
-                case ResearchGrade.B:
-                    progressGain = 10;
-                    immediateFunding = 400;
-                    quarterlyFundingDelta = 50;
-                    break;
-                case ResearchGrade.C:
-                    progressGain = 5;
-                    immediateFunding = 150;
-                    quarterlyFundingDelta = 0;
-                    break;
-                default:
-                    progressGain = 2;
-                    immediateFunding = 0;
-                    quarterlyFundingDelta = -100;
-                    break;
-            }
+            int pathIndex = mapSeed % 3 + 1;
+            return $"{stageId}_Path_{pathIndex}";
         }
 
         private static void GetDateForTurn(int turnIndex, out int year, out int quarter)
