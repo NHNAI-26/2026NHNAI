@@ -63,6 +63,8 @@ internal static class UberShaderVariantManifest
         new UberShaderVariantSpec(PostShaderName, PassType.Normal, "_ORDERED_DITHER_ON"),
         new UberShaderVariantSpec(PostShaderName, PassType.Normal, "_PIXELATION_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline),
+        new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_BASE_MAP_TRIPLANAR"),
+        new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_BASE_MAP_TRIPLANAR", "_TEXTURE_BLEND_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_COLOR_ADJUST_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_COLOR_ADJUST_ON", "_EMISSION", "_HEIGHT_FADE_ON", "_RIM_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_DISSOLVE_OBJECT_SPACE", "_DISSOLVE_ON"),
@@ -80,6 +82,7 @@ internal static class UberShaderVariantManifest
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_HOLOGRAM_ON", "_HOLOGRAM_SCREEN_SPACE"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_HOLOGRAM_ON", "_HOLOGRAM_WORLD_SPACE"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_RIM_ON"),
+        new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_TEXTURE_BLEND_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_DITHER_FADE_ON", "_STENCIL_OUTLINE_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_STENCIL_OUTLINE_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline),
@@ -154,8 +157,8 @@ internal static class UberShaderVariantManifest
     internal static IReadOnlyList<UberShaderVariantSpec> Rows => ReadOnlyRows;
     internal static void ValidateRows(IReadOnlyList<UberShaderVariantSpec> rows)
     {
-        if (rows == null || rows.Count != 97)
-            throw new InvalidOperationException("The Uber variant manifest must contain 97 rows.");
+        if (rows == null || rows.Count != 100)
+            throw new InvalidOperationException("The Uber variant manifest must contain 100 rows.");
         var uniqueRows = new HashSet<string>(StringComparer.Ordinal);
         int uncheckedCount = 0;
         for (int index = 0; index < rows.Count; ++index)
@@ -193,12 +196,12 @@ internal static class UberShaderVariantManifest
             throw new InvalidOperationException("Exactly one Particle row requires unchecked construction.");
     }
     private static string ExpectedShader(int index) => index < 11
-        ? PostShaderName : index < 31 ? ObjectShaderName : index < 57
-            ? SpriteShaderName : index < 79 ? UIShaderName : ParticleShaderName;
+        ? PostShaderName : index < 34 ? ObjectShaderName : index < 60
+            ? SpriteShaderName : index < 82 ? UIShaderName : ParticleShaderName;
     private static PassType ExpectedPass(int index)
     {
         if (index < 11) return PassType.Normal;
-        if (index < 29 || index >= 31 && index < 57 || index >= 79)
+        if (index < 32 || index >= 34 && index < 60 || index >= 82)
             return PassType.ScriptableRenderPipeline;
         return PassType.ScriptableRenderPipelineDefaultUnlit;
     }

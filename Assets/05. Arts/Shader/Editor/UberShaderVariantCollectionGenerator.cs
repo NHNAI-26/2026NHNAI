@@ -39,7 +39,8 @@ internal static class UberShaderVariantCollectionGenerator
             ShaderVariantCollection live = LoadLive();
             if (IsExact(live, UberShaderVariantManifest.Rows))
                 return false;
-            ShaderVariantCollection backup = UnityEngine.Object.Instantiate(live);
+            ShaderVariantCollection backup = new ShaderVariantCollection();
+            EditorUtility.CopySerialized(live, backup);
             try
             {
                 EditorUtility.CopySerialized(candidate, live);

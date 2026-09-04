@@ -38,6 +38,10 @@ ShaderVariantCollection:
       variants:
       - keywords: 
         passType: 13
+      - keywords: _BASE_MAP_TRIPLANAR
+        passType: 13
+      - keywords: _BASE_MAP_TRIPLANAR _TEXTURE_BLEND_ON
+        passType: 13
       - keywords: _COLOR_ADJUST_ON
         passType: 13
       - keywords: _COLOR_ADJUST_ON _EMISSION _HEIGHT_FADE_ON _RIM_ON
@@ -71,6 +75,8 @@ ShaderVariantCollection:
       - keywords: _HOLOGRAM_ON _HOLOGRAM_WORLD_SPACE
         passType: 13
       - keywords: _RIM_ON
+        passType: 13
+      - keywords: _TEXTURE_BLEND_ON
         passType: 13
       - keywords: _DITHER_FADE_ON _STENCIL_OUTLINE_ON
         passType: 14

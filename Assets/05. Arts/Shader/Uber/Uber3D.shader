@@ -19,11 +19,21 @@ Shader "Shader/Uber/3D Object"
         [Main(SurfaceInputs, _, on, off)] _SurfaceInputs("Surface Inputs", Float) = 1
         [Title(SurfaceInputs, _)] [UberGroup(SurfaceInputs)] [MainTexture] _BaseMap("Base Map", 2D) = "white" {}
         [Sub(SurfaceInputs)] [MainColor] _BaseColor("Base Color", Color) = (1, 1, 1, 1)
+        [KWEnum(SurfaceInputs, UV, _, Triplanar, _BASE_MAP_TRIPLANAR)] _BaseMapMapping("Base Map Mapping", Float) = 0
+        [UberVector3(SurfaceInputs)] _BaseMap3DTiling("Base Map 3D Tiling", Vector) = (1, 1, 1, 0)
+        [Sub(SurfaceInputs)] _BaseMap3DBlendSharpness("Base Map 3D Blend Sharpness", Range(1, 16)) = 4
         [Sub(SurfaceInputs)] _Metallic("Metallic", Range(0, 1)) = 0
         [Sub(SurfaceInputs)] _Smoothness("Smoothness", Range(0, 1)) = 0.5
         [SubToggle(SurfaceInputs, _)] _NormalMapEnabled("Normal Map", Float) = 0
         [Tex(SurfaceInputs)] [Normal] [NoScaleOffset] _BumpMap("Normal Map", 2D) = "bump" {}
         [Sub(SurfaceInputs)] _BumpScale("Normal Scale", Range(0, 2)) = 1
+
+        [Main(TextureBlend, _TEXTURE_BLEND_ON, on)] _TextureBlendEnabled("Texture Blend", Float) = 0
+        [Title(TextureBlend, _)] [Tex(TextureBlend)] [NoScaleOffset] _BlendMap("Blend Map", 2D) = "white" {}
+        [UberVector2(TextureBlend)] _BlendTiling("Blend Tiling", Vector) = (1, 1, 0, 0)
+        [Sub(TextureBlend)] _BlendColor("Blend Color", Color) = (1, 1, 1, 1)
+        [Sub(TextureBlend)] _BlendThreshold("Upward Threshold", Range(-1, 1)) = 0.6
+        [Sub(TextureBlend)] _BlendSmoothness("Blend Smoothness", Range(0.01, 1)) = 0.25
 
         [Main(ColorAdjust, _COLOR_ADJUST_ON, on)] _ColorAdjustEnabled("Color Adjustment", Float) = 0
         [Title(ColorAdjust, _)] [Sub(ColorAdjust)] _HueShift("Hue Shift", Range(-180, 180)) = 0
@@ -145,6 +155,8 @@ Shader "Shader/Uber/3D Object"
             #pragma fragment UberForwardFragment
 
             #pragma multi_compile_local _ _NORMALMAP
+            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
+            #pragma multi_compile_local_fragment _ _TEXTURE_BLEND_ON
             #pragma multi_compile_local_fragment _ _SURFACE_TYPE_TRANSPARENT
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
             #pragma multi_compile_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
@@ -225,6 +237,7 @@ Shader "Shader/Uber/3D Object"
             #pragma fragment UberOutlineFragment
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
             #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local_fragment _ _STENCIL_OUTLINE_ON
             #pragma shader_feature_local _ _GLITCH_ON
             #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
@@ -255,6 +268,7 @@ Shader "Shader/Uber/3D Object"
             #pragma fragment UberSilhouetteFragment
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
             #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local _ _GLITCH_ON
             #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
@@ -284,6 +298,7 @@ Shader "Shader/Uber/3D Object"
             #pragma fragment UberSilhouetteFragment
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
             #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local _ _GLITCH_ON
             #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
@@ -310,6 +325,7 @@ Shader "Shader/Uber/3D Object"
             #pragma vertex UberDepthNormalsVertex
             #pragma fragment UberDepthNormalsFragment
             #pragma multi_compile_local _ _NORMALMAP
+            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
             #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
             #pragma shader_feature_local _ _GLITCH_ON
@@ -341,6 +357,8 @@ Shader "Shader/Uber/3D Object"
             #pragma fragment UberMetaFragment
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
             #pragma multi_compile_local_fragment _ _UNLIT_ON
+            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
+            #pragma multi_compile_local_fragment _ _TEXTURE_BLEND_ON
             #pragma shader_feature_local_fragment _ _COLOR_ADJUST_ON
             #pragma shader_feature_local_fragment _ _EMISSION
             #pragma shader_feature EDITOR_VISUALIZATION

@@ -110,6 +110,7 @@ namespace Border.Rendering.Tests
             "_SMOOTHNESSMAP", "_UNLIT_ON",
             "_RECEIVE_SHADOWS_OFF", "_UBER_QUALITY_LOW", "UNITY_UI_CLIP_RECT",
             "UNITY_UI_ALPHACLIP", "_GLITCH_OBJECT_SPACE", "_GLITCH_WORLD_SPACE",
+            "_TEXTURE_BLEND_ON", "_BASE_MAP_TRIPLANAR",
         };
 
         private static readonly HashSet<string> AllowedGlobalKeywords =
@@ -1727,17 +1728,17 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
             UberShaderVariantManifest.ValidateRows(rows);
             UberShaderVariantCollectionGenerator.ValidateCollection(collection,
                 rows, "Reviewed live collection");
-            Assert.That(rows.Count, Is.EqualTo(97));
+            Assert.That(rows.Count, Is.EqualTo(100));
             UberShaderVariantSpec[] particleRows = rows.Where(item =>
                 item.ShaderName == ParticleShaderName).ToArray();
             Assert.That(particleRows.Length, Is.EqualTo(18));
-            Assert.That(rows.Count - particleRows.Length, Is.EqualTo(79));
+            Assert.That(rows.Count - particleRows.Length, Is.EqualTo(82));
             Assert.That(particleRows.All(item =>
                 item.PassType == PassType.ScriptableRenderPipeline), Is.True);
             Assert.That(particleRows.Select(item => string.Join(" ", item.Keywords))
                 .Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(18));
             Assert.That(rows.Count(item =>
-                item.PassType == PassType.ScriptableRenderPipeline), Is.EqualTo(62));
+                item.PassType == PassType.ScriptableRenderPipeline), Is.EqualTo(65));
             Assert.That(rows.Count(item =>
                 item.PassType == PassType.ScriptableRenderPipelineDefaultUnlit),
                 Is.EqualTo(24));
@@ -1824,7 +1825,7 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
         public void VariantManifestGeneratorIsTransientFirstExplicitAndByteNoOp()
         {
             const string expectedCollectionHash =
-                "0B258A9CD40D1CC1F94E9804F4751802A97BDD15B0437C8CAF2B9EFB7D535D7B";
+                "E1D6A5E91646389ED67E756C1DBAA213A53437A096F8D6B46E602E2AD878E457";
             const string expectedMetaHash =
                 "C4AA07D520559A09F8246F5B8C539E2E5509D6B9777F01FDE56E9F00F1D48D31";
             IReadOnlyList<UberShaderVariantSpec> rows =
@@ -1849,7 +1850,7 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
                 UberShaderVariantCollectionGenerator.ValidateCollection(candidate,
                     rows, "Test transient candidate");
                 Assert.That(candidate.shaderCount, Is.EqualTo(5));
-                Assert.That(candidate.variantCount, Is.EqualTo(97));
+                Assert.That(candidate.variantCount, Is.EqualTo(100));
             }
             finally
             {

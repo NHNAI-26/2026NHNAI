@@ -31,6 +31,7 @@ namespace Border.Rendering.Tests
             string[] mainSignatures =
             {
                 "Surface, _, on, off", "SurfaceInputs, _, on, off",
+                "TextureBlend, _TEXTURE_BLEND_ON, on",
                 "ColorAdjust, _COLOR_ADJUST_ON, on", "Emission, _EMISSION, on",
                 "Rim, _RIM_ON, on", "HeightFade, _HEIGHT_FADE_ON, on",
                 "GlassGlow, _GLASS_GLOW_ON, on", "Hologram, _HOLOGRAM_ON, on",
@@ -41,7 +42,7 @@ namespace Border.Rendering.Tests
             };
             string[] childOwners =
             {
-                "Surface", "SurfaceInputs", "ColorAdjust", "Emission", "Rim",
+                "Surface", "SurfaceInputs", "TextureBlend", "ColorAdjust", "Emission", "Rim",
                 "HeightFade", "GlassGlow", "Hologram", "Glitch", "Dissolve",
                 "DitherFade", "StencilOutline",
             };
@@ -68,7 +69,11 @@ namespace Border.Rendering.Tests
                 { "_UberQuality", "[KWEnum(Surface, High, _, Low, _UBER_QUALITY_LOW)] _UberQuality(\"Effect Quality\", Float) = 0" },
                 { "_QueueControl", "[KWEnum(Surface, Auto, _, Custom, _)] _QueueControl(\"Queue Control\", Float) = 0" },
                 { "_BaseMap", "[Title(SurfaceInputs, _)] [UberGroup(SurfaceInputs)] [MainTexture] _BaseMap(\"Base Map\", 2D) = \"white\" {}" },
+                { "_BaseMapMapping", "[KWEnum(SurfaceInputs, UV, _, Triplanar, _BASE_MAP_TRIPLANAR)] _BaseMapMapping(\"Base Map Mapping\", Float) = 0" },
+                { "_BaseMap3DTiling", "[UberVector3(SurfaceInputs)] _BaseMap3DTiling(\"Base Map 3D Tiling\", Vector) = (1, 1, 1, 0)" },
                 { "_BumpMap", "[Tex(SurfaceInputs)] [Normal] [NoScaleOffset] _BumpMap(\"Normal Map\", 2D) = \"bump\" {}" },
+                { "_BlendMap", "[Title(TextureBlend, _)] [Tex(TextureBlend)] [NoScaleOffset] _BlendMap(\"Blend Map\", 2D) = \"white\" {}" },
+                { "_BlendTiling", "[UberVector2(TextureBlend)] _BlendTiling(\"Blend Tiling\", Vector) = (1, 1, 0, 0)" },
                 { "_EmissionMap", "[Title(Emission, _)] [Tex(Emission)] [NoScaleOffset] _EmissionMap(\"Emission Map\", 2D) = \"white\" {}" },
                 { "_HologramSpace", "[KWEnum(Hologram, Object, _, World, _HOLOGRAM_WORLD_SPACE, Screen, _HOLOGRAM_SCREEN_SPACE)] _HologramSpace(\"Space\", Float) = 0" },
                 { "_HologramObjectUpVector", "[UberVector3(Hologram)] _HologramObjectUpVector(\"Object Up Vector\", Vector) = (0, 1, 0, 0)" },
@@ -150,6 +155,87 @@ namespace Border.Rendering.Tests
                 "EditorGUI.Vector3Field(position, label", gui);
             StringAssert.DoesNotContain(
                 "EditorGUI.MultiFloatField(valuePosition", gui);
+        }
+
+        [Test]
+        public void ObjectTextureBlendUsesUpwardWorldNormalAndLocalVariant()
+        {
+            string shader = Read(UberDirectory + "Uber3D.shader");
+            string include = Read(UberDirectory + "Uber3D.hlsl");
+            string gui = Read(EditorDirectory + "UberShaderGUI.cs");
+
+            Assert.That(Regex.Matches(shader,
+                @"#pragma\s+multi_compile_local_fragment\s+_\s+_TEXTURE_BLEND_ON").Count,
+                Is.EqualTo(2));
+            Assert.That(Regex.Matches(shader,
+                @"#pragma\s+multi_compile_local\s+_\s+_BASE_MAP_TRIPLANAR").Count,
+                Is.EqualTo(6));
+            StringAssert.Contains("float4 _BlendTiling;", include);
+            StringAssert.Contains("float4 _BaseMap3DTiling;", include);
+            StringAssert.Contains("TEXTURE2D(_BlendMap);", include);
+            StringAssert.Contains("inline half4 UberSampleBaseMapped(", include);
+            StringAssert.Contains("float3 mappingTiling = max(abs(_BaseMap3DTiling.xyz), 0.0001);", include);
+            StringAssert.Contains("float3 mappingPosition = positionWS * mappingTiling;", include);
+            StringAssert.Contains("xSample * blendWeights.x + ySample * blendWeights.y", include);
+            StringAssert.Contains("float2 blendUV = rawUV * _BlendTiling.xy;", include);
+            StringAssert.Contains("normalize(geometricNormalWS).y", include);
+            StringAssert.Contains("smoothstep(_BlendThreshold - blendWidth,", include);
+            StringAssert.Contains("return lerp(baseAlbedo, blendAlbedo, blendWeight);", include);
+            StringAssert.Contains(
+                "new KeywordBinding(\"_TextureBlendEnabled\", \"_TEXTURE_BLEND_ON\", 1)",
+                gui);
+            StringAssert.Contains(
+                "new KeywordBinding(\"_BaseMapMapping\", \"_BASE_MAP_TRIPLANAR\", 1)",
+                gui);
+
+            Material material = new Material(Shader.Find(ObjectShaderName));
+            try
+            {
+                Assert.That(material.HasProperty("_TextureBlendEnabled"), Is.True);
+                Assert.That(material.HasProperty("_BlendMap"), Is.True);
+                Assert.That(material.HasProperty("_BlendTiling"), Is.True);
+                Assert.That(material.HasProperty("_BaseMapMapping"), Is.True);
+                Assert.That(material.HasProperty("_BaseMap3DTiling"), Is.True);
+                Assert.That(material.GetFloat("_TextureBlendEnabled"), Is.Zero);
+
+                material.SetFloat("_BaseMapMapping", 1f);
+                new UberShaderGUI().ValidateMaterial(material);
+                Assert.That(material.IsKeywordEnabled("_BASE_MAP_TRIPLANAR"), Is.True);
+
+                material.SetFloat("_TextureBlendEnabled", 1f);
+                new UberShaderGUI().ValidateMaterial(material);
+                Assert.That(material.IsKeywordEnabled("_TEXTURE_BLEND_ON"), Is.True);
+
+                material.SetFloat("_TextureBlendEnabled", 0f);
+                new UberShaderGUI().ValidateMaterial(material);
+                Assert.That(material.IsKeywordEnabled("_TEXTURE_BLEND_ON"), Is.False);
+
+                Material ground = AssetDatabase.LoadAssetAtPath<Material>(
+                    "Assets/05. Arts/Material/RocketBase/MAT_ground.mat");
+                Texture2D dirt = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Assets/05. Arts/Texture/RocketBase/dirt.png");
+                Texture2D grass = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Assets/05. Arts/Texture/RocketBase/grass.png");
+                Assert.That(ground, Is.Not.Null);
+                Assert.That(ground.GetTexture("_BaseMap"), Is.SameAs(dirt));
+                Assert.That(ground.GetTexture("_BlendMap"), Is.SameAs(grass));
+                Assert.That(ground.IsKeywordEnabled("_TEXTURE_BLEND_ON"), Is.True);
+                Assert.That(ground.IsKeywordEnabled("_BASE_MAP_TRIPLANAR"), Is.True);
+                Assert.That(ground.GetFloat("_BaseMapMapping"), Is.EqualTo(1f));
+                Vector4 baseMap3DTiling = ground.GetVector("_BaseMap3DTiling");
+                Assert.That(baseMap3DTiling.x, Is.GreaterThan(0f));
+                Assert.That(baseMap3DTiling.y, Is.GreaterThan(0f));
+                Assert.That(baseMap3DTiling.z, Is.GreaterThan(0f));
+                Vector4 blendTiling = ground.GetVector("_BlendTiling");
+                Assert.That(blendTiling.x, Is.GreaterThan(0f));
+                Assert.That(blendTiling.y, Is.GreaterThan(0f));
+                Assert.That(ground.GetFloat("_BlendThreshold"), Is.InRange(-1f, 1f));
+                Assert.That(ground.GetFloat("_BlendSmoothness"), Is.InRange(0.01f, 1f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+            }
         }
 
         [Test]

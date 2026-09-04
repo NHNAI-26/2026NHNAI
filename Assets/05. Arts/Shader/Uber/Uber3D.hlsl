@@ -11,12 +11,15 @@
 
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseMap_ST;
+    float4 _BaseMap3DTiling;
+    float4 _BlendTiling;
     float4 _DissolveTilingOffset;
     float4 _DissolvePanning;
     float4 _DissolveNoiseAmountMovement;
     float4 _GlitchBandSizeRange;
     float4 _GlitchUpVector;
     half4 _BaseColor;
+    half4 _BlendColor;
     half4 _EmissionColor;
     half4 _RimColor;
     half4 _HeightFadeColor;
@@ -28,6 +31,9 @@ CBUFFER_START(UnityPerMaterial)
     half _Metallic;
     half _Smoothness;
     half _BumpScale;
+    half _BaseMap3DBlendSharpness;
+    half _BlendThreshold;
+    half _BlendSmoothness;
     half _HueShift;
     half _Saturation;
     half _Brightness;
@@ -71,7 +77,9 @@ CBUFFER_START(UnityPerMaterial)
     half _AlphaClip;
     half _LightingMode;
     half _SurfaceInputs;
+    half _BaseMapMapping;
     half _NormalMapEnabled;
+    half _TextureBlendEnabled;
     half _ReceiveShadows;
     half _UberQuality;
     half _CastShadows;
@@ -102,6 +110,8 @@ CBUFFER_END
 
 TEXTURE2D(_DissolveNoiseMap);
 SAMPLER(sampler_DissolveNoiseMap);
+TEXTURE2D(_BlendMap);
+SAMPLER(sampler_BlendMap);
 
 float3 _LightDirection;
 float3 _LightPosition;
@@ -110,6 +120,49 @@ inline half4 UberSampleBase(float2 rawUV, out float2 surfaceUV)
 {
     surfaceUV = TRANSFORM_TEX(rawUV, _BaseMap);
     return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, surfaceUV);
+}
+
+inline half4 UberSampleBaseMapped(float2 rawUV, float3 positionWS,
+    half3 geometricNormalWS, out float2 surfaceUV)
+{
+    surfaceUV = TRANSFORM_TEX(rawUV, _BaseMap);
+#if defined(_BASE_MAP_TRIPLANAR)
+    half3 blendWeights = pow(abs(normalize(geometricNormalWS)),
+        max(_BaseMap3DBlendSharpness, 1.0h));
+    blendWeights /= max(blendWeights.x + blendWeights.y + blendWeights.z,
+        0.0001h);
+
+    float3 mappingTiling = max(abs(_BaseMap3DTiling.xyz), 0.0001);
+    float3 mappingPosition = positionWS * mappingTiling;
+    half3 normalSign = sign(geometricNormalWS);
+    float2 xUV = mappingPosition.zy * float2(normalSign.x, 1.0);
+    float2 yUV = mappingPosition.xz * float2(normalSign.y, 1.0);
+    float2 zUV = mappingPosition.xy * float2(-normalSign.z, 1.0);
+    half4 xSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, xUV);
+    half4 ySample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, yUV);
+    half4 zSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, zUV);
+    return xSample * blendWeights.x + ySample * blendWeights.y +
+        zSample * blendWeights.z;
+#else
+    return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, surfaceUV);
+#endif
+}
+
+inline half3 UberApplyTextureBlend(float2 rawUV, half3 geometricNormalWS,
+    half3 baseAlbedo, half3 vertexColor)
+{
+#if defined(_TEXTURE_BLEND_ON)
+    float2 blendUV = rawUV * _BlendTiling.xy;
+    half3 blendAlbedo = SAMPLE_TEXTURE2D(_BlendMap, sampler_BlendMap,
+        blendUV).rgb * _BlendColor.rgb * vertexColor;
+    half normalUp = normalize(geometricNormalWS).y;
+    half blendWidth = max(_BlendSmoothness, 0.0001h);
+    half blendWeight = smoothstep(_BlendThreshold - blendWidth,
+        _BlendThreshold + blendWidth, normalUp);
+    return lerp(baseAlbedo, blendAlbedo, blendWeight);
+#else
+    return baseAlbedo;
+#endif
 }
 
 inline float UberGlitchHash(float2 value)
@@ -286,7 +339,7 @@ inline float2 UberApplyGlitchUV(float2 rawUV, float3 positionOS,
 inline half4 UberApplyGlitchRGBSplit(float2 effectUV, half4 center,
     half glitchActivation, float glitchDirection, float2 rawPixelStep)
 {
-#if defined(_GLITCH_ON)
+#if defined(_GLITCH_ON) && !defined(_BASE_MAP_TRIPLANAR)
     [branch]
     if (glitchActivation > 0.0h && _GlitchRGBSplit > 0.0001h)
     {
@@ -482,8 +535,8 @@ inline void UberApplyHologram(float3 positionOS, float3 positionWS,
 }
 
 inline void UberInitializeSurface(float2 rawUV, float3 positionOS, float3 positionWS,
-    half4 vertexColor, float4 positionCS, out SurfaceData surfaceData,
-    out half dissolveEdge)
+    half3 geometricNormalWS, half4 vertexColor, float4 positionCS,
+    out SurfaceData surfaceData, out half dissolveEdge)
 {
     half glitchActivation;
     float glitchDirection;
@@ -491,11 +544,14 @@ inline void UberInitializeSurface(float2 rawUV, float3 positionOS, float3 positi
     float2 effectUV = UberApplyGlitchUV(rawUV, positionOS,
         glitchActivation, glitchDirection, rawPixelStep);
     float2 surfaceUV;
-    half4 baseSample = UberSampleBase(effectUV, surfaceUV);
+    half4 baseSample = UberSampleBaseMapped(effectUV, positionWS,
+        geometricNormalWS, surfaceUV);
     baseSample = UberApplyGlitchRGBSplit(effectUV, baseSample,
         glitchActivation, glitchDirection, rawPixelStep);
     half4 baseColor = baseSample * _BaseColor * vertexColor;
-    half3 albedo = UberApplyBaseColorAdjustment(baseColor.rgb);
+    half3 blendedAlbedo = UberApplyTextureBlend(effectUV, geometricNormalWS,
+        baseColor.rgb, vertexColor.rgb);
+    half3 albedo = UberApplyBaseColorAdjustment(blendedAlbedo);
     half alpha = UberEvaluateSilhouette(effectUV, positionOS, baseColor.a, positionCS,
         dissolveEdge);
     half4 heightTint = UberEvaluateHeightTint(positionWS);
@@ -673,8 +729,8 @@ UberForwardOutput UberForwardFragment(UberForwardVaryings input)
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
     SurfaceData surfaceData;
     half dissolveEdge;
-    UberInitializeSurface(input.rawUV, input.positionOS, input.positionWS, input.color,
-        input.positionCS, surfaceData, dissolveEdge);
+    UberInitializeSurface(input.rawUV, input.positionOS, input.positionWS,
+        input.normalWS, input.color, input.positionCS, surfaceData, dissolveEdge);
 #if defined(LOD_FADE_CROSSFADE)
     LODFadeCrossFade(input.positionCS);
 #endif
@@ -717,6 +773,9 @@ struct UberSilhouetteVaryings
     float2 rawUV : TEXCOORD0;
     float3 positionOS : TEXCOORD1;
     half vertexAlpha : TEXCOORD2;
+#if defined(_BASE_MAP_TRIPLANAR)
+    half3 normalWS : TEXCOORD3;
+#endif
     float4 positionCS : SV_POSITION;
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
@@ -743,6 +802,9 @@ UberSilhouetteVaryings UberShadowVertex(UberDepthAttributes input)
     output.rawUV = input.uv;
     output.positionOS = input.positionOS.xyz;
     output.vertexAlpha = input.color.a;
+#if defined(_BASE_MAP_TRIPLANAR)
+    output.normalWS = normalWS;
+#endif
     return output;
 }
 #else
@@ -757,6 +819,9 @@ UberSilhouetteVaryings UberDepthVertex(UberDepthAttributes input)
     output.rawUV = input.uv;
     output.positionOS = input.positionOS.xyz;
     output.vertexAlpha = input.color.a;
+#if defined(_BASE_MAP_TRIPLANAR)
+    output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+#endif
     return output;
 }
 #endif
@@ -772,8 +837,14 @@ half4 UberSilhouetteFragment(UberSilhouetteVaryings input) : SV_Target
         glitchActivation, glitchDirection, rawPixelStep);
 #if defined(_ALPHATEST_ON) || defined(_DITHER_FADE_ON)
     float2 surfaceUV;
+#if defined(_BASE_MAP_TRIPLANAR)
+    half baseAlpha = UberSampleBaseMapped(effectUV,
+        TransformObjectToWorld(input.positionOS), input.normalWS,
+        surfaceUV).a * _BaseColor.a * input.vertexAlpha;
+#else
     half baseAlpha = UberSampleBase(effectUV, surfaceUV).a * _BaseColor.a *
         input.vertexAlpha;
+#endif
 #else
     half baseAlpha = 1.0h;
 #endif
@@ -848,7 +919,8 @@ void UberDepthNormalsFragment(UberDepthNormalsVaryings input,
     float2 effectUV = UberApplyGlitchUV(input.rawUV, input.positionOS,
         glitchActivation, glitchDirection, rawPixelStep);
     float2 surfaceUV;
-    half4 baseSample = UberSampleBase(effectUV, surfaceUV);
+    half4 baseSample = UberSampleBaseMapped(effectUV,
+        TransformObjectToWorld(input.positionOS), input.normalWS, surfaceUV);
     half dissolveEdge;
     UberEvaluateSilhouette(effectUV, input.positionOS,
         baseSample.a * _BaseColor.a * input.vertexAlpha, input.positionCS,
@@ -895,6 +967,9 @@ struct UberOutlineVaryings
     float2 rawUV : TEXCOORD0;
     float3 positionOS : TEXCOORD1;
     half vertexAlpha : TEXCOORD2;
+#if defined(_BASE_MAP_TRIPLANAR)
+    half3 normalWS : TEXCOORD3;
+#endif
     float4 positionCS : SV_POSITION;
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
@@ -917,6 +992,9 @@ UberOutlineVaryings UberOutlineVertex(UberOutlineAttributes input)
     output.rawUV = input.uv;
     output.positionOS = input.positionOS.xyz;
     output.vertexAlpha = input.color.a;
+#if defined(_BASE_MAP_TRIPLANAR)
+    output.normalWS = normalWS;
+#endif
     return output;
 }
 
@@ -933,8 +1011,14 @@ half4 UberOutlineFragment(UberOutlineVaryings input) : SV_Target
     float2 effectUV = UberApplyGlitchUV(input.rawUV, input.positionOS,
         glitchActivation, glitchDirection, rawPixelStep);
     float2 surfaceUV;
+#if defined(_BASE_MAP_TRIPLANAR)
+    half baseAlpha = UberSampleBaseMapped(effectUV,
+        TransformObjectToWorld(input.positionOS), input.normalWS,
+        surfaceUV).a * _BaseColor.a * input.vertexAlpha;
+#else
     half baseAlpha = UberSampleBase(effectUV, surfaceUV).a * _BaseColor.a *
         input.vertexAlpha;
+#endif
     half dissolveEdge;
     half alpha = UberEvaluateSilhouette(effectUV, input.positionOS, baseAlpha,
         input.positionCS, dissolveEdge);
@@ -950,13 +1034,19 @@ half4 UberOutlineFragment(UberOutlineVaryings input) : SV_Target
 struct UberMetaAttributes
 {
     float4 positionOS : POSITION;
+    float3 normalOS : NORMAL;
     float2 uv0 : TEXCOORD0; float2 uv1 : TEXCOORD1; float2 uv2 : TEXCOORD2;
     half4 color : COLOR;
 };
 struct UberMetaVaryings
 {
     float4 positionCS : SV_POSITION;
-    float2 uv : TEXCOORD0; half4 color : COLOR;
+    float2 rawUV : TEXCOORD0;
+    half3 normalWS : TEXCOORD3;
+#if defined(_BASE_MAP_TRIPLANAR)
+    float3 positionOS : TEXCOORD4;
+#endif
+    half4 color : COLOR;
 #ifdef EDITOR_VISUALIZATION
     float2 VizUV : TEXCOORD1; float4 LightCoord : TEXCOORD2;
 #endif
@@ -965,7 +1055,11 @@ UberMetaVaryings UberMetaVertex(UberMetaAttributes input)
 {
     UberMetaVaryings output = (UberMetaVaryings)0;
     output.positionCS = UnityMetaVertexPosition(input.positionOS.xyz, input.uv1, input.uv2);
-    output.uv = TRANSFORM_TEX(input.uv0, _BaseMap);
+    output.rawUV = input.uv0;
+    output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+#if defined(_BASE_MAP_TRIPLANAR)
+    output.positionOS = input.positionOS.xyz;
+#endif
     output.color = input.color;
 #ifdef EDITOR_VISUALIZATION
     UnityEditorVizData(input.positionOS.xyz, input.uv0, input.uv1, input.uv2, output.VizUV, output.LightCoord);
@@ -974,14 +1068,23 @@ UberMetaVaryings UberMetaVertex(UberMetaAttributes input)
 }
 half4 UberMetaFragment(UberMetaVaryings input) : SV_Target
 {
-    half4 baseSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
+    float2 surfaceUV;
+    half4 baseSample = UberSampleBaseMapped(input.rawUV,
+#if defined(_BASE_MAP_TRIPLANAR)
+        TransformObjectToWorld(input.positionOS),
+#else
+        0.0,
+#endif
+        input.normalWS, surfaceUV);
     half4 baseColor = baseSample * _BaseColor * input.color;
     half alpha = saturate(baseColor.a);
 #if defined(_ALPHATEST_ON)
     clip(alpha - _Cutoff);
 #endif
-    half3 albedo = UberApplyBaseColorAdjustment(baseColor.rgb);
-    half3 emission = SampleEmission(input.uv,
+    half3 blendedAlbedo = UberApplyTextureBlend(input.rawUV, input.normalWS,
+        baseColor.rgb, input.color.rgb);
+    half3 albedo = UberApplyBaseColorAdjustment(blendedAlbedo);
+    half3 emission = SampleEmission(surfaceUV,
         _EmissionColor.rgb * max(_EmissionIntensity, 0.0h),
         TEXTURE2D_ARGS(_EmissionMap, sampler_EmissionMap));
     MetaInput metaInput = (MetaInput)0;
