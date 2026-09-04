@@ -52,6 +52,38 @@ namespace Simulation
             BuildToggle();
         }
 
+        public static bool OpenDesignStage()
+        {
+            if (!Application.isPlaying)
+            {
+                return false;
+            }
+
+            SimulationStageHost host = FindFirstObjectByType<SimulationStageHost>();
+            if (host == null)
+            {
+                host = new GameObject("Simulation Stage Host").AddComponent<SimulationStageHost>();
+            }
+
+            return host.OpenDesignStageInternal();
+        }
+
+        private bool OpenDesignStageInternal()
+        {
+            if (busy)
+            {
+                return false;
+            }
+
+            if (loaded)
+            {
+                return true;
+            }
+
+            StartCoroutine(LoadRoutine());
+            return true;
+        }
+
         private void BuildToggle()
         {
             var canvasObject = new GameObject("SimulationToggleCanvas", typeof(RectTransform));
@@ -105,7 +137,13 @@ namespace Simulation
         {
             if (busy) return;
 
-            StartCoroutine(loaded ? UnloadRoutine() : LoadRoutine());
+            if (loaded)
+            {
+                StartCoroutine(UnloadRoutine());
+                return;
+            }
+
+            OpenDesignStageInternal();
         }
 
         private IEnumerator LoadRoutine()

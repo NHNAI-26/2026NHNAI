@@ -8,27 +8,27 @@ namespace Border.Research
 {
     public readonly struct ResearchMiniGameResult
     {
-        public ResearchMiniGameResult(EnginePresetId presetId, EngineStatId statId, bool focused, int score, bool completedByTimeout)
+        public ResearchMiniGameResult(EnginePresetId presetId, EngineStatId statId, bool focused, int score)
         {
             PresetId = presetId;
             StatId = statId;
             Focused = focused;
             Score = ResearchPrototypeModel.ClampInt(score, 0, 100);
-            CompletedByTimeout = completedByTimeout;
         }
 
         public EnginePresetId PresetId { get; }
         public EngineStatId StatId { get; }
         public bool Focused { get; }
         public int Score { get; }
-        public bool CompletedByTimeout { get; }
     }
 
     public sealed class ResearchMiniGameController : MonoBehaviour
     {
-        private const float DefaultDurationSeconds = 9f;
+        private const string MiniGameScreenPrefabPath = "ResearchUI/ResearchMiniGameScreen";
         private const float ResultDismissSeconds = 2f;
-        private const float CoolingExampleSeconds = 2f;
+        private const float FuelJudgementSeconds = 2f;
+        private const float CoolingDurationSeconds = 9f;
+        private const float NoInputReactionSeconds = 9f;
         private const int FuelAttemptCount = 3;
         private const int CoolingRoundCount = 4;
         private const int OutputStageCount = 3;
@@ -40,6 +40,8 @@ namespace Border.Research
         private readonly Button[] coolingButtons = new Button[4];
         private readonly Button[] ignitionButtons = new Button[4];
 
+        [SerializeField] private GameObject miniGameScreenPrefab;
+
         private EnginePresetId presetId;
         private EngineStatId statId;
         private bool focused;
@@ -50,10 +52,11 @@ namespace Border.Research
         private bool gameCompleted;
         private bool resultShowing;
         private bool resultDismissed;
-        private float durationSeconds = DefaultDurationSeconds;
+        private bool fuelJudgementShowing;
         private float elapsedSeconds;
         private float roundElapsedSeconds;
         private float resultElapsedSeconds;
+        private float fuelJudgementElapsedSeconds;
         private int roundIndex;
         private int activeValveIndex;
         private int fuelAttemptIndex;
@@ -69,7 +72,6 @@ namespace Border.Research
         private float fuelTargetValue;
         private float outputGaugeValue;
         private bool fuelFilling;
-        private bool coolingExampleActive;
         private bool ignitionShowingSequence;
 
         private TMP_Text titleText;
@@ -78,6 +80,12 @@ namespace Border.Research
         private TMP_Text stateText;
         private TMP_Text fuelStatusText;
         private TMP_Text fuelTargetText;
+        private TMP_Text fuelJudgementText;
+        private RectTransform fuelGameGroup;
+        private RectTransform coolingGameGroup;
+        private RectTransform outputGameGroup;
+        private RectTransform ignitionGameGroup;
+        private RectTransform resultGroup;
         private Image fuelFillImage;
         private Image fuelTargetImage;
         private Image fuelCurrentMarkerImage;
@@ -87,6 +95,8 @@ namespace Border.Research
         private Image coolingHotspotImage;
         private RectTransform playArea;
         private Button primaryButton;
+        private TMP_Text resultScoreText;
+        private TMP_Text resultDetailText;
         private Camera fallbackRenderingCamera;
 
         public EngineStatId StatId => statId;
@@ -116,14 +126,23 @@ namespace Border.Research
             focused = nextFocused;
             completedCallback = onCompleted;
 
-            BuildInterface();
+            if (!BuildInterface())
+            {
+                return;
+            }
+
             StartStatGame();
             initialized = true;
         }
 
+        public void ConfigureScreenPrefabForTests(GameObject screenTemplate)
+        {
+            miniGameScreenPrefab = screenTemplate;
+        }
+
         public void ForceCompleteForTests(int score)
         {
-            Complete(score, false);
+            Complete(score);
         }
 
         public void ForceDismissForTests()
@@ -131,10 +150,28 @@ namespace Border.Research
             DismissResult();
         }
 
+        public void RecordFuelAttemptForTests(float normalizedFillValue)
+        {
+            fuelGaugeValue = Mathf.Clamp01(normalizedFillValue);
+            RecordFuelAttempt();
+        }
+
+        public void ForceAdvanceFuelJudgementForTests()
+        {
+            AdvanceFuelAfterJudgement();
+        }
+
         public string GetStateTextForTests()
         {
             return stateText == null ? string.Empty : stateText.text;
         }
+
+        public string GetTimerTextForTests()
+        {
+            return timerText == null || !timerText.gameObject.activeSelf ? string.Empty : timerText.text;
+        }
+
+        public bool IsShowingFuelJudgementForTests => fuelJudgementShowing;
 
         public float GetFuelTargetForTests()
         {
@@ -156,7 +193,7 @@ namespace Border.Research
 
         public static string FormatStateText(string baseText, bool showExample)
         {
-            return showExample ? $"{baseText}\n예시 표시 중" : baseText;
+            return baseText;
         }
 
         public static int CalculateFuelCapacityScore(params float[] normalizedErrors)
@@ -174,6 +211,22 @@ namespace Border.Research
 
             float average = total / normalizedErrors.Length;
             return ResearchPrototypeModel.ClampInt(Mathf.RoundToInt(100f - average * 140f), 0, 100);
+        }
+
+        public static string GetFuelJudgementText(float normalizedError)
+        {
+            float error = Mathf.Abs(normalizedError);
+            if (error <= 0.03f)
+            {
+                return "Perfect!";
+            }
+
+            if (error <= 0.08f)
+            {
+                return "Great";
+            }
+
+            return error <= 0.16f ? "Good" : "Miss";
         }
 
         public static int CalculateCoolingScore(int correctCount, int wrongCount, float averageReactionSeconds)
@@ -256,61 +309,147 @@ namespace Border.Research
 
             elapsedSeconds += Time.deltaTime;
             roundElapsedSeconds += Time.deltaTime;
-            timerText.text = $"남은 시간 {Mathf.CeilToInt(Mathf.Max(0f, durationSeconds - elapsedSeconds))}초";
+            UpdateTimerText();
+
+            if (fuelJudgementShowing)
+            {
+                fuelJudgementElapsedSeconds += Time.deltaTime;
+                if (fuelJudgementElapsedSeconds >= FuelJudgementSeconds)
+                {
+                    AdvanceFuelAfterJudgement();
+                }
+
+                return;
+            }
 
             UpdateActiveGame();
 
-            if (elapsedSeconds >= durationSeconds)
+            if (!gameCompleted && statId == EngineStatId.Cooling && elapsedSeconds >= CoolingDurationSeconds)
             {
-                Complete(CalculateCurrentScore(), true);
+                Complete(CalculateCurrentScore());
             }
         }
 
-        private void BuildInterface()
+        private bool BuildInterface()
         {
             EnsureEventSystem();
 
-            RectTransform canvasTransform = CreateGroup("ResearchMiniGameCanvas", transform);
-            Canvas canvas = canvasTransform.gameObject.AddComponent<Canvas>();
+#if UNITY_EDITOR
+            if (miniGameScreenPrefab == null && Resources.Load<GameObject>(MiniGameScreenPrefabPath) == null)
+            {
+                RebuildDefaultPrefabsForEditor();
+            }
+#endif
+
+            GameObject prefab = miniGameScreenPrefab != null
+                ? miniGameScreenPrefab
+                : Resources.Load<GameObject>(MiniGameScreenPrefabPath);
+            if (prefab == null)
+            {
+                Debug.LogError("Research mini game UI prefab is missing. Expected Resources/ResearchUI/ResearchMiniGameScreen.");
+                return false;
+            }
+
+            GameObject instance = Instantiate(prefab, transform);
+            instance.name = "ResearchMiniGameCanvas";
+            RectTransform canvasTransform = instance.GetComponent<RectTransform>();
+            if (canvasTransform == null)
+            {
+                canvasTransform = instance.AddComponent<RectTransform>();
+            }
+
+            Canvas canvas = instance.GetComponent<Canvas>() ?? instance.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 20;
-            canvasTransform.gameObject.AddComponent<GraphicRaycaster>();
+            if (instance.GetComponent<GraphicRaycaster>() == null)
+            {
+                instance.AddComponent<GraphicRaycaster>();
+            }
 
-            var scaler = canvasTransform.gameObject.AddComponent<CanvasScaler>();
+            CanvasScaler scaler = instance.GetComponent<CanvasScaler>() ?? instance.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280f, 720f);
             scaler.matchWidthOrHeight = 0.5f;
 
-            RectTransform background = CreatePanel("Background", canvasTransform, new Color(0.04f, 0.05f, 0.07f, 0.96f));
-            Stretch(background, 0f);
             EnsureRenderingCamera();
 
-            RectTransform panel = CreatePanel("MiniGamePanel", canvasTransform, new Color(0.13f, 0.16f, 0.2f, 0.98f));
-            panel.anchorMin = new Vector2(0.5f, 0.5f);
-            panel.anchorMax = new Vector2(0.5f, 0.5f);
-            panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.anchoredPosition = Vector2.zero;
-            panel.sizeDelta = new Vector2(1040f, 560f);
-            AddVerticalLayout(panel, 20f, 20f, 18f, 10f);
+            titleText = FindRequiredText(canvasTransform, "Title");
+            timerText = FindRequiredText(canvasTransform, "Timer");
+            instructionText = FindRequiredText(canvasTransform, "Instruction");
+            stateText = FindRequiredText(canvasTransform, "State");
+            primaryButton = FindRequiredButton(canvasTransform, "PrimaryActionButton");
+            playArea = FindRequiredRectTransform(canvasTransform, "PlayArea");
+            fuelGameGroup = FindRequiredRectTransform(canvasTransform, "FuelGame");
+            coolingGameGroup = FindRequiredRectTransform(canvasTransform, "CoolingGame");
+            outputGameGroup = FindRequiredRectTransform(canvasTransform, "OutputGame");
+            ignitionGameGroup = FindRequiredRectTransform(canvasTransform, "IgnitionGame");
+            resultGroup = FindRequiredRectTransform(canvasTransform, "ResultGame");
+            fuelStatusText = FindRequiredText(canvasTransform, "FuelStatusText");
+            fuelTargetText = FindRequiredText(canvasTransform, "FuelGaugeLabel");
+            fuelJudgementText = FindRequiredText(canvasTransform, "FuelJudgementText");
+            fuelFillImage = FindRequiredImage(canvasTransform, "FuelFill");
+            fuelTargetImage = FindRequiredImage(canvasTransform, "FuelTarget");
+            fuelCurrentMarkerImage = FindRequiredImage(canvasTransform, "FuelCurrentMarker");
+            coolingHotspotImage = FindRequiredImage(canvasTransform, "CoolingHotspot");
+            outputLabelText = FindRequiredText(canvasTransform, "OutputLabel");
+            outputFillImage = FindRequiredImage(canvasTransform, "OutputFill");
+            outputSafeZone = FindRequiredRectTransform(canvasTransform, "SafeZone");
+            resultScoreText = FindRequiredText(canvasTransform, "ResultScoreText");
+            resultDetailText = FindRequiredText(canvasTransform, "ResultDetailText");
 
-            RectTransform topRow = CreateGroup("TopRow", panel);
-            AddHorizontalLayout(topRow, 0f, 0f, 0f, 10f);
-            topRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 48f;
-            titleText = CreateText("Title", topRow, 24, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
-            titleText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            timerText = CreateText("Timer", topRow, 18, FontStyles.Bold, TextAlignmentOptions.Right, string.Empty);
-            timerText.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
+            if (titleText == null
+                || timerText == null
+                || instructionText == null
+                || stateText == null
+                || primaryButton == null
+                || playArea == null
+                || fuelGameGroup == null
+                || coolingGameGroup == null
+                || outputGameGroup == null
+                || ignitionGameGroup == null
+                || resultGroup == null
+                || fuelStatusText == null
+                || fuelTargetText == null
+                || fuelJudgementText == null
+                || fuelFillImage == null
+                || fuelTargetImage == null
+                || fuelCurrentMarkerImage == null
+                || coolingHotspotImage == null
+                || outputLabelText == null
+                || outputFillImage == null
+                || outputSafeZone == null
+                || resultScoreText == null
+                || resultDetailText == null)
+            {
+                DestroyUnityObject(instance);
+                Debug.LogError("Research mini game UI prefab is invalid. Check required child names in ResearchMiniGameScreen.");
+                return false;
+            }
 
-            instructionText = CreateText("Instruction", panel, 16, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
-            instructionText.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
+            for (int i = 0; i < coolingButtons.Length; i++)
+            {
+                coolingButtons[i] = FindRequiredButton(canvasTransform, $"CoolingValve_{i}");
+                if (coolingButtons[i] == null)
+                {
+                    DestroyUnityObject(instance);
+                    Debug.LogError($"Research mini game UI prefab is invalid. Missing CoolingValve_{i}.");
+                    return false;
+                }
+            }
 
-            playArea = CreatePanel("PlayArea", panel, new Color(0.07f, 0.09f, 0.12f, 1f));
-            playArea.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            for (int i = 0; i < ignitionButtons.Length; i++)
+            {
+                ignitionButtons[i] = FindRequiredButton(canvasTransform, $"Igniter_{i}");
+                if (ignitionButtons[i] == null)
+                {
+                    DestroyUnityObject(instance);
+                    Debug.LogError($"Research mini game UI prefab is invalid. Missing Igniter_{i}.");
+                    return false;
+                }
+            }
 
-            stateText = CreateText("State", panel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-            stateText.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
-
-            primaryButton = CreateButton("PrimaryActionButton", panel, string.Empty, 0f, 54f);
+            SetActiveGameGroup(null);
+            return true;
         }
 
         private void StartStatGame()
@@ -319,6 +458,8 @@ namespace Border.Research
             elapsedSeconds = 0f;
             roundElapsedSeconds = 0f;
             roundIndex = 0;
+            timerText.gameObject.SetActive(statId == EngineStatId.Cooling);
+            UpdateTimerText();
 
             switch (statId)
             {
@@ -345,35 +486,17 @@ namespace Border.Research
 
         private void BuildFuelGame()
         {
+            SetActiveGameGroup(fuelGameGroup);
             fuelAttemptIndex = 0;
             SetupFuelAttempt();
-
-            fuelStatusText = CreateText("FuelStatusText", playArea, 18, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-            fuelStatusText.rectTransform.anchorMin = new Vector2(0.08f, 0.68f);
-            fuelStatusText.rectTransform.anchorMax = new Vector2(0.92f, 0.84f);
-            fuelStatusText.rectTransform.offsetMin = Vector2.zero;
-            fuelStatusText.rectTransform.offsetMax = Vector2.zero;
-
-            RectTransform gaugeFrame = CreatePanel("FuelGaugeFrame", playArea, new Color(0.14f, 0.18f, 0.23f, 1f));
-            gaugeFrame.anchorMin = new Vector2(0.08f, 0.28f);
-            gaugeFrame.anchorMax = new Vector2(0.92f, 0.62f);
-            gaugeFrame.offsetMin = Vector2.zero;
-            gaugeFrame.offsetMax = Vector2.zero;
-
-            fuelFillImage = CreatePanel("FuelFill", gaugeFrame, new Color(0.26f, 0.74f, 0.88f, 1f)).GetComponent<Image>();
-            SetHorizontalFill(fuelFillImage.rectTransform, 0f);
-
-            fuelCurrentMarkerImage = CreatePanel("FuelCurrentMarker", gaugeFrame, new Color(0.92f, 0.98f, 1f, 1f)).GetComponent<Image>();
-            SetVerticalMarker(fuelCurrentMarkerImage.rectTransform, 0f, 4f);
-
-            fuelTargetImage = CreatePanel("FuelTarget", gaugeFrame, new Color(1f, 0.88f, 0.24f, 1f)).GetComponent<Image>();
-            SetVerticalMarker(fuelTargetImage.rectTransform, fuelTargetValue, 7f);
-
-            fuelTargetText = CreateText("FuelGaugeLabel", gaugeFrame, 15, FontStyles.Bold, TextAlignmentOptions.Center, "목표선");
-            fuelTargetText.color = new Color(1f, 0.94f, 0.42f, 1f);
             SetFuelTargetLabel();
             UpdateFuelStatusText();
+            fuelJudgementText.gameObject.SetActive(false);
 
+            primaryButton.gameObject.SetActive(true);
+            primaryButton.interactable = true;
+            primaryButton.onClick.RemoveAllListeners();
+            RemovePointerHandlers(primaryButton.gameObject);
             AddPointer(primaryButton.gameObject, EventTriggerType.PointerDown, () => fuelFilling = true);
             AddPointer(primaryButton.gameObject, EventTriggerType.PointerUp, RecordFuelAttempt);
             primaryButton.GetComponentInChildren<TMP_Text>().text = "누르고 있다가 목표선에서 놓기";
@@ -381,80 +504,62 @@ namespace Border.Research
 
         private void BuildCoolingGame()
         {
+            SetActiveGameGroup(coolingGameGroup);
             primaryButton.gameObject.SetActive(false);
-            activeValveIndex = NextIndex(coolingButtons.Length);
-            coolingExampleActive = true;
-
-            coolingHotspotImage = CreatePanel("CoolingHotspot", playArea, GetValveColor(activeValveIndex, true)).GetComponent<Image>();
-            coolingHotspotImage.rectTransform.anchorMin = new Vector2(0.34f, 0.70f);
-            coolingHotspotImage.rectTransform.anchorMax = new Vector2(0.66f, 0.90f);
-            coolingHotspotImage.rectTransform.offsetMin = Vector2.zero;
-            coolingHotspotImage.rectTransform.offsetMax = Vector2.zero;
-
-            TMP_Text hotspotLabel = CreateText("CoolingHotspotLabel", coolingHotspotImage.transform, 16, FontStyles.Bold, TextAlignmentOptions.Center, "뜨거운 엔진 위치");
-            Stretch(hotspotLabel.rectTransform, 6f);
-
-            RectTransform valveGrid = CreateGroup("CoolingValveGrid", playArea);
-            valveGrid.anchorMin = new Vector2(0.20f, 0.06f);
-            valveGrid.anchorMax = new Vector2(0.80f, 0.55f);
-            valveGrid.offsetMin = Vector2.zero;
-            valveGrid.offsetMax = Vector2.zero;
-            AddGrid(valveGrid, 2, 2, 16f, 170f, 64f);
 
             for (int i = 0; i < coolingButtons.Length; i++)
             {
                 int valveIndex = i;
-                Button button = CreateButton($"CoolingValve_{i}", valveGrid, GetValveLabel(i), 0f, 0f);
-                button.GetComponent<Image>().color = GetValveColor(i, i == activeValveIndex);
-                button.interactable = false;
+                Button button = coolingButtons[i];
+                button.onClick.RemoveAllListeners();
+                TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+                if (label != null)
+                {
+                    label.text = GetValveLabel(i);
+                }
+
+                button.GetComponent<Image>().color = GetValveColor(i, false);
+                button.interactable = true;
                 button.onClick.AddListener(() => PressCoolingValve(valveIndex));
-                coolingButtons[i] = button;
             }
+
+            activeValveIndex = -1;
+            SetupCoolingRound();
         }
 
         private void BuildOutputGame()
         {
-            outputLabelText = CreateText("OutputLabel", playArea, 18, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-            outputLabelText.rectTransform.anchorMin = new Vector2(0.08f, 0.70f);
-            outputLabelText.rectTransform.anchorMax = new Vector2(0.92f, 0.86f);
-            outputLabelText.rectTransform.offsetMin = Vector2.zero;
-            outputLabelText.rectTransform.offsetMax = Vector2.zero;
-
-            RectTransform gaugeFrame = CreatePanel("OutputGaugeFrame", playArea, new Color(0.14f, 0.18f, 0.23f, 1f));
-            gaugeFrame.anchorMin = new Vector2(0.08f, 0.34f);
-            gaugeFrame.anchorMax = new Vector2(0.92f, 0.58f);
-            gaugeFrame.offsetMin = Vector2.zero;
-            gaugeFrame.offsetMax = Vector2.zero;
-
-            outputSafeZone = CreatePanel("SafeZone", gaugeFrame, new Color(0.22f, 0.72f, 0.38f, 0.82f));
+            SetActiveGameGroup(outputGameGroup);
             UpdateOutputSafeZone();
-
-            outputFillImage = CreatePanel("OutputFill", gaugeFrame, new Color(0.88f, 0.5f, 0.2f, 0.92f)).GetComponent<Image>();
             SetHorizontalFill(outputFillImage.rectTransform, 0f);
 
             outputStageIndex = 0;
+            primaryButton.gameObject.SetActive(true);
+            primaryButton.interactable = true;
+            primaryButton.onClick.RemoveAllListeners();
+            RemovePointerHandlers(primaryButton.gameObject);
             primaryButton.GetComponentInChildren<TMP_Text>().text = "안전 영역에서 출력 올리기";
             primaryButton.onClick.AddListener(RecordOutputStage);
         }
 
         private void BuildIgnitionGame()
         {
+            SetActiveGameGroup(ignitionGameGroup);
             primaryButton.gameObject.SetActive(false);
-
-            RectTransform igniterGrid = CreateGroup("IgniterGrid", playArea);
-            igniterGrid.anchorMin = new Vector2(0.25f, 0.10f);
-            igniterGrid.anchorMax = new Vector2(0.75f, 0.78f);
-            igniterGrid.offsetMin = Vector2.zero;
-            igniterGrid.offsetMax = Vector2.zero;
-            AddGrid(igniterGrid, 2, 2, 18f, 136f, 88f);
 
             for (int i = 0; i < ignitionButtons.Length; i++)
             {
                 int igniterIndex = i;
-                Button button = CreateButton($"Igniter_{i}", igniterGrid, (i + 1).ToString(), 0f, 0f);
+                Button button = ignitionButtons[i];
+                button.onClick.RemoveAllListeners();
+                TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+                if (label != null)
+                {
+                    label.text = (i + 1).ToString();
+                }
+
                 button.GetComponent<Image>().color = GetIgniterColor(i, false);
                 button.onClick.AddListener(() => PressIgniter(igniterIndex));
-                ignitionButtons[i] = button;
             }
 
             SetupIgnitionRound();
@@ -493,22 +598,6 @@ namespace Border.Research
 
         private void UpdateCoolingGame()
         {
-            if (coolingExampleActive)
-            {
-                float pulse = Mathf.PingPong(elapsedSeconds * 3f, 1f);
-                coolingHotspotImage.color = Color.Lerp(GetValveColor(activeValveIndex, false), GetValveColor(activeValveIndex, true), pulse);
-                coolingButtons[activeValveIndex].GetComponent<Image>().color = coolingHotspotImage.color;
-                SetStateText("예시: 뜨거운 위치와 같은 색 밸브가 함께 빛납니다.", false);
-
-                if (elapsedSeconds >= CoolingExampleSeconds)
-                {
-                    coolingExampleActive = false;
-                    SetupCoolingRound();
-                }
-
-                return;
-            }
-
             SetStateText($"밸브 {roundIndex + 1}/{CoolingRoundCount}", false);
         }
 
@@ -519,13 +608,10 @@ namespace Border.Research
             SetHorizontalFill(outputFillImage.rectTransform, outputGaugeValue);
             outputLabelText.text = $"{GetOutputStageLabel(outputStageIndex)} 단계  안전 영역 안에서 한 번 클릭";
 
-            if (roundElapsedSeconds >= stageDuration)
-            {
-                RecordMissedOutputStage();
-                return;
-            }
-
-            SetStateText($"출력 단계 {GetOutputStageLabel(outputStageIndex)}  게이지가 안전 영역에 들어오면 클릭", false);
+            SetStateText(roundElapsedSeconds >= stageDuration
+                ? $"출력 단계 {GetOutputStageLabel(outputStageIndex)}  게이지가 끝에 닿았습니다. 클릭해서 기록하세요."
+                : $"출력 단계 {GetOutputStageLabel(outputStageIndex)}  게이지가 안전 영역에 들어오면 클릭",
+                false);
         }
 
         private void UpdateIgnitionGame()
@@ -576,6 +662,11 @@ namespace Border.Research
                 SetFuelGaugeValue(0f);
             }
 
+            if (fuelJudgementText != null)
+            {
+                fuelJudgementText.gameObject.SetActive(false);
+            }
+
             UpdateFuelStatusText();
         }
 
@@ -587,11 +678,33 @@ namespace Border.Research
             }
 
             fuelFilling = false;
-            fuelErrors[fuelAttemptIndex] = Mathf.Abs(fuelGaugeValue - fuelTargetValue);
+            float error = Mathf.Abs(fuelGaugeValue - fuelTargetValue);
+            fuelErrors[fuelAttemptIndex] = error;
             fuelAttemptIndex++;
+            ShowFuelJudgement(error);
+        }
+
+        private void ShowFuelJudgement(float normalizedError)
+        {
+            fuelJudgementShowing = true;
+            fuelJudgementElapsedSeconds = 0f;
+            primaryButton.interactable = false;
+            if (fuelJudgementText != null)
+            {
+                fuelJudgementText.text = GetFuelJudgementText(normalizedError);
+                fuelJudgementText.gameObject.SetActive(true);
+            }
+
+            SetStateText($"판정 {fuelAttemptIndex}/{FuelAttemptCount}", false);
+        }
+
+        private void AdvanceFuelAfterJudgement()
+        {
+            fuelJudgementShowing = false;
+            primaryButton.interactable = true;
             if (fuelAttemptIndex >= FuelAttemptCount)
             {
-                Complete(CalculateFuelCapacityScore(fuelErrors), false);
+                Complete(CalculateFuelCapacityScore(fuelErrors));
                 return;
             }
 
@@ -614,7 +727,7 @@ namespace Border.Research
 
         private void PressCoolingValve(int valveIndex)
         {
-            if (gameCompleted || coolingExampleActive || statId != EngineStatId.Cooling)
+            if (gameCompleted || statId != EngineStatId.Cooling)
             {
                 return;
             }
@@ -626,8 +739,8 @@ namespace Border.Research
                 roundIndex++;
                 if (roundIndex >= CoolingRoundCount)
                 {
-                    float averageReaction = coolingCorrectCount == 0 ? durationSeconds : coolingReactionTotal / coolingCorrectCount;
-                    Complete(CalculateCoolingScore(coolingCorrectCount, coolingWrongCount, averageReaction), false);
+                    float averageReaction = coolingCorrectCount == 0 ? CoolingDurationSeconds : coolingReactionTotal / coolingCorrectCount;
+                    Complete(CalculateCoolingScore(coolingCorrectCount, coolingWrongCount, averageReaction));
                     return;
                 }
 
@@ -667,7 +780,7 @@ namespace Border.Research
             outputStageIndex++;
             if (outputStageIndex >= OutputStageCount)
             {
-                Complete(CalculateMaxOutputScore(outputErrors), false);
+                Complete(CalculateMaxOutputScore(outputErrors));
                 return;
             }
 
@@ -726,8 +839,8 @@ namespace Border.Research
             roundIndex++;
             if (roundIndex >= IgnitionRoundCount)
             {
-                float averageReaction = ignitionTotalInputs == 0 ? durationSeconds : ignitionReactionTotal / ignitionTotalInputs;
-                Complete(CalculateIgnitionReliabilityScore(ignitionCorrectInputs, ignitionTotalInputs, averageReaction), false);
+                float averageReaction = ignitionTotalInputs == 0 ? NoInputReactionSeconds : ignitionReactionTotal / ignitionTotalInputs;
+                Complete(CalculateIgnitionReliabilityScore(ignitionCorrectInputs, ignitionTotalInputs, averageReaction));
                 return;
             }
 
@@ -748,7 +861,7 @@ namespace Border.Research
                     Array.Copy(fuelErrors, attemptedFuelErrors, fuelAttemptIndex);
                     return CalculateFuelCapacityScore(attemptedFuelErrors);
                 case EngineStatId.Cooling:
-                    float coolingAverage = coolingCorrectCount == 0 ? durationSeconds : coolingReactionTotal / coolingCorrectCount;
+                    float coolingAverage = coolingCorrectCount == 0 ? CoolingDurationSeconds : coolingReactionTotal / coolingCorrectCount;
                     return CalculateCoolingScore(coolingCorrectCount, coolingWrongCount, coolingAverage);
                 case EngineStatId.MaxOutput:
                     if (outputStageIndex == 0)
@@ -760,14 +873,14 @@ namespace Border.Research
                     Array.Copy(outputErrors, attemptedOutputErrors, outputStageIndex);
                     return CalculateMaxOutputScore(attemptedOutputErrors);
                 case EngineStatId.IgnitionReliability:
-                    float ignitionAverage = ignitionTotalInputs == 0 ? durationSeconds : ignitionReactionTotal / ignitionTotalInputs;
+                    float ignitionAverage = ignitionTotalInputs == 0 ? NoInputReactionSeconds : ignitionReactionTotal / ignitionTotalInputs;
                     return CalculateIgnitionReliabilityScore(ignitionCorrectInputs, ignitionTotalInputs, ignitionAverage);
                 default:
                     return 0;
             }
         }
 
-        private void Complete(int score, bool completedByTimeout)
+        private void Complete(int score)
         {
             if (gameCompleted)
             {
@@ -775,7 +888,7 @@ namespace Border.Research
             }
 
             gameCompleted = true;
-            pendingResult = new ResearchMiniGameResult(presetId, statId, focused, score, completedByTimeout);
+            pendingResult = new ResearchMiniGameResult(presetId, statId, focused, score);
             ShowResult();
         }
 
@@ -783,25 +896,14 @@ namespace Border.Research
         {
             resultShowing = true;
             resultElapsedSeconds = 0f;
-            timerText.text = "결과 확인";
+            timerText.gameObject.SetActive(false);
+            timerText.text = string.Empty;
             instructionText.text = "개발 결과를 확인하세요.";
-            ClearPlayArea();
+            SetActiveGameGroup(resultGroup);
+            resultScoreText.text = $"{ResearchPrototypeModel.GetStatDisplayName(statId)} 개발 {GetEvaluationText(pendingResult.Score)}";
+            resultDetailText.text = $"미니게임 점수 {pendingResult.Score}\n스탯 +{CalculateResearchStatGain(focused, pendingResult.Score)} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
 
-            TMP_Text scoreText = CreateText("ResultScoreText", playArea, 30, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-            scoreText.rectTransform.anchorMin = new Vector2(0.08f, 0.58f);
-            scoreText.rectTransform.anchorMax = new Vector2(0.92f, 0.82f);
-            scoreText.rectTransform.offsetMin = Vector2.zero;
-            scoreText.rectTransform.offsetMax = Vector2.zero;
-            scoreText.text = $"{ResearchPrototypeModel.GetStatDisplayName(statId)} 개발 {GetEvaluationText(pendingResult.Score)}";
-
-            TMP_Text resultText = CreateText("ResultDetailText", playArea, 21, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-            resultText.rectTransform.anchorMin = new Vector2(0.1f, 0.28f);
-            resultText.rectTransform.anchorMax = new Vector2(0.9f, 0.56f);
-            resultText.rectTransform.offsetMin = Vector2.zero;
-            resultText.rectTransform.offsetMax = Vector2.zero;
-            resultText.text = $"미니게임 점수 {pendingResult.Score}\n스탯 +{CalculateResearchStatGain(focused, pendingResult.Score)} / 레벨 +{(focused ? ResearchPrototypeModel.FocusedResearchLevelGain : ResearchPrototypeModel.NormalResearchLevelGain)}";
-
-            stateText.text = pendingResult.CompletedByTimeout ? "시간 종료. 현재 점수로 개발을 완료합니다." : "개발 완료. 곧 연구 화면으로 돌아갑니다.";
+            stateText.text = "개발 완료. 곧 연구 화면으로 돌아갑니다.";
             primaryButton.gameObject.SetActive(true);
             primaryButton.onClick.RemoveAllListeners();
             RemovePointerHandlers(primaryButton.gameObject);
@@ -826,6 +928,20 @@ namespace Border.Research
             stateText.text = FormatStateText(text, showExample);
         }
 
+        private void UpdateTimerText()
+        {
+            if (statId != EngineStatId.Cooling)
+            {
+                timerText.gameObject.SetActive(false);
+                timerText.text = string.Empty;
+                return;
+            }
+
+            timerText.gameObject.SetActive(true);
+            int secondsLeft = Mathf.CeilToInt(Mathf.Max(0f, CoolingDurationSeconds - elapsedSeconds));
+            timerText.text = $"남은 시간 {secondsLeft}초";
+        }
+
         private void UpdateOutputSafeZone()
         {
             float center = GetOutputTargetCenter(outputStageIndex);
@@ -833,14 +949,6 @@ namespace Border.Research
             outputSafeZone.anchorMax = new Vector2(Mathf.Clamp01(center + 0.08f), 1f);
             outputSafeZone.offsetMin = Vector2.zero;
             outputSafeZone.offsetMax = Vector2.zero;
-        }
-
-        private void ClearPlayArea()
-        {
-            for (int i = playArea.childCount - 1; i >= 0; i--)
-            {
-                DestroyUnityObject(playArea.GetChild(i).gameObject);
-            }
         }
 
         private static int CalculateResearchStatGain(bool focused, int score)
@@ -1053,120 +1161,84 @@ namespace Border.Research
             }
         }
 
-        private static void AddGrid(RectTransform target, int rows, int columns, float spacing, float width, float height)
+        private void SetActiveGameGroup(RectTransform activeGroup)
         {
-            GridLayoutGroup grid = target.gameObject.AddComponent<GridLayoutGroup>();
-            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = columns;
-            grid.cellSize = new Vector2(width, height);
-            grid.spacing = new Vector2(spacing, spacing);
-            grid.childAlignment = TextAnchor.MiddleCenter;
-            grid.padding = new RectOffset(24, 24, 28, 28);
+            SetActiveIfPresent(fuelGameGroup, activeGroup);
+            SetActiveIfPresent(coolingGameGroup, activeGroup);
+            SetActiveIfPresent(outputGameGroup, activeGroup);
+            SetActiveIfPresent(ignitionGameGroup, activeGroup);
+            SetActiveIfPresent(resultGroup, activeGroup);
         }
 
-        private static Button CreateButton(string name, Transform parent, string text, float preferredWidth, float preferredHeight)
+        private static void SetActiveIfPresent(RectTransform group, RectTransform activeGroup)
         {
-            RectTransform rectTransform = CreatePanel(name, parent, new Color(0.24f, 0.29f, 0.36f, 1f));
-            LayoutElement layout = rectTransform.gameObject.AddComponent<LayoutElement>();
-            if (preferredWidth > 0f)
+            if (group != null)
             {
-                layout.preferredWidth = preferredWidth;
+                group.gameObject.SetActive(group == activeGroup);
             }
-            else
-            {
-                layout.flexibleWidth = 1f;
-            }
+        }
 
-            if (preferredHeight > 0f)
+        private static TMP_Text FindRequiredText(Transform root, string name)
+        {
+            foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
             {
-                layout.preferredHeight = preferredHeight;
-            }
-            else
-            {
-                layout.flexibleHeight = 1f;
+                if (text.name == name)
+                {
+                    return text;
+                }
             }
 
-            Button button = rectTransform.gameObject.AddComponent<Button>();
-            button.targetGraphic = rectTransform.GetComponent<Image>();
-            button.colors = CreateButtonColors();
-
-            TMP_Text label = CreateText("Label", rectTransform, 14, FontStyles.Bold, TextAlignmentOptions.Center, text);
-            Stretch(label.rectTransform, 6f);
-            return button;
+            return null;
         }
 
-        private static ColorBlock CreateButtonColors()
+        private static Button FindRequiredButton(Transform root, string name)
         {
-            ColorBlock colors = ColorBlock.defaultColorBlock;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.92f, 0.96f, 1f, 1f);
-            colors.pressedColor = new Color(0.78f, 0.86f, 0.94f, 1f);
-            colors.selectedColor = new Color(0.9f, 0.95f, 1f, 1f);
-            colors.disabledColor = new Color(0.42f, 0.45f, 0.48f, 0.72f);
-            return colors;
+            foreach (Button button in root.GetComponentsInChildren<Button>(true))
+            {
+                if (button.name == name)
+                {
+                    return button;
+                }
+            }
+
+            return null;
         }
 
-        private static TMP_Text CreateText(string name, Transform parent, int fontSize, FontStyles fontStyle, TextAlignmentOptions alignment, string text)
+        private static Image FindRequiredImage(Transform root, string name)
         {
-            var textObject = new GameObject(name, typeof(RectTransform));
-            textObject.transform.SetParent(parent, false);
-            TMP_Text label = textObject.AddComponent<TextMeshProUGUI>();
-            label.text = text;
-            label.fontSize = fontSize;
-            label.fontStyle = fontStyle;
-            label.alignment = alignment;
-            label.color = Color.white;
-            label.textWrappingMode = TextWrappingModes.Normal;
-            label.raycastTarget = false;
-            return label;
+            foreach (Image image in root.GetComponentsInChildren<Image>(true))
+            {
+                if (image.name == name)
+                {
+                    return image;
+                }
+            }
+
+            return null;
         }
 
-        private static RectTransform CreatePanel(string name, Transform parent, Color color)
+        private static RectTransform FindRequiredRectTransform(Transform root, string name)
         {
-            var panel = new GameObject(name, typeof(RectTransform));
-            panel.transform.SetParent(parent, false);
-            Image image = panel.AddComponent<Image>();
-            image.color = color;
-            return (RectTransform)panel.transform;
+            foreach (RectTransform rectTransform in root.GetComponentsInChildren<RectTransform>(true))
+            {
+                if (rectTransform.name == name)
+                {
+                    return rectTransform;
+                }
+            }
+
+            return null;
         }
 
-        private static RectTransform CreateGroup(string name, Transform parent)
+#if UNITY_EDITOR
+        private static void RebuildDefaultPrefabsForEditor()
         {
-            var group = new GameObject(name, typeof(RectTransform));
-            group.transform.SetParent(parent, false);
-            return (RectTransform)group.transform;
+            Type builderType = Type.GetType("Border.Research.Editor.ResearchUiPrefabBuilder, Border.Editor");
+            System.Reflection.MethodInfo method = builderType?.GetMethod("RebuildUiPrefabs", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            method?.Invoke(null, null);
         }
 
-        private static void AddVerticalLayout(RectTransform target, float left, float right, float top, float spacing)
-        {
-            VerticalLayoutGroup layout = target.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset((int)left, (int)right, (int)top, (int)top);
-            layout.spacing = spacing;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-        }
-
-        private static void AddHorizontalLayout(RectTransform target, float left, float right, float top, float spacing)
-        {
-            HorizontalLayoutGroup layout = target.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset((int)left, (int)right, (int)top, (int)top);
-            layout.spacing = spacing;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = true;
-        }
-
-        private static void Stretch(RectTransform target, float padding)
-        {
-            target.anchorMin = Vector2.zero;
-            target.anchorMax = Vector2.one;
-            target.offsetMin = new Vector2(padding, padding);
-            target.offsetMax = new Vector2(-padding, -padding);
-        }
-
+#endif
         private static void EnsureEventSystem()
         {
             EventSystem eventSystem = FindFirstObjectByType<EventSystem>();

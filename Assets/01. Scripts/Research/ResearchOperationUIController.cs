@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -195,8 +196,6 @@ namespace Border.Research
                 || fundsText == null
                 || quarterlyFundingText == null
                 || selectedEngineText == null
-                || selectedStageText == null
-                || selectedRequirementText == null
                 || designEntryText == null
                 || statusText == null
                 || normalResearchButton == null
@@ -219,6 +218,15 @@ namespace Border.Research
             createEnginePresetButtonText = createEnginePresetButton.GetComponentInChildren<TMP_Text>(true);
             enterDesignButtonText = enterDesignButton.GetComponentInChildren<TMP_Text>(true);
             waitButtonText = waitButton.GetComponentInChildren<TMP_Text>(true);
+            if (selectedStageText != null)
+            {
+                selectedStageText.gameObject.SetActive(false);
+            }
+
+            if (selectedRequirementText != null)
+            {
+                selectedRequirementText.gameObject.SetActive(false);
+            }
 
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
@@ -361,21 +369,18 @@ namespace Border.Research
             EnginePresetState selectedEngine = model.GetEnginePreset(selectedEnginePreset);
             LaunchStageConfig selectedStageConfig = ResearchPrototypeModel.GetStageConfig(selectedStage);
             LaunchStageState selectedStageState = model.GetStage(selectedStage);
-            ResearchDesignEntryData preview = model.CreateDesignEntry(selectedStage, selectedEnginePreset, CreatePreviewInstalledCounts(selectedStage, selectedEnginePreset), 50, selectedStage == LaunchStageId.Moon ? TestVisibility.FinalMission : TestVisibility.Private);
 
-            selectedEngineText.text = $"{selectedEngineConfig.DisplayName} Lv.{selectedEngine.Level}/{ResearchPrototypeModel.MaxEnginePresetLevel}  "
+            selectedEngineText.text = $"{selectedEngineConfig.DisplayName}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
                 + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {selectedEngineConfig.InstallCost}\n"
-                + $"연료 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 출력 {selectedEngine.MaxOutput} / 점화 {selectedEngine.IgnitionReliability}\n"
-                + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)} / 미니게임 점수로 보상 결정 / 시험 최고 {GetBestGradeText(selectedEngine)}";
-            selectedStageText.text = $"현재 설계 목표  발사비 {selectedStageConfig.LaunchCost} / 예상 성공 {model.CalculateSuccessChance(preview)}% / 경험 +{preview.ExperienceBonus}%p";
-            selectedRequirementText.text = GetDesignEntryRequirementText(selectedStageConfig, selectedStageState, selectedEngine);
+                + $"연료량 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 최대 출력 {selectedEngine.MaxOutput} / 점화 신뢰도 {selectedEngine.IgnitionReliability}\n"
+                + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)} / 시험 최고 {GetBestGradeText(selectedEngine)}";
 
-            normalResearchButtonText.text = $"일반 연구\n{selectedEngineConfig.NormalResearchCost} / Lv +{ResearchPrototypeModel.NormalResearchLevelGain}";
-            focusedResearchButtonText.text = $"집중 연구\n{selectedEngineConfig.FocusedResearchCost} / Lv +{ResearchPrototypeModel.FocusedResearchLevelGain}";
+            normalResearchButtonText.text = $"일반 연구\n{selectedEngineConfig.NormalResearchCost} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
+            focusedResearchButtonText.text = $"집중 연구\n{selectedEngineConfig.FocusedResearchCost} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
             createEnginePresetButtonText.text = model.ActiveEnginePresetCount >= ResearchPrototypeModel.MaxEnginePresetCount
                 ? "새로운 엔진 개발\n최대 10개"
                 : $"새로운 엔진 개발\n현재 {model.ActiveEnginePresetCount}/{ResearchPrototypeModel.MaxEnginePresetCount}";
-            enterDesignButtonText.text = $"설계 진입\n발사비 {selectedStageConfig.LaunchCost}";
+            enterDesignButtonText.text = $"설계 진입\n예산 {selectedStageConfig.LaunchCost}";
             waitButtonText.text = $"1분기 대기   비용 0 / 분기 연구비 +{model.QuarterlyFunding}";
 
             normalResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.NormalResearchCost);
@@ -410,14 +415,14 @@ namespace Border.Research
             bool selected = selectedEnginePreset == config.Id;
             card.Button.GetComponent<Image>().color = selected ? new Color(0.28f, 0.35f, 0.42f, 1f) : new Color(0.19f, 0.23f, 0.28f, 1f);
             card.Title.text = config.DisplayName;
-            card.Detail.text = $"Lv.{engine.Level} 성능 {model.CalculateEnginePerformanceScore(config.Id)} 최고 {GetBestGradeText(engine)}";
+            card.Detail.text = $"완성도 {engine.Completion} 성능 {model.CalculateEnginePerformanceScore(config.Id)} 최고 {GetBestGradeText(engine)}";
         }
 
         private bool CanResearch(EnginePresetState engine, int cost)
         {
             return !model.DeadlineReached
                 && engine.Unlocked
-                && engine.Level < ResearchPrototypeModel.MaxEnginePresetLevel
+                && engine.Completion < ResearchPrototypeModel.MaxEngineCompletion
                 && model.Funds >= cost;
         }
 
@@ -426,44 +431,7 @@ namespace Border.Research
             return !model.DeadlineReached
                 && engine.Unlocked
                 && stage.Unlocked
-                && (selectedStage != LaunchStageId.Engine || engine.Level >= 1)
                 && model.Funds >= config.LaunchCost;
-        }
-
-        private string GetDesignEntryRequirementText(LaunchStageConfig config, LaunchStageState stage, EnginePresetState engine)
-        {
-            if (!stage.Unlocked)
-            {
-                return $"설계 진입 불가: {model.GetUnlockConditionText(config.Id)}";
-            }
-
-            if (!engine.Unlocked)
-            {
-                return $"설계 진입 불가: {ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset).DisplayName} 개발 필요";
-            }
-
-            if (selectedStage == LaunchStageId.Engine && engine.Level < 1)
-            {
-                return $"설계 진입 불가: {ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset).DisplayName} 레벨 1 필요";
-            }
-
-            if (model.Funds < config.LaunchCost)
-            {
-                return $"설계 진입 불가: 연구비 {model.Funds}/{config.LaunchCost}";
-            }
-
-            return "설계 진입 가능: 비용과 분기는 발사 전까지 소비하지 않음";
-        }
-
-        private int[] CreatePreviewInstalledCounts(LaunchStageId stageId, EnginePresetId presetId)
-        {
-            var counts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
-            if (stageId != LaunchStageId.Engine)
-            {
-                counts[(int)presetId] = 1;
-            }
-
-            return counts;
         }
 
         private void EnsureSelectedEnginePresetUnlocked()
@@ -479,8 +447,7 @@ namespace Border.Research
         private string FormatDesignEntry(ResearchDesignEntryData data)
         {
             return $"{data.StageId} / {ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId).DisplayName} / {data.Year} Q{data.Quarter}\n"
-                + $"발사비 {data.LaunchCost}, 예약 설치비 {data.ReservedInstallCost}, 설계 적합도 {data.DesignFit}, {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)}\n"
-                + $"예상 성공 {model.CalculateSuccessChance(data)}%. 설계 진입은 아직 비용/분기/결과를 소비하지 않음.";
+                + $"지불한 예산 {data.LaunchCost}, 예약 설치비 {data.ReservedInstallCost}, 설계 적합도 {data.DesignFit}, {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)}";
         }
 
         private static string FormatLaunchResult(ResearchLaunchResultData result)
@@ -492,7 +459,6 @@ namespace Border.Research
         private void ShowDesignScreen()
         {
             RequestedScreenName = ResearchFlowSession.DesignScreenName;
-            canvasTransform.gameObject.SetActive(false);
 
             if (activeDesignController != null)
             {
@@ -500,10 +466,13 @@ namespace Border.Research
                 activeDesignController = null;
             }
 
-            var host = new GameObject("Research Design Screen Controller");
-            host.transform.SetParent(transform, false);
-            activeDesignController = host.AddComponent<ResearchDesignScreenController>();
-            activeDesignController.Initialize(session, ReturnFromDesignScreen);
+            if (TryOpenSimulationDesignStage())
+            {
+                return;
+            }
+
+            statusText.text = "설계 단계 진입 실패. 시뮬레이션 설계 호스트를 찾을 수 없습니다.";
+            Refresh();
         }
 
         private void ReturnFromDesignScreen()
@@ -557,6 +526,24 @@ namespace Border.Research
         }
 
 #endif
+        private static bool TryOpenSimulationDesignStage()
+        {
+            if (!Application.isPlaying)
+            {
+                return false;
+            }
+
+            Type hostType = Type.GetType("Simulation.SimulationStageHost, Simulation");
+            MethodInfo method = hostType?.GetMethod("OpenDesignStage", BindingFlags.Public | BindingFlags.Static);
+            if (method == null)
+            {
+                return false;
+            }
+
+            object result = method.Invoke(null, null);
+            return result is bool opened && opened;
+        }
+
         private static string GetBestGradeText(LaunchStageState stage)
         {
             return stage.HasBestGrade ? stage.BestGrade.ToString() : "-";

@@ -34,6 +34,7 @@ namespace Border.Research.Editor
             SavePrefab(CreateDesignEnginePresetButton(), "DesignEnginePresetButton");
             SavePrefab(CreateOperationScreen(), "ResearchOperationScreen");
             SavePrefab(CreateDesignScreen(), "ResearchDesignScreen");
+            SavePrefab(CreateMiniGameScreen(), "ResearchMiniGameScreen");
             AssetDatabase.DeleteAsset($"{ResourceFolder}/LaunchTargetCard.prefab");
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -44,6 +45,7 @@ namespace Border.Research.Editor
             GameObject operationScreen = AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchOperationScreen.prefab");
             return operationScreen != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchDesignScreen.prefab") != null
+                && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchMiniGameScreen.prefab") != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/EnginePresetCard.prefab") != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/DesignEnginePresetButton.prefab") != null
                 && FindChild(operationScreen.transform, "LaunchTargetColumn") == null;
@@ -140,11 +142,132 @@ namespace Border.Research.Editor
             return root.gameObject;
         }
 
+        private static GameObject CreateMiniGameScreen()
+        {
+            RectTransform root = CreateCanvasRoot("ResearchMiniGameScreen", new Vector2(1280f, 720f));
+            Canvas canvas = root.GetComponent<Canvas>();
+            canvas.sortingOrder = 20;
+            RectTransform background = CreatePanel("Background", root, new Color(0.04f, 0.05f, 0.07f, 0.96f));
+            Stretch(background, 0f);
+
+            RectTransform panel = CreatePanel("MiniGamePanel", root, new Color(0.13f, 0.16f, 0.2f, 0.98f));
+            Center(panel, new Vector2(1040f, 560f));
+            AddVerticalLayout(panel, 20f, 20f, 18f, 10f);
+
+            RectTransform topRow = CreateGroup("TopRow", panel);
+            AddHorizontalLayout(topRow, 0f, 0f, 0f, 10f);
+            topRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 48f;
+            TMP_Text title = CreateText("Title", topRow, 24, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
+            title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            TMP_Text timer = CreateText("Timer", topRow, 18, FontStyles.Bold, TextAlignmentOptions.Right, string.Empty);
+            timer.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
+
+            TMP_Text instruction = CreateText("Instruction", panel, 16, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
+            instruction.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
+
+            RectTransform playArea = CreatePanel("PlayArea", panel, new Color(0.07f, 0.09f, 0.12f, 1f));
+            playArea.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            CreateFuelGame(playArea);
+            CreateCoolingGame(playArea);
+            CreateOutputGame(playArea);
+            CreateIgnitionGame(playArea);
+            CreateResultGame(playArea);
+
+            TMP_Text state = CreateText("State", panel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
+            state.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
+            CreateButton("PrimaryActionButton", panel, string.Empty, 0f, 54f);
+            return root.gameObject;
+        }
+
+        private static void CreateFuelGame(RectTransform parent)
+        {
+            RectTransform group = CreateGroup("FuelGame", parent);
+            Stretch(group, 0f);
+            TMP_Text status = CreateText("FuelStatusText", group, 18, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(status.rectTransform, new Vector2(0.08f, 0.68f), new Vector2(0.92f, 0.84f));
+
+            RectTransform gaugeFrame = CreatePanel("FuelGaugeFrame", group, new Color(0.14f, 0.18f, 0.23f, 1f));
+            Anchor(gaugeFrame, new Vector2(0.08f, 0.28f), new Vector2(0.92f, 0.62f));
+            Image fill = CreatePanel("FuelFill", gaugeFrame, new Color(0.26f, 0.74f, 0.88f, 1f)).GetComponent<Image>();
+            Anchor(fill.rectTransform, Vector2.zero, new Vector2(0f, 1f));
+            Image currentMarker = CreatePanel("FuelCurrentMarker", gaugeFrame, new Color(0.92f, 0.98f, 1f, 1f)).GetComponent<Image>();
+            currentMarker.rectTransform.sizeDelta = new Vector2(4f, 0f);
+            Image targetMarker = CreatePanel("FuelTarget", gaugeFrame, new Color(1f, 0.88f, 0.24f, 1f)).GetComponent<Image>();
+            targetMarker.rectTransform.sizeDelta = new Vector2(7f, 0f);
+
+            TMP_Text label = CreateText("FuelGaugeLabel", gaugeFrame, 15, FontStyles.Bold, TextAlignmentOptions.Center, "목표선");
+            label.color = new Color(1f, 0.94f, 0.42f, 1f);
+            TMP_Text judgement = CreateText("FuelJudgementText", group, 38, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(judgement.rectTransform, new Vector2(0.25f, 0.08f), new Vector2(0.75f, 0.25f));
+            group.gameObject.SetActive(false);
+        }
+
+        private static void CreateCoolingGame(RectTransform parent)
+        {
+            RectTransform group = CreateGroup("CoolingGame", parent);
+            Stretch(group, 0f);
+            RectTransform hotspot = CreatePanel("CoolingHotspot", group, new Color(0.88f, 0.36f, 0.24f, 1f));
+            Anchor(hotspot, new Vector2(0.34f, 0.70f), new Vector2(0.66f, 0.90f));
+            TMP_Text hotspotLabel = CreateText("CoolingHotspotLabel", hotspot, 16, FontStyles.Bold, TextAlignmentOptions.Center, "뜨거운 엔진 위치");
+            Stretch(hotspotLabel.rectTransform, 6f);
+
+            RectTransform valveGrid = CreateGroup("CoolingValveGrid", group);
+            Anchor(valveGrid, new Vector2(0.20f, 0.06f), new Vector2(0.80f, 0.55f));
+            AddGrid(valveGrid, 2, 16f, 170f, 64f);
+            for (int i = 0; i < 4; i++)
+            {
+                CreateButton($"CoolingValve_{i}", valveGrid, string.Empty, 0f, 0f);
+            }
+
+            group.gameObject.SetActive(false);
+        }
+
+        private static void CreateOutputGame(RectTransform parent)
+        {
+            RectTransform group = CreateGroup("OutputGame", parent);
+            Stretch(group, 0f);
+            TMP_Text label = CreateText("OutputLabel", group, 18, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(label.rectTransform, new Vector2(0.08f, 0.70f), new Vector2(0.92f, 0.86f));
+            RectTransform gaugeFrame = CreatePanel("OutputGaugeFrame", group, new Color(0.14f, 0.18f, 0.23f, 1f));
+            Anchor(gaugeFrame, new Vector2(0.08f, 0.34f), new Vector2(0.92f, 0.58f));
+            RectTransform safeZone = CreatePanel("SafeZone", gaugeFrame, new Color(0.22f, 0.72f, 0.38f, 0.82f));
+            Anchor(safeZone, new Vector2(0.27f, 0f), new Vector2(0.43f, 1f));
+            RectTransform fill = CreatePanel("OutputFill", gaugeFrame, new Color(0.88f, 0.5f, 0.2f, 0.92f));
+            Anchor(fill, Vector2.zero, new Vector2(0f, 1f));
+            group.gameObject.SetActive(false);
+        }
+
+        private static void CreateIgnitionGame(RectTransform parent)
+        {
+            RectTransform group = CreateGroup("IgnitionGame", parent);
+            Stretch(group, 0f);
+            RectTransform igniterGrid = CreateGroup("IgniterGrid", group);
+            Anchor(igniterGrid, new Vector2(0.25f, 0.10f), new Vector2(0.75f, 0.78f));
+            AddGrid(igniterGrid, 2, 18f, 136f, 88f);
+            for (int i = 0; i < 4; i++)
+            {
+                CreateButton($"Igniter_{i}", igniterGrid, (i + 1).ToString(), 0f, 0f);
+            }
+
+            group.gameObject.SetActive(false);
+        }
+
+        private static void CreateResultGame(RectTransform parent)
+        {
+            RectTransform group = CreateGroup("ResultGame", parent);
+            Stretch(group, 0f);
+            TMP_Text score = CreateText("ResultScoreText", group, 30, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(score.rectTransform, new Vector2(0.08f, 0.58f), new Vector2(0.92f, 0.82f));
+            TMP_Text detail = CreateText("ResultDetailText", group, 21, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(detail.rectTransform, new Vector2(0.1f, 0.28f), new Vector2(0.9f, 0.56f));
+            group.gameObject.SetActive(false);
+        }
+
         private static void CreateOperationDetails(RectTransform parent)
         {
             RectTransform selectedPanel = CreatePanel("SelectedPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
             AddVerticalLayout(selectedPanel, 12f, 12f, 10f, 7f);
-            selectedPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 215f;
+            selectedPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 154f;
             CreateText("SelectedEngineText", selectedPanel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
 
             RectTransform statRow = CreateGroup("StatButtons", selectedPanel);
@@ -154,9 +277,6 @@ namespace Border.Research.Editor
             CreateButton("StatButton_Cooling", statRow, "냉각", 0f, 36f);
             CreateButton("StatButton_MaxOutput", statRow, "최대 출력", 0f, 36f);
             CreateButton("StatButton_IgnitionReliability", statRow, "점화 신뢰도", 0f, 36f);
-            CreateText("SelectedStageText", selectedPanel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-            CreateText("SelectedRequirementText", selectedPanel, 14, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
-
             RectTransform actionPanel = CreatePanel("ActionPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
             AddVerticalLayout(actionPanel, 12f, 12f, 10f, 8f);
             actionPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 160f;
@@ -339,6 +459,17 @@ namespace Border.Research.Editor
             layout.childControlHeight = true;
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = true;
+        }
+
+        private static void AddGrid(RectTransform target, int columns, float spacing, float width, float height)
+        {
+            GridLayoutGroup grid = target.gameObject.AddComponent<GridLayoutGroup>();
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = columns;
+            grid.cellSize = new Vector2(width, height);
+            grid.spacing = new Vector2(spacing, spacing);
+            grid.childAlignment = TextAnchor.MiddleCenter;
+            grid.padding = new RectOffset(24, 24, 28, 28);
         }
 
         private static ColorBlock CreateButtonColors()

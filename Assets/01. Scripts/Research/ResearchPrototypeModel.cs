@@ -57,7 +57,7 @@ namespace Border.Research
         RequirementNotMet,
         DeadlineReached,
         NoPendingDesignEntry,
-        EngineLevelMaxed,
+        EngineCompletionMaxed,
         EnginePresetLocked,
         EnginePresetLimitReached
     }
@@ -76,7 +76,7 @@ namespace Border.Research
     public sealed class EnginePresetState
     {
         public EnginePresetId PresetId;
-        public int Level;
+        public int Completion;
         public int FuelCapacity;
         public int Cooling;
         public int MaxOutput;
@@ -179,7 +179,7 @@ namespace Border.Research
             int quarter,
             int mapSeed,
             string targetPathId,
-            int selectedEngineLevel,
+            int selectedEngineCompletion,
             int selectedEngineScore,
             int installedEngineScore,
             int[] installedEngineCounts,
@@ -188,7 +188,8 @@ namespace Border.Research
             int designFit,
             TestVisibility visibility,
             int previousCertificationBonus,
-            int experienceBonus)
+            int experienceBonus,
+            bool launchCostPaid)
         {
             StageId = stageId;
             SelectedEnginePresetId = selectedEnginePresetId;
@@ -196,7 +197,7 @@ namespace Border.Research
             Quarter = quarter;
             MapSeed = mapSeed;
             TargetPathId = targetPathId;
-            SelectedEngineLevel = selectedEngineLevel;
+            SelectedEngineCompletion = selectedEngineCompletion;
             SelectedEngineScore = selectedEngineScore;
             InstalledEngineScore = installedEngineScore;
             InstalledEngineCounts = CopyEngineCounts(installedEngineCounts);
@@ -206,6 +207,7 @@ namespace Border.Research
             Visibility = visibility;
             PreviousCertificationBonus = previousCertificationBonus;
             ExperienceBonus = experienceBonus;
+            LaunchCostPaid = launchCostPaid;
         }
 
         public LaunchStageId StageId { get; }
@@ -214,7 +216,7 @@ namespace Border.Research
         public int Quarter { get; }
         public int MapSeed { get; }
         public string TargetPathId { get; }
-        public int SelectedEngineLevel { get; }
+        public int SelectedEngineCompletion { get; }
         public int SelectedEngineScore { get; }
         public int InstalledEngineScore { get; }
         public int[] InstalledEngineCounts { get; }
@@ -224,6 +226,7 @@ namespace Border.Research
         public TestVisibility Visibility { get; }
         public int PreviousCertificationBonus { get; }
         public int ExperienceBonus { get; }
+        public bool LaunchCostPaid { get; }
 
         public int InstalledEngineCount
         {
@@ -334,11 +337,10 @@ namespace Border.Research
         public const int InitialQuarterlyFunding = 600;
         public const int MinQuarterlyFunding = 300;
         public const int MaxQuarterlyFunding = 1000;
-        public const int NormalResearchLevelGain = 1;
-        public const int FocusedResearchLevelGain = 2;
-        public const int NormalResearchGain = NormalResearchLevelGain;
-        public const int FocusedResearchGain = FocusedResearchLevelGain;
-        public const int MaxEnginePresetLevel = 5;
+        public const int ResearchCompletionGain = 10;
+        public const int NormalResearchGain = ResearchCompletionGain;
+        public const int FocusedResearchGain = ResearchCompletionGain;
+        public const int MaxEngineCompletion = 100;
         public const int MaxEnginePresetCount = 10;
         public const int InitialEngineStat = 40;
         public const int EngineNormalResearchCost = 350;
@@ -363,7 +365,7 @@ namespace Border.Research
 
         private static readonly LaunchStageConfig[] StageConfigs =
         {
-            new(LaunchStageId.Engine, "초기 목표", 600, "엔진 레벨 1 이상"),
+            new(LaunchStageId.Engine, "초기 목표", 600, "기본 해금"),
             new(LaunchStageId.Rocket, "확장 목표", 900, "직전 목표 C 이상"),
             new(LaunchStageId.Orbit, "궤도 목표", 1200, "직전 목표 C 이상"),
             new(LaunchStageId.Moon, "달 착륙", 1800, "직전 목표 C 이상"),
@@ -419,7 +421,7 @@ namespace Border.Research
                 EnginePresets[i] = new EnginePresetState
                 {
                     PresetId = config.Id,
-                    Level = 0,
+                    Completion = 0,
                     FuelCapacity = config.InitialFuelCapacity,
                     Cooling = config.InitialCooling,
                     MaxOutput = config.InitialMaxOutput,
@@ -524,7 +526,7 @@ namespace Border.Research
             }
 
             EnginePresetState preset = GetEnginePreset(presetId);
-            preset.Level = Math.Max(preset.Level, 3);
+            preset.Completion = Math.Max(preset.Completion, 30);
             preset.FuelCapacity = Math.Max(preset.FuelCapacity, 65);
             preset.Cooling = Math.Max(preset.Cooling, 65);
             preset.MaxOutput = Math.Max(preset.MaxOutput, 65);
@@ -555,10 +557,10 @@ namespace Border.Research
                 return ResearchActionResult.EnginePresetLocked;
             }
 
-            if (preset.Level >= MaxEnginePresetLevel)
+            if (preset.Completion >= MaxEngineCompletion)
             {
-                LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName}은 이미 최대 레벨입니다.";
-                return ResearchActionResult.EngineLevelMaxed;
+                LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName}은 완성도 100입니다. 더 이상 연구할 수 없습니다.";
+                return ResearchActionResult.EngineCompletionMaxed;
             }
 
             EnginePresetConfig config = GetEnginePresetConfig(presetId);
@@ -570,17 +572,16 @@ namespace Border.Research
             }
 
             int oldStat = preset.GetStat(statId);
-            int oldLevel = preset.Level;
+            int oldCompletion = preset.Completion;
             int statGain = GetResearchStatGain(focused, score);
-            int levelGain = focused ? FocusedResearchLevelGain : NormalResearchLevelGain;
 
             Funds -= cost;
             preset.SetStat(statId, oldStat + statGain);
-            preset.Level = Math.Min(MaxEnginePresetLevel, preset.Level + levelGain);
+            preset.Completion = Math.Min(MaxEngineCompletion, preset.Completion + ResearchCompletionGain);
             AdvanceQuarter();
 
             LastMessage = $"{config.DisplayName} {GetStatDisplayName(statId)} {(focused ? "집중" : "일반")} 연구 완료. "
-                + $"점수 {ClampInt(score, 0, 100)}, 스탯 {oldStat}->{preset.GetStat(statId)}, 레벨 {oldLevel}->{preset.Level}.";
+                + $"점수 {ClampInt(score, 0, 100)}, 스탯 {oldStat}->{preset.GetStat(statId)}, 완성도 {oldCompletion}->{preset.Completion}.";
             return ResearchActionResult.Success;
         }
 
@@ -619,20 +620,15 @@ namespace Border.Research
                 return ResearchActionResult.LaunchTargetLocked;
             }
 
-            if (stageId == LaunchStageId.Engine && GetEnginePreset(presetId).Level < 1)
-            {
-                LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName} 시험 조건 부족. 엔진 레벨 1 필요.";
-                return ResearchActionResult.RequirementNotMet;
-            }
-
             if (Funds < config.LaunchCost)
             {
-                LastMessage = $"발사비 부족. 필요 {config.LaunchCost}, 보유 {Funds}.";
+                LastMessage = $"예산 부족. 필요 {config.LaunchCost}, 보유 {Funds}.";
                 return ResearchActionResult.NotEnoughFunds;
             }
 
-            data = CreateDesignEntry(stageId, presetId, CreateDefaultInstalledEngineCounts(stageId, presetId), 50, GetDefaultVisibility(stageId));
-            LastMessage = $"{config.DisplayName} 설계 진입 준비 완료. 비용과 시간은 아직 소비하지 않습니다.";
+            Funds -= config.LaunchCost;
+            data = CreateDesignEntry(stageId, presetId, CreateDefaultInstalledEngineCounts(stageId, presetId), 50, GetDefaultVisibility(stageId), true);
+            LastMessage = $"{config.DisplayName} 설계 진입. 예산 {config.LaunchCost} 지불.";
             return ResearchActionResult.Success;
         }
 
@@ -641,7 +637,8 @@ namespace Border.Research
             EnginePresetId presetId,
             int[] installedEngineCounts,
             int designFit,
-            TestVisibility visibility)
+            TestVisibility visibility,
+            bool launchCostPaid = false)
         {
             LaunchStageConfig stageConfig = GetStageConfig(stageId);
             EnginePresetState selectedEngine = GetEnginePreset(presetId);
@@ -668,7 +665,7 @@ namespace Border.Research
                 Quarter,
                 mapSeed,
                 CreateTargetPathId(stageId, mapSeed),
-                selectedEngine.Level,
+                selectedEngine.Completion,
                 CalculateEnginePerformanceScore(presetId),
                 installedScore,
                 counts,
@@ -677,7 +674,8 @@ namespace Border.Research
                 clampedFit,
                 normalizedVisibility,
                 GetPreviousCertificationBonus(stageId, presetId),
-                GetExperienceBonus(stageId));
+                GetExperienceBonus(stageId),
+                launchCostPaid);
         }
 
         public ResearchActionResult CommitLaunch(ResearchDesignEntryData designEntry, out ResearchLaunchResultData result)
@@ -704,16 +702,11 @@ namespace Border.Research
                 return ResearchActionResult.LaunchTargetLocked;
             }
 
-            if (designEntry.StageId == LaunchStageId.Engine && GetEnginePreset(designEntry.SelectedEnginePresetId).Level < 1)
+            int entryCost = designEntry.LaunchCostPaid ? 0 : designEntry.LaunchCost;
+            int remainingCost = entryCost + designEntry.ReservedInstallCost;
+            if (Funds < remainingCost)
             {
-                LastMessage = $"{GetEnginePresetConfig(designEntry.SelectedEnginePresetId).DisplayName} 시험 조건 부족. 엔진 레벨 1 필요.";
-                return ResearchActionResult.RequirementNotMet;
-            }
-
-            int totalCost = designEntry.LaunchCost + designEntry.ReservedInstallCost;
-            if (Funds < totalCost)
-            {
-                LastMessage = $"발사비 부족. 필요 {totalCost}, 보유 {Funds}.";
+                LastMessage = $"예산 부족. 필요 {remainingCost}, 보유 {Funds}.";
                 return ResearchActionResult.NotEnoughFunds;
             }
 
@@ -724,7 +717,7 @@ namespace Border.Research
             ResearchGrade grade = DetermineGrade(successChance, roll);
             GetVisibilityAdjustedReward(grade, designEntry.Visibility, out int immediateFunding, out int quarterlyFundingDelta);
 
-            Funds -= totalCost;
+            Funds -= remainingCost;
             stage.AttemptCount++;
             ApplyBestGrade(stage, grade);
             if (designEntry.StageId == LaunchStageId.Engine)
@@ -762,7 +755,7 @@ namespace Border.Research
                 moonMissionWon,
                 deadlineMissed);
 
-            LastMessage = $"{config.DisplayName} 발사 결과 {grade}. 총 비용 {totalCost}, 지원금 +{immediateFunding}, 분기 연구비 {quarterlyFundingDelta:+#;-#;0}.";
+            LastMessage = $"{config.DisplayName} 발사 결과 {grade}. 총 비용 {designEntry.LaunchCost + designEntry.ReservedInstallCost}, 지원금 +{immediateFunding}, 분기 연구비 {quarterlyFundingDelta:+#;-#;0}.";
             if (moonMissionWon)
             {
                 LastMessage += " 달 착륙 성공.";
@@ -816,7 +809,7 @@ namespace Border.Research
             int minimum = Math.Min(Math.Min(preset.FuelCapacity, preset.Cooling), Math.Min(preset.MaxOutput, preset.IgnitionReliability));
             double quality = average * 0.6d + minimum * 0.4d;
             double penalty = CalculateEngineImbalancePenalty(preset);
-            double score = preset.Level * 6d + quality * 0.6d - penalty;
+            double score = quality * 0.6d - penalty;
             return ClampInt((int)Math.Round(score, MidpointRounding.AwayFromZero), 0, 100);
         }
 

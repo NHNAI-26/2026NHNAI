@@ -231,8 +231,9 @@ namespace Border.Research
             }
 
             LaunchStageId stageId = session.PendingDesignEntry.StageId;
+            bool launchCostPaid = session.PendingDesignEntry.LaunchCostPaid;
             ClearLockedEngineCounts(installedEngineCounts);
-            ResearchDesignEntryData data = session.Model.CreateDesignEntry(stageId, selectedEnginePreset, installedEngineCounts, designFit, visibility);
+            ResearchDesignEntryData data = session.Model.CreateDesignEntry(stageId, selectedEnginePreset, installedEngineCounts, designFit, visibility, launchCostPaid);
             session.UpdatePendingDesignEntry(data);
         }
 
@@ -292,18 +293,21 @@ namespace Border.Research
             int successChance = model.CalculateSuccessChance(data);
             int partialChance = Math.Min(15, 95 - successChance);
             int failureChance = 100 - successChance - partialChance;
+            int remainingCost = data.ReservedInstallCost + (data.LaunchCostPaid ? 0 : data.LaunchCost);
             RefreshPresetButtons(model);
 
             headerText.text = $"{stageConfig.DisplayName} 설계";
             designDataText.text = $"날짜: {data.Year} Q{data.Quarter} / 맵 시드: {data.MapSeed} / 목표: {data.TargetPathId}\n"
-                + $"선택 프리셋: {engineConfig.DisplayName} Lv.{data.SelectedEngineLevel} / 성능 {data.SelectedEngineScore}\n"
+                + $"선택 프리셋: {engineConfig.DisplayName} / 완성도 {data.SelectedEngineCompletion} / 성능 {data.SelectedEngineScore}\n"
                 + $"설계 적합도: {data.DesignFit} ({ResearchPrototypeModel.CalculateDesignFitModifier(data.DesignFit):+#;-#;0}%p) / {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)} ({ResearchPrototypeModel.GetVisibilitySuccessModifier(data.Visibility):+#;-#;0}%p)\n"
                 + $"성공 {successChance}% / 부분 {partialChance}% / 실패 {failureChance}%";
             installedEngineText.text = $"설치 엔진: {FormatInstalledEngines(data)}\n"
-                + $"설치 엔진 점수 {data.InstalledEngineScore} / 발사비 {data.LaunchCost} / 예약 설치비 {data.ReservedInstallCost} / 총 확정 비용 {data.LaunchCost + data.ReservedInstallCost}";
-            statusText.text = "발사 전입니다. 연구 단계로 돌아가면 예약 설치 비용은 버려지고 연구비/분기/발사 횟수는 변하지 않습니다.";
-            launchButtonText.text = $"발사\n총 비용 {data.LaunchCost + data.ReservedInstallCost} / 1분기";
-            launchButton.interactable = model.Funds >= data.LaunchCost + data.ReservedInstallCost && !model.DeadlineReached;
+                + $"설치 엔진 점수 {data.InstalledEngineScore} / {(data.LaunchCostPaid ? "지불한" : "필요")} 예산 {data.LaunchCost} / 남은 설치비 {data.ReservedInstallCost}";
+            statusText.text = data.LaunchCostPaid
+                ? "발사 전입니다. 연구 단계로 돌아가면 예약 설치 비용은 버려지고 예산은 이미 지불된 상태입니다."
+                : "발사 전입니다. 발사 확정 시 예산과 예약 설치 비용을 함께 지불합니다.";
+            launchButtonText.text = $"발사\n남은 비용 {remainingCost} / 1분기";
+            launchButton.interactable = model.Funds >= remainingCost && !model.DeadlineReached;
 
             bool finalMission = data.StageId == LaunchStageId.Moon;
             publicButton.interactable = !finalMission;
@@ -392,7 +396,7 @@ namespace Border.Research
                 case ResearchActionResult.NoPendingDesignEntry:
                     return "발사할 설계 데이터가 없습니다.";
                 case ResearchActionResult.NotEnoughFunds:
-                    return "발사비와 설치비가 부족합니다.";
+                    return "예산과 설치비가 부족합니다.";
                 case ResearchActionResult.DeadlineReached:
                     return "마감에 도달해 발사할 수 없습니다.";
                 case ResearchActionResult.RequirementNotMet:
