@@ -1,7 +1,7 @@
 # 13. 기술 구조 — Unity 기준
 
 > 상태: **권장 구현 구조 확정**  
-> 목표: 48시간 안에 데이터와 연출을 분리하고, 시험 결과 중복 적용과 재굴림을 방지한다.
+> 목표: 48시간 안에 연구, 설계, 자동 발사를 분리하고, 발사 결과 중복 적용과 재굴림을 방지한다.
 
 ## 1. 씬 구성
 
@@ -10,15 +10,16 @@
 ```text
 00_Boot
 01_Main
-02_Sim_Engine
-03_Sim_Rocket
-04_Sim_Orbit
-05_Sim_Moon
+02_Design
+03_Sim_Engine
+04_Sim_Rocket
+05_Sim_Orbit
+06_Sim_Moon
 ```
 
 `00_Boot`는 선택 사항이다. 시간이 부족하면 `01_Main`에서 바로 초기화한다.
 
-각 시뮬레이션을 별도 씬으로 두되, 공통 HUD와 실행 구조는 프리팹 또는 공통 컴포넌트로 공유한다.
+설계 단계는 공통 씬 하나를 사용한다. 자동 발사는 단계별 별도 씬으로 두되, 공통 HUD와 실행 구조는 프리팹 또는 공통 컴포넌트로 공유한다.
 
 ## 2. 핵심 런타임 데이터
 
@@ -71,7 +72,7 @@ public sealed class GameState
 
     public EnvironmentId[] environmentSchedule;
     public int totalFundsSpent;
-    public int totalTests;
+    public int totalLaunches;
     public int totalFailures;
     public bool gameEnded;
 }
@@ -91,6 +92,29 @@ public sealed class StageState
 }
 ```
 
+### DesignData
+
+```csharp
+[Serializable]
+public sealed class DesignData
+{
+    public StageId stageId;
+    public int year;
+    public int quarter;
+    public EnvironmentId environmentId;
+
+    public int mapSeed;
+    public string targetPathId;
+
+    public RocketPartPlacement[] partPlacements;
+    public float force;
+    public float directionDegrees;
+    public int designFit;
+}
+```
+
+`DesignData`는 설계 씬에서 수정된다. 발사 전 연구 화면으로 돌아가면 버릴 수 있다. 같은 분기·단계·시드로 다시 설계 씬에 들어오면 같은 맵과 목표 경로를 생성해야 한다.
+
 ### SimRunData
 
 ```csharp
@@ -101,6 +125,10 @@ public sealed class SimRunData
     public int year;
     public int quarter;
     public EnvironmentId environmentId;
+
+    public int mapSeed;
+    public string targetPathId;
+    public int designFit;
 
     public int currentProgress;
     public float prerequisiteAverage;
@@ -117,12 +145,13 @@ public sealed class SimRunData
     public int seed;
 
     public SimMetrics metrics;
+    public DesignData designData;
 
     public bool resultApplied;
 }
 ```
 
-`SimRunData`는 시험 확인 직후 생성하고 씬 전환 전에 보존한다.
+`SimRunData`는 설계 씬에서 최종 `발사` 버튼을 누른 직후 생성하고 자동 발사 씬 전환 전에 보존한다.
 
 ## 3. 권장 관리자
 
@@ -130,6 +159,7 @@ public sealed class SimRunData
 
 - 새 게임
 - 분기 행동 처리
+- 설계 씬 진입과 복귀
 - 씬 전환
 - 승리·패배 검사
 - 결과 보고서 호출
@@ -165,6 +195,7 @@ public sealed class SimRunData
 ### ProbabilityResolver
 
 - 성공·부분 성공·실패 확률 계산
+- 설계 적합도 보정 반영
 - 난수 생성
 - 등급 결정
 - 사고 선택
@@ -181,11 +212,21 @@ public sealed class SimRunData
 - 결과 보고서 전환
 - 배속과 건너뛰기
 
+### DesignSceneController
+
+- 현재 단계와 분기 기준 맵 생성
+- 목표 경로 표시
+- 부품 위치, 힘, 방향 입력 처리
+- 설계 적합도 계산
+- 예상 성공률 표시
+- 연구 단계로 복귀
+- 발사 확인과 `SimRunData` 생성 요청
+
 ### ResultApplier
 
 - 결과를 정확히 한 번 반영
 - 진행도 증가
-- 시험 횟수 증가
+- 발사 횟수 증가
 - 최고 등급 갱신
 - 즉시 지원금
 - 분기 연구비 변화
@@ -215,6 +256,7 @@ focusedResearchCost
 testCost
 minimumTestProgress
 unlockProgressRequirement
+designSceneName
 simulationSceneName
 ```
 
@@ -244,6 +286,18 @@ warningText
 resultReasonText
 ```
 
+### DesignConfig
+
+```text
+stageId
+availablePartIds
+attachmentPoints
+forceMin
+forceMax
+targetPathPatterns
+designFitToleranceByProgress
+```
+
 시간이 부족하면 ScriptableObject 대신 직렬화된 단일 설정 클래스도 허용한다. 단, 수치를 여러 스크립트에 하드코딩하지 않는다.
 
 ## 5. 행동 처리 의사코드
@@ -267,10 +321,10 @@ function ExecuteResearch(stage, mode):
     EndQuarter()
 ```
 
-### 시험 시작
+### 설계 진입
 
 ```pseudo
-function StartTest(stage):
+function EnterDesign(stage):
     if not stage.unlocked:
         return Locked
 
@@ -280,17 +334,38 @@ function StartTest(stage):
     if funds < stage.testCost:
         return NotEnoughFunds
 
+    designData = CreateOrLoadDesignData(stage, currentYear, currentQuarter)
+    LoadScene("02_Design")
+```
+
+설계 진입은 비용과 분기를 소비하지 않는다.
+
+### 연구 단계로 복귀
+
+```pseudo
+function ReturnFromDesign():
+    DiscardUnsavedDesignData()
+    LoadScene("01_Main")
+```
+
+### 발사 시작
+
+```pseudo
+function ConfirmLaunch(stage, designData):
+    if funds < stage.testCost:
+        return NotEnoughFunds
+
     funds -= stage.testCost
     totalFundsSpent += stage.testCost
 
     currentEnvironment = forecast[currentTurn]
-    simRunData = ProbabilityResolver.Resolve(stage, currentEnvironment)
+    simRunData = ProbabilityResolver.Resolve(stage, currentEnvironment, designData)
 
     Persist(simRunData)
     LoadScene(stage.simulationSceneName)
 ```
 
-### 시험 종료
+### 발사 종료
 
 ```pseudo
 function FinishSimulation():
@@ -311,24 +386,38 @@ function FinishSimulation():
 ## 6. 확률 처리 의사코드
 
 ```pseudo
-function GetSuccessChance(stage):
+function GetSuccessChance(stage, designData):
     current = stage.progress
     experience = min(stage.attemptCount * 3, 9)
     environment = GetEnvironmentModifier(currentEnvironment, stage.id)
+    design = round((designData.designFit - 50) * 0.4)
 
     if stage.id == Engine:
-        raw = 20 + current * 0.8 + experience + environment
+        raw = 20 + current * 0.8 + experience + environment + design
     else:
         prerequisiteAverage = GetPrerequisiteAverage(stage.id)
         raw = 20 + current * 0.6
                  + prerequisiteAverage * 0.2
                  + experience
                  + environment
+                 + design
 
     return clamp(round(raw), 10, 90)
 ```
 
-## 7. 환경 스케줄 생성
+## 7. 설계 맵 생성
+
+단순 구현 방법:
+
+1. 세션 시드, 현재 분기, 단계 ID로 `mapSeed` 생성
+2. 단계별 목표 경로 패턴 중 하나 선택
+3. 현재 환경에 맞는 위험 구간 또는 보정 방향 표시
+4. 출발 지점과 목표 지점 배치
+5. 설계 입력으로 예상 경로와 `designFit` 계산
+
+같은 분기와 같은 단계에서는 설계 씬을 다시 열어도 같은 맵과 목표 경로가 나와야 한다. 발사하지 않고 연구 단계로 돌아오면 비용과 시간은 그대로다.
+
+## 8. 환경 스케줄 생성
 
 단순 구현 방법:
 
@@ -341,7 +430,7 @@ function GetSuccessChance(stage):
 
 이 방식이면 모든 연속 4분기 창에 안정 또는 최적 환경이 최소 한 번 존재한다. 복잡한 재귀 생성기나 백트래킹은 필요 없다.
 
-## 8. 3D 시퀀스 구현 방식
+## 9. 3D 시퀀스 구현 방식
 
 권장 우선순위:
 
@@ -354,7 +443,7 @@ function GetSuccessChance(stage):
 
 성공 경로는 Transform 애니메이션으로 만들고, 실패 시점부터 Rigidbody를 켜는 방식이 가장 빠르다.
 
-## 9. 시뮬레이션 상태
+## 10. 시뮬레이션 상태
 
 ```csharp
 public enum SimulationPhase
@@ -382,7 +471,7 @@ public interface IStageSimulation
 }
 ```
 
-## 10. 결과 중복 방지
+## 11. 결과 중복 방지
 
 필수 안전장치:
 
@@ -404,7 +493,7 @@ ApplyRewardsAndProgress();
 - 결과 화면 중복 호출
 - 애니메이션 이벤트 중복
 
-## 11. 저장 정책
+## 12. 저장 정책
 
 게임잼 버전은 중간 저장을 제공하지 않는다. 그러나 씬 사이 상태 보존은 필요하다.
 
@@ -416,7 +505,7 @@ ApplyRewardsAndProgress();
 
 권장 방식은 `DontDestroyOnLoad GameSession` 하나다. 영구 저장 시스템은 만들지 않는다.
 
-## 12. 입력
+## 13. 입력
 
 메인 UI:
 
@@ -424,21 +513,28 @@ ApplyRewardsAndProgress();
 - Enter 또는 Space로 확인 가능하면 P1
 - Esc로 모달 닫기
 
+설계:
+
+- 마우스 드래그: 부품 위치 또는 방향 조정
+- 슬라이더: 힘 조정
+- Esc: 연구 단계로 돌아가기 확인
+
 시뮬레이션:
 
 - Space: 2배속 토글, P1
 - Esc: 일시정지
 - 결과 개입 입력 없음
 
-## 13. 오류 처리
+## 14. 오류 처리
 
 - `SimRunData` 없이 시뮬레이션 씬에 진입하면 메인으로 복귀
+- `DesignData` 없이 설계 씬에 진입하면 메인으로 복귀
 - 존재하지 않는 사고 ID면 등급 기본 시퀀스 사용
 - 환경 VFX가 없어도 확률과 결과는 정상 처리
 - 카메라가 누락되어도 기본 카메라 사용
 - 결과 보고서 데이터가 누락되면 등급과 경제 변화만 표시
 
-## 14. 성능 기준
+## 15. 성능 기준
 
 - 1080p에서 안정적 실행
 - 폭발 파편 수를 제한
