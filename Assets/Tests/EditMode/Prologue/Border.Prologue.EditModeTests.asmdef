@@ -1,0 +1,21 @@
+{
+    "name": "Border.Prologue.EditModeTests",
+    "rootNamespace": "Border.Prologue.Tests",
+    "references": [
+        "Border"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

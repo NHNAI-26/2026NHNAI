@@ -3,6 +3,7 @@
     "rootNamespace": "Simulation",
     "references": [
         "Border",
+        "Unity.Cinemachine",
         "Unity.InputSystem",
         "Unity.TextMeshPro",
         "UnityEngine.UI"
