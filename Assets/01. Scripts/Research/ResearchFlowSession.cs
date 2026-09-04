@@ -66,7 +66,12 @@ namespace Border.Research
 
         public ResearchActionResult TryEnterDesign(ResearchStageId stageId, out ResearchDesignEntryData data)
         {
-            ResearchActionResult result = Model.TryEnterDesign(stageId, out data);
+            return TryEnterDesign(stageId, EnginePresetId.Engine01, out data);
+        }
+
+        public ResearchActionResult TryEnterDesign(ResearchStageId stageId, EnginePresetId presetId, out ResearchDesignEntryData data)
+        {
+            ResearchActionResult result = Model.TryEnterDesign(stageId, presetId, out data);
             if (result == ResearchActionResult.Success)
             {
                 StoreDesignEntry(data);
@@ -83,6 +88,11 @@ namespace Border.Research
         {
             pendingDesignEntry = data;
             hasPendingDesignEntry = true;
+        }
+
+        public void UpdatePendingDesignEntry(ResearchDesignEntryData data)
+        {
+            StoreDesignEntry(data);
         }
 
         public ResearchActionResult CommitPendingDesignLaunch(out ResearchLaunchResultData result)

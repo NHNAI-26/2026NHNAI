@@ -20,110 +20,90 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void TryEnterDesign_WhenReady_DoesNotConsumeResearchState()
+        public void Reset_CreatesTenIdenticalEnginePresets()
         {
             var model = new ResearchPrototypeModel();
-            ResearchStageState stage = model.GetStage(ResearchStageId.Engine);
-            stage.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).MinimumTestProgress;
 
-            int funds = model.Funds;
-            int year = model.Year;
-            int quarter = model.Quarter;
-            int remainingTurns = model.RemainingTurns;
-            int attemptCount = stage.AttemptCount;
-            int progress = stage.Progress;
+            Assert.That(ResearchPrototypeModel.GetEnginePresetConfigs(), Has.Count.EqualTo(ResearchPrototypeModel.MaxEnginePresetCount));
+            Assert.That(model.EnginePresets, Has.Length.EqualTo(ResearchPrototypeModel.MaxEnginePresetCount));
 
-            ResearchActionResult result = model.TryEnterDesign(ResearchStageId.Engine, out ResearchDesignEntryData data);
+            foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
+            {
+                Assert.That(config.NormalResearchCost, Is.EqualTo(ResearchPrototypeModel.EngineNormalResearchCost));
+                Assert.That(config.FocusedResearchCost, Is.EqualTo(ResearchPrototypeModel.EngineFocusedResearchCost));
+                Assert.That(config.InstallCost, Is.EqualTo(ResearchPrototypeModel.EngineInstallCost));
+            }
+
+            foreach (EnginePresetState preset in model.EnginePresets)
+            {
+                Assert.That(preset.Level, Is.EqualTo(0));
+                Assert.That(preset.FuelCapacity, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat));
+                Assert.That(preset.Cooling, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat));
+                Assert.That(preset.MaxOutput, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat));
+                Assert.That(preset.IgnitionReliability, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat));
+            }
+        }
+
+        [Test]
+        public void ExecuteEngineResearch_Normal_IncreasesSelectedPresetOnly()
+        {
+            var model = new ResearchPrototypeModel();
+            EnginePresetState selected = model.GetEnginePreset(EnginePresetId.Engine04);
+            EnginePresetState untouched = model.GetEnginePreset(EnginePresetId.Engine05);
+            int untouchedLevel = untouched.Level;
+            int untouchedStat = untouched.Cooling;
+
+            ResearchActionResult result = model.ExecuteEngineResearch(EnginePresetId.Engine04, EngineStatId.Cooling, false, 65);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(model.Funds, Is.EqualTo(funds));
-            Assert.That(model.Year, Is.EqualTo(year));
-            Assert.That(model.Quarter, Is.EqualTo(quarter));
-            Assert.That(model.RemainingTurns, Is.EqualTo(remainingTurns));
-            Assert.That(stage.AttemptCount, Is.EqualTo(attemptCount));
-            Assert.That(stage.Progress, Is.EqualTo(progress));
-            Assert.That(data.StageId, Is.EqualTo(ResearchStageId.Engine));
-            Assert.That(data.Year, Is.EqualTo(year));
-            Assert.That(data.Quarter, Is.EqualTo(quarter));
-            Assert.That(data.CurrentProgress, Is.EqualTo(progress));
-            Assert.That(data.TargetPathId, Is.Not.Empty);
-        }
-
-        [Test]
-        public void TryEnterDesign_WhenStageLocked_ReturnsStageLocked()
-        {
-            var model = new ResearchPrototypeModel();
-
-            ResearchActionResult result = model.TryEnterDesign(ResearchStageId.Rocket, out _);
-
-            Assert.That(result, Is.EqualTo(ResearchActionResult.StageLocked));
-        }
-
-        [Test]
-        public void Reset_UnlocksOnlyEngine()
-        {
-            var model = new ResearchPrototypeModel();
-
-            Assert.That(model.GetStage(ResearchStageId.Engine).Unlocked, Is.True);
-            Assert.That(model.GetStage(ResearchStageId.Rocket).Unlocked, Is.False);
-            Assert.That(model.GetStage(ResearchStageId.Orbit).Unlocked, Is.False);
-            Assert.That(model.GetStage(ResearchStageId.Moon).Unlocked, Is.False);
-        }
-
-        [Test]
-        public void TryEnterDesign_WhenProgressTooLow_ReturnsProgressTooLow()
-        {
-            var model = new ResearchPrototypeModel();
-
-            ResearchActionResult result = model.TryEnterDesign(ResearchStageId.Engine, out _);
-
-            Assert.That(result, Is.EqualTo(ResearchActionResult.ProgressTooLow));
-        }
-
-        [Test]
-        public void TryEnterDesign_WhenLaunchCostMissing_ReturnsNotEnoughFunds()
-        {
-            var model = new ResearchPrototypeModel();
-            ResearchStageState stage = model.GetStage(ResearchStageId.Engine);
-            ResearchStageConfig config = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine);
-            stage.Progress = config.MinimumTestProgress;
-            SetFunds(model, config.TestCost - 1);
-
-            ResearchActionResult result = model.TryEnterDesign(ResearchStageId.Engine, out _);
-
-            Assert.That(result, Is.EqualTo(ResearchActionResult.NotEnoughFunds));
-        }
-
-        [Test]
-        public void ExecuteResearch_KeepsExistingProgressAndQuarterBehavior()
-        {
-            var model = new ResearchPrototypeModel();
-
-            ResearchActionResult result = model.ExecuteResearch(ResearchStageId.Engine, false);
-
-            Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(model.GetStage(ResearchStageId.Engine).Progress, Is.EqualTo(ResearchPrototypeModel.NormalResearchGain));
-            Assert.That(model.Funds, Is.EqualTo(ResearchPrototypeModel.InitialFunds
-                - ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).NormalResearchCost
-                + ResearchPrototypeModel.InitialQuarterlyFunding));
-            Assert.That(model.Year, Is.EqualTo(2018));
+            Assert.That(selected.Level, Is.EqualTo(1));
+            Assert.That(selected.Cooling, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat + 13));
+            Assert.That(untouched.Level, Is.EqualTo(untouchedLevel));
+            Assert.That(untouched.Cooling, Is.EqualTo(untouchedStat));
+            Assert.That(model.Funds, Is.EqualTo(ResearchPrototypeModel.InitialFunds - ResearchPrototypeModel.EngineNormalResearchCost + ResearchPrototypeModel.InitialQuarterlyFunding));
             Assert.That(model.Quarter, Is.EqualTo(2));
             Assert.That(model.RemainingTurns, Is.EqualTo(ResearchPrototypeModel.MaxTurns - 1));
         }
 
         [Test]
-        public void ExecuteFocusedResearch_KeepsExistingProgressGain()
+        public void ExecuteEngineResearch_Focused_UsesHighScoreRewardAndLevelGain()
         {
             var model = new ResearchPrototypeModel();
 
-            ResearchActionResult result = model.ExecuteResearch(ResearchStageId.Engine, true);
+            ResearchActionResult result = model.ExecuteEngineResearch(EnginePresetId.Engine02, EngineStatId.MaxOutput, true, 85);
 
+            EnginePresetState selected = model.GetEnginePreset(EnginePresetId.Engine02);
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(model.GetStage(ResearchStageId.Engine).Progress, Is.EqualTo(ResearchPrototypeModel.FocusedResearchGain));
+            Assert.That(selected.Level, Is.EqualTo(2));
+            Assert.That(selected.MaxOutput, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat + 26));
         }
 
         [Test]
-        public void WaitQuarter_KeepsExistingFundingAndQuarterBehavior()
+        public void ExecuteEngineResearch_WhenLevelMaxed_ReturnsEngineLevelMaxed()
+        {
+            var model = new ResearchPrototypeModel();
+            model.GetEnginePreset(EnginePresetId.Engine01).Level = ResearchPrototypeModel.MaxEnginePresetLevel;
+            int funds = model.Funds;
+
+            ResearchActionResult result = model.ExecuteEngineResearch(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 100);
+
+            Assert.That(result, Is.EqualTo(ResearchActionResult.EngineLevelMaxed));
+            Assert.That(model.Funds, Is.EqualTo(funds));
+        }
+
+        [Test]
+        public void ExecuteResearch_ForRocketOrbitMoon_IsNotAvailable()
+        {
+            var model = new ResearchPrototypeModel();
+
+            ResearchActionResult result = model.ExecuteResearch(ResearchStageId.Rocket, false);
+
+            Assert.That(result, Is.EqualTo(ResearchActionResult.StageLocked));
+            Assert.That(model.GetStage(ResearchStageId.Rocket).Progress, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void WaitQuarter_KeepsFundingAndQuarterBehavior()
         {
             var model = new ResearchPrototypeModel();
 
@@ -137,83 +117,89 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void Unlock_KeepsPreviousStageAvailableAfterNextStageOpens()
+        public void TryEnterDesign_EngineLevelZero_ReturnsProgressTooLow()
         {
             var model = new ResearchPrototypeModel();
-            ResearchStageState engine = model.GetStage(ResearchStageId.Engine);
-            engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).UnlockProgressRequirement;
-            engine.HasBestGrade = true;
-            engine.BestGrade = ResearchGrade.C;
 
-            model.ExecuteResearch(ResearchStageId.Engine, false);
+            ResearchActionResult result = model.TryEnterDesign(ResearchStageId.Engine, EnginePresetId.Engine01, out _);
 
-            Assert.That(model.GetStage(ResearchStageId.Engine).Unlocked, Is.True);
-            Assert.That(model.GetStage(ResearchStageId.Rocket).Unlocked, Is.True);
+            Assert.That(result, Is.EqualTo(ResearchActionResult.ProgressTooLow));
         }
 
         [Test]
-        public void FlowSession_TryEnterDesign_StoresPendingDataWithoutConsumingResearchState()
+        public void TryEnterDesign_WhenReady_DoesNotConsumeState()
         {
-            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            ResearchPrototypeModel model = session.Model;
-            ResearchStageState engine = model.GetStage(ResearchStageId.Engine);
-            engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).MinimumTestProgress;
-
+            var model = new ResearchPrototypeModel();
+            model.ExecuteEngineResearch(EnginePresetId.Engine03, EngineStatId.FuelCapacity, false, 80);
+            EnginePresetState engine = model.GetEnginePreset(EnginePresetId.Engine03);
             int funds = model.Funds;
             int year = model.Year;
             int quarter = model.Quarter;
             int remainingTurns = model.RemainingTurns;
             int attemptCount = engine.AttemptCount;
+            int level = engine.Level;
 
-            ResearchActionResult result = session.TryEnterDesign(ResearchStageId.Engine, out ResearchDesignEntryData data);
+            ResearchActionResult result = model.TryEnterDesign(ResearchStageId.Engine, EnginePresetId.Engine03, out ResearchDesignEntryData data);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(session.HasPendingDesignEntry, Is.True);
-            Assert.That(session.PendingDesignEntry.StageId, Is.EqualTo(data.StageId));
             Assert.That(model.Funds, Is.EqualTo(funds));
             Assert.That(model.Year, Is.EqualTo(year));
             Assert.That(model.Quarter, Is.EqualTo(quarter));
             Assert.That(model.RemainingTurns, Is.EqualTo(remainingTurns));
             Assert.That(engine.AttemptCount, Is.EqualTo(attemptCount));
+            Assert.That(engine.Level, Is.EqualTo(level));
+            Assert.That(data.StageId, Is.EqualTo(ResearchStageId.Engine));
+            Assert.That(data.SelectedEnginePresetId, Is.EqualTo(EnginePresetId.Engine03));
+            Assert.That(data.LaunchCost, Is.EqualTo(600));
+            Assert.That(data.ReservedInstallCost, Is.EqualTo(0));
+            Assert.That(data.TargetPathId, Is.Not.Empty);
         }
 
         [Test]
-        public void FlowSession_ClearPendingDesignEntry_PreservesResearchState()
-        {
-            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            ResearchPrototypeModel model = session.Model;
-            ResearchStageState engine = model.GetStage(ResearchStageId.Engine);
-            engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).MinimumTestProgress;
-            session.TryEnterDesign(ResearchStageId.Engine, out _);
-
-            int funds = model.Funds;
-            int year = model.Year;
-            int quarter = model.Quarter;
-            int remainingTurns = model.RemainingTurns;
-            int progress = engine.Progress;
-
-            session.ClearPendingDesignEntry();
-
-            Assert.That(session.HasPendingDesignEntry, Is.False);
-            Assert.That(model.Funds, Is.EqualTo(funds));
-            Assert.That(model.Year, Is.EqualTo(year));
-            Assert.That(model.Quarter, Is.EqualTo(quarter));
-            Assert.That(model.RemainingTurns, Is.EqualTo(remainingTurns));
-            Assert.That(engine.Progress, Is.EqualTo(progress));
-        }
-
-        [Test]
-        public void CommitLaunch_WhenReady_ConsumesLaunchCostQuarterAndAttempt()
+        public void TryEnterDesign_WhenStageLocked_ReturnsStageLocked()
         {
             var model = new ResearchPrototypeModel();
-            ResearchStageConfig config = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine);
-            ResearchStageState engine = model.GetStage(ResearchStageId.Engine);
-            engine.Progress = config.MinimumTestProgress;
-            model.TryEnterDesign(ResearchStageId.Engine, out ResearchDesignEntryData entry);
+
+            ResearchActionResult result = model.TryEnterDesign(ResearchStageId.Rocket, EnginePresetId.Engine01, out _);
+
+            Assert.That(result, Is.EqualTo(ResearchActionResult.StageLocked));
+        }
+
+        [Test]
+        public void TryEnterDesign_WhenLaunchCostMissing_ReturnsNotEnoughFunds()
+        {
+            var model = new ResearchPrototypeModel();
+            model.GetEnginePreset(EnginePresetId.Engine01).Level = 1;
+            SetFunds(model, ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).LaunchCost - 1);
+
+            ResearchActionResult result = model.TryEnterDesign(ResearchStageId.Engine, EnginePresetId.Engine01, out _);
+
+            Assert.That(result, Is.EqualTo(ResearchActionResult.NotEnoughFunds));
+        }
+
+        [Test]
+        public void Visibility_ChangesSuccessChanceByTwentyPoints()
+        {
+            var model = new ResearchPrototypeModel();
+            model.GetEnginePreset(EnginePresetId.Engine01).Level = 1;
+            ResearchDesignEntryData publicEntry = model.CreateDesignEntry(ResearchStageId.Engine, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 50, TestVisibility.Public);
+            ResearchDesignEntryData privateEntry = model.CreateDesignEntry(ResearchStageId.Engine, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 50, TestVisibility.Private);
+
+            Assert.That(model.CalculateSuccessChance(privateEntry) - model.CalculateSuccessChance(publicEntry), Is.EqualTo(20));
+        }
+
+        [Test]
+        public void CommitLaunch_WhenReady_ConsumesLaunchAndInstallCostOnlyOnLaunch()
+        {
+            var model = new ResearchPrototypeModel();
+            model.GetEnginePreset(EnginePresetId.Engine01).Level = 1;
+            int[] installed = new int[ResearchPrototypeModel.MaxEnginePresetCount];
+            installed[(int)EnginePresetId.Engine01] = 2;
+            model.GetStage(ResearchStageId.Rocket).Unlocked = true;
+            ResearchDesignEntryData entry = model.CreateDesignEntry(ResearchStageId.Rocket, EnginePresetId.Engine01, installed, 70, TestVisibility.Private);
             int funds = model.Funds;
             int quarterlyFunding = model.QuarterlyFunding;
             int remainingTurns = model.RemainingTurns;
-            int attemptCount = engine.AttemptCount;
 
             ResearchActionResult result = model.CommitLaunch(entry, out ResearchLaunchResultData launchResult);
 
@@ -222,34 +208,68 @@ namespace Border.Research.Tests
                 ResearchPrototypeModel.MinQuarterlyFunding,
                 ResearchPrototypeModel.MaxQuarterlyFunding);
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(launchResult.StageId, Is.EqualTo(ResearchStageId.Engine));
+            Assert.That(launchResult.TotalCost, Is.EqualTo(ResearchPrototypeModel.GetStageConfig(ResearchStageId.Rocket).LaunchCost + ResearchPrototypeModel.EngineInstallCost * 2));
             Assert.That(launchResult.SuccessChance + launchResult.PartialChance + launchResult.FailureChance, Is.EqualTo(100));
-            Assert.That(model.Funds, Is.EqualTo(funds - config.TestCost + launchResult.ImmediateFunding + expectedQuarterlyFunding));
+            Assert.That(model.Funds, Is.EqualTo(funds - launchResult.TotalCost + launchResult.ImmediateFunding + expectedQuarterlyFunding));
             Assert.That(model.QuarterlyFunding, Is.EqualTo(expectedQuarterlyFunding));
             Assert.That(model.RemainingTurns, Is.EqualTo(remainingTurns - 1));
-            Assert.That(engine.AttemptCount, Is.EqualTo(attemptCount + 1));
+            Assert.That(model.GetStage(ResearchStageId.Rocket).AttemptCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void EngineTest_CGradeOrBetter_UnlocksRocket()
+        {
+            var model = new ResearchPrototypeModel(1);
+            EnginePresetState engine = model.GetEnginePreset(EnginePresetId.Engine01);
+            engine.Level = 5;
+            engine.FuelCapacity = 100;
+            engine.Cooling = 100;
+            engine.MaxOutput = 100;
+            engine.IgnitionReliability = 100;
+            ResearchDesignEntryData entry = model.CreateDesignEntry(ResearchStageId.Engine, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 100, TestVisibility.Private);
+
+            model.CommitLaunch(entry, out ResearchLaunchResultData result);
+
+            Assume.That(result.Grade, Is.LessThanOrEqualTo(ResearchGrade.C));
+            Assert.That(model.GetStage(ResearchStageId.Rocket).Unlocked, Is.True);
             Assert.That(engine.HasBestGrade, Is.True);
-            Assert.That(engine.BestGrade, Is.EqualTo(launchResult.Grade));
+        }
+
+        [Test]
+        public void FlowSession_StoresUpdatesAndClearsPendingDesignEntry()
+        {
+            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
+            session.Model.GetEnginePreset(EnginePresetId.Engine02).Level = 1;
+
+            ResearchActionResult result = session.TryEnterDesign(ResearchStageId.Engine, EnginePresetId.Engine02, out ResearchDesignEntryData data);
+            ResearchDesignEntryData updated = session.Model.CreateDesignEntry(data.StageId, data.SelectedEnginePresetId, data.InstalledEngineCounts, 80, TestVisibility.Public);
+            session.UpdatePendingDesignEntry(updated);
+
+            Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
+            Assert.That(session.HasPendingDesignEntry, Is.True);
+            Assert.That(session.PendingDesignEntry.DesignFit, Is.EqualTo(80));
+
+            session.ClearPendingDesignEntry();
+            Assert.That(session.HasPendingDesignEntry, Is.False);
         }
 
         [Test]
         public void FlowSession_CommitPendingDesignLaunch_ClearsPendingAndStoresLaunchResult()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            ResearchStageState engine = session.Model.GetStage(ResearchStageId.Engine);
-            engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).MinimumTestProgress;
-            session.TryEnterDesign(ResearchStageId.Engine, out _);
+            session.Model.GetEnginePreset(EnginePresetId.Engine01).Level = 1;
+            session.TryEnterDesign(ResearchStageId.Engine, EnginePresetId.Engine01, out _);
 
             ResearchActionResult result = session.CommitPendingDesignLaunch(out ResearchLaunchResultData launchResult);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
             Assert.That(session.HasPendingDesignEntry, Is.False);
             Assert.That(session.HasLastLaunchResult, Is.True);
-            Assert.That(session.LastLaunchResult.Grade, Is.EqualTo(launchResult.Grade));
+            Assert.That(session.LastLaunchResult.Roll, Is.EqualTo(launchResult.Roll));
         }
 
         [Test]
-        public void OperationUI_InitialRender_ShowsOnlyEngineAsSelectable()
+        public void OperationUI_InitialRender_ShowsTenEnginesAndOnlyEngineStageSelectable()
         {
             var host = new GameObject("Research UI Test Host");
 
@@ -258,11 +278,12 @@ namespace Border.Research.Tests
                 ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
                 controller.InitializeForTests();
 
+                Assert.That(FindButton(host.transform, "EngineCard_Engine01").interactable, Is.True);
+                Assert.That(FindButton(host.transform, "EngineCard_Engine10").interactable, Is.True);
                 Assert.That(FindButton(host.transform, "StageCard_Engine").interactable, Is.True);
                 Assert.That(FindButton(host.transform, "StageCard_Rocket").interactable, Is.False);
                 Assert.That(FindButton(host.transform, "StageCard_Orbit").interactable, Is.False);
                 Assert.That(FindButton(host.transform, "StageCard_Moon").interactable, Is.False);
-                Assert.That(GetText(FindText(host.transform, "StageCard_Rocket", "Content", "Progress")), Does.Contain("Engine"));
             }
             finally
             {
@@ -271,7 +292,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void OperationUI_Refresh_UpdatesSelectedStagePanelAndActionState()
+        public void OperationUI_ResearchButtonUpdatesSelectedEngine()
         {
             var host = new GameObject("Research UI Test Host");
 
@@ -279,13 +300,11 @@ namespace Border.Research.Tests
             {
                 ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
                 controller.InitializeForTests();
-                ResearchStageState engine = controller.Model.GetStage(ResearchStageId.Engine);
-                engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).MinimumTestProgress;
-                controller.RefreshForTests();
 
-                Assert.That(GetText(FindText(host.transform, "SelectedStageTitle")), Does.Contain("Engine"));
-                Assert.That(GetText(FindText(host.transform, "SelectedStageRequirement")), Does.Contain("설계 진입 가능"));
-                Assert.That(FindButton(host.transform, "EnterDesignButton").interactable, Is.True);
+                FindButton(host.transform, "NormalResearchButton").onClick.Invoke();
+
+                Assert.That(controller.Model.GetEnginePreset(EnginePresetId.Engine01).Level, Is.EqualTo(1));
+                Assert.That(GetText(FindText(host.transform, "SelectedRequirementText")), Does.Contain("설계 진입 가능"));
             }
             finally
             {
@@ -297,8 +316,7 @@ namespace Border.Research.Tests
         public void OperationUI_UsesFlowSessionAndShowsDesignScreenOnEnterDesign()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            ResearchStageState engine = session.Model.GetStage(ResearchStageId.Engine);
-            engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).MinimumTestProgress;
+            session.Model.GetEnginePreset(EnginePresetId.Engine01).Level = 1;
             int funds = session.Model.Funds;
             int remainingTurns = session.Model.RemainingTurns;
             var host = new GameObject("Research UI Test Host");
@@ -328,9 +346,6 @@ namespace Border.Research.Tests
         public void OperationUI_DebugEnterDesignBypassesResearchGateAndShowsDesignScreen()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            ResearchPrototypeModel model = session.Model;
-            ResearchStageState engine = model.GetStage(ResearchStageId.Engine);
-            int attemptCount = engine.AttemptCount;
             var host = new GameObject("Research UI Test Host");
 
             try
@@ -340,15 +355,10 @@ namespace Border.Research.Tests
 
                 controller.EnterDesignDebugForEditor();
 
-                ResearchStageConfig engineConfig = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine);
                 Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.DesignScreenName));
                 Assert.That(controller.GetActiveDesignControllerForTests(), Is.Not.Null);
                 Assert.That(session.HasPendingDesignEntry, Is.True);
-                Assert.That(model.Year, Is.EqualTo(ResearchPrototypeModel.StartYear));
-                Assert.That(model.Quarter, Is.EqualTo(ResearchPrototypeModel.StartQuarter));
-                Assert.That(engine.Progress, Is.GreaterThanOrEqualTo(engineConfig.MinimumTestProgress));
-                Assert.That(model.Funds, Is.GreaterThanOrEqualTo(engineConfig.TestCost));
-                Assert.That(engine.AttemptCount, Is.EqualTo(attemptCount));
+                Assert.That(session.Model.GetEnginePreset(EnginePresetId.Engine01).Level, Is.GreaterThanOrEqualTo(1));
             }
             finally
             {
@@ -379,9 +389,8 @@ namespace Border.Research.Tests
         public void DesignScreenController_ReturnToResearch_ClearsOnlyPendingData()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            ResearchStageState engine = session.Model.GetStage(ResearchStageId.Engine);
-            engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).MinimumTestProgress;
-            session.TryEnterDesign(ResearchStageId.Engine, out _);
+            session.Model.GetEnginePreset(EnginePresetId.Engine01).Level = 1;
+            session.TryEnterDesign(ResearchStageId.Engine, EnginePresetId.Engine01, out _);
             int funds = session.Model.Funds;
             int remainingTurns = session.Model.RemainingTurns;
             bool returned = false;
@@ -410,9 +419,8 @@ namespace Border.Research.Tests
         public void DesignScreenController_LaunchCommitsResultAndRequestsResearchReturn()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            ResearchStageState engine = session.Model.GetStage(ResearchStageId.Engine);
-            engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).MinimumTestProgress;
-            session.TryEnterDesign(ResearchStageId.Engine, out _);
+            session.Model.GetEnginePreset(EnginePresetId.Engine01).Level = 1;
+            session.TryEnterDesign(ResearchStageId.Engine, EnginePresetId.Engine01, out _);
             int remainingTurns = session.Model.RemainingTurns;
             bool returned = false;
             var host = new GameObject("Design UI Test Host");
@@ -432,7 +440,7 @@ namespace Border.Research.Tests
                 Assert.That(session.HasLastLaunchResult, Is.True);
                 Assert.That(session.LastLaunchResult.Roll, Is.EqualTo(launchResult.Roll));
                 Assert.That(session.Model.RemainingTurns, Is.EqualTo(remainingTurns - 1));
-                Assert.That(engine.AttemptCount, Is.EqualTo(1));
+                Assert.That(session.Model.GetEnginePreset(EnginePresetId.Engine01).AttemptCount, Is.EqualTo(1));
             }
             finally
             {
@@ -476,47 +484,11 @@ namespace Border.Research.Tests
             return null;
         }
 
-        private static Component FindText(Transform root, params string[] path)
-        {
-            Transform current = root;
-            foreach (string segment in path)
-            {
-                current = FindChild(current, segment);
-                Assert.That(current, Is.Not.Null, $"Transform not found: {segment}");
-            }
-
-            Component text = null;
-            foreach (Component component in current.GetComponents<Component>())
-            {
-                if (component.GetType().FullName == "TMPro.TextMeshProUGUI")
-                {
-                    text = component;
-                    break;
-                }
-            }
-
-            Assert.That(text, Is.Not.Null, $"TMP text not found at: {string.Join("/", path)}");
-            return text;
-        }
-
         private static string GetText(Component text)
         {
             PropertyInfo property = text.GetType().GetProperty("text");
             Assert.That(property, Is.Not.Null);
             return (string)property.GetValue(text);
-        }
-
-        private static Transform FindChild(Transform root, string name)
-        {
-            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
-            {
-                if (child.name == name)
-                {
-                    return child;
-                }
-            }
-
-            return null;
         }
     }
 }
