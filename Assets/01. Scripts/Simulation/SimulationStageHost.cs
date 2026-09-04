@@ -35,11 +35,28 @@ namespace Simulation
         private bool loaded;
         private bool busy;
 
+        /// <summary>
+        /// <see cref="RuntimeInitializeLoadType.AfterSceneLoad"/> 는 플레이 세션당 첫 씬 하나에만 걸린다.
+        /// 타이틀에서 시작하면 그때 활성 씬이 `00_Title` 이라 여기서 걸러지고, 뒤늦게 `01_Main` 을
+        /// 로드해도 다시 불리지 않아 토글 버튼이 아예 안 생겼다 — 그래서 로드마다 다시 본다.
+        /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void Install()
+        {
+            // 도메인 리로드를 끈 설정(Enter Play Mode Options)에서는 정적 구독이 남아 쌓인다.
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            SpawnInMainScene();
+        }
+
+        private static void OnSceneLoaded(Scene scene, LoadSceneMode mode) => SpawnInMainScene();
+
         private static void SpawnInMainScene()
         {
+            // 시뮬레이션 씬을 additive 로 얹을 때도 이 콜백이 돈다. 비활성 오브젝트까지 찾지 않으면
+            // 잠시 꺼 둔 호스트를 놓쳐 두 번째가 생긴다.
             if (SceneManager.GetActiveScene().name != ResearchFlowSession.MainSceneName
-                || FindFirstObjectByType<SimulationStageHost>() != null)
+                || FindFirstObjectByType<SimulationStageHost>(FindObjectsInactive.Include) != null)
             {
                 return;
             }

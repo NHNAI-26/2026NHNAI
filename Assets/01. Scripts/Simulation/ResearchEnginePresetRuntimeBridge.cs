@@ -24,11 +24,25 @@ namespace Simulation
         public EnginePresetLibrarySO RuntimePresetLibrary => runtimePresetLibrary;
         public EnginePresetLibrarySO BasePresetLibrary => basePresetLibrary;
 
+        /// <summary>
+        /// <see cref="SimulationStageHost"/> 과 같은 이유로 씬 로드마다 다시 본다 —
+        /// <see cref="RuntimeInitializeLoadType.AfterSceneLoad"/> 는 세션당 한 번뿐이라 타이틀에서
+        /// 시작하면 이 다리가 아예 안 생겨 연구 프리셋이 시뮬레이션으로 넘어가지 않았다.
+        /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void Install()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            SpawnInMainScene();
+        }
+
+        private static void OnSceneLoaded(Scene scene, LoadSceneMode mode) => SpawnInMainScene();
+
         private static void SpawnInMainScene()
         {
             if (SceneManager.GetActiveScene().name != ResearchFlowSession.MainSceneName
-                || FindFirstObjectByType<ResearchEnginePresetRuntimeBridge>() != null)
+                || FindFirstObjectByType<ResearchEnginePresetRuntimeBridge>(FindObjectsInactive.Include) != null)
             {
                 return;
             }

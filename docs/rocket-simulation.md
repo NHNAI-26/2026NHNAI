@@ -426,6 +426,17 @@ Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 �
 
 `01_Main`의 우상단 `시뮬레이션` 버튼(`SimulationStageHost`)이 `SimulationTest` 씬을 **additive 로** 올린다.
 연구 운영 UI는 그동안 통째로 꺼지고, 화면은 가장자리 컨트롤 패널 + 가운데 3D 뷰가 된다.
+
+호스트는 씬에 배치돼 있지 않고 `[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]` 로 만들어진다. 그 훅은
+**플레이 세션당 첫 씬 하나에만** 걸리므로, 타이틀에서 시작하면 그때 활성 씬이 `00_Title` 이라 걸러지고
+뒤이어 `01_Main` 을 로드해도 다시 불리지 않았다 — 버튼이 통째로 없었다. 그래서 훅에서
+`SceneManager.sceneLoaded` 를 구독해 **로드마다** 조건을 다시 본다. 런타임 생성인 다른 하나
+(`ResearchEnginePresetRuntimeBridge`)도 같은 이유로 같은 방식이다. `ResearchOperationUIController` 는
+`01_Main` 에 실제 오브젝트로 놓여 있어 이 문제가 없고, 손대지 않았다 — 미션 컨트롤 진입 중에는 그 루트가
+꺼져 있어서 로드마다 도는 스폰을 붙이면 중복이 하나 더 생긴다.
+
+중복 방지 검사는 `FindObjectsInactive.Include` 로 한다. 시뮬레이션 씬을 additive 로 얹을 때도 콜백이
+도는데, 기본값(활성만)으로 찾으면 잠시 꺼 둔 오브젝트를 놓친다.
 이건 아직 **테스트 화면**이다 — 설계 화면(`ResearchDesignScreenController`)을 대체한 것이 아니라
 그 옆에 붙은 별도 진입점이고, 통합 형태는 `docs/specs/rocket-design-ui-spec.md` OI-006 에서 여전히 열려 있다.
 
