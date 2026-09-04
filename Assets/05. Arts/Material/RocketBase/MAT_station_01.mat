@@ -24,7 +24,8 @@ Material:
   m_Shader: {fileID: 4800000, guid: d03bad68e5f94df47a2c30a8822ea41c, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _HEIGHT_FADE_ON
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -40,6 +41,10 @@ Material:
     m_TexEnvs:
     - _BaseMap:
         m_Texture: {fileID: 2800000, guid: 4f31798cdb39e4858bf7facd28c9eb6d, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BlendMap:
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
@@ -103,8 +108,12 @@ Material:
     - _AddPrecomputedVelocity: 0
     - _AlphaClip: 0
     - _AlphaToMask: 0
+    - _BaseMap3DBlendSharpness: 4
+    - _BaseMapMapping: 0
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
+    - _BlendSmoothness: 0.25
+    - _BlendThreshold: 0.6
     - _Brightness: 1
     - _BumpScale: 1
     - _CastShadows: 1
@@ -142,10 +151,10 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
-    - _HeightFadeEnabled: 0
-    - _HeightFadeLower: 0
+    - _HeightFadeEnabled: 1
+    - _HeightFadeLower: -1.18
     - _HeightFadeOffset: 0
-    - _HeightFadeUpper: 1
+    - _HeightFadeUpper: -0.17
     - _HologramEnabled: 0
     - _HologramFresnelIntensity: 2
     - _HologramFresnelPower: 4
@@ -181,6 +190,7 @@ Material:
     - _Surface: 0
     - _SurfaceInputs: 1
     - _SurfaceOptions: 1
+    - _TextureBlendEnabled: 0
     - _UberQuality: 0
     - _WorkflowMode: 1
     - _XRMotionVectorsPass: 1
@@ -188,6 +198,9 @@ Material:
     - _ZWriteControl: 0
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BaseMap3DTiling: {r: 1, g: 1, b: 1, a: 0}
+    - _BlendColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BlendTiling: {r: 1, g: 1, b: 0, a: 0}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _DissolveEdgeColor: {r: 1, g: 0.5, b: 0, a: 1}
     - _DissolveNoiseAmountMovement: {r: 1, g: 0, b: 0, a: 0}
@@ -199,7 +212,7 @@ Material:
     - _GlassGlowColor: {r: 1, g: 1, b: 1, a: 1}
     - _GlitchBandSizeRange: {r: 4, g: 12, b: 0, a: 0}
     - _GlitchUpVector: {r: 0, g: 1, b: 0, a: 0}
-    - _HeightFadeColor: {r: 0.24999997, g: 0.24999997, b: 0.24999997, a: 1}
+    - _HeightFadeColor: {r: 0, g: 0, b: 0, a: 1}
     - _HologramColor: {r: 0, g: 1, b: 1, a: 1}
     - _HologramObjectUpVector: {r: 0, g: 1, b: 0, a: 0}
     - _RimColor: {r: 1, g: 1, b: 1, a: 1}
