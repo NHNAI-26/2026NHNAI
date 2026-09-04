@@ -20,10 +20,10 @@ namespace Border.Research
         private EnginePresetId selectedEnginePreset = EnginePresetId.Engine01;
         private EngineStatId selectedStat = EngineStatId.FuelCapacity;
         private ResearchStageId selectedStage = ResearchStageId.Engine;
-        private int selectedResearchScore = 80;
         private bool initialized;
         private RectTransform canvasTransform;
         private ResearchDesignScreenController activeDesignController;
+        private ResearchMiniGameController activeMiniGameController;
 
         private TMP_Text dateText;
         private TMP_Text remainingTurnsText;
@@ -198,13 +198,6 @@ namespace Border.Research
             CreateStatButton(statRow, EngineStatId.MaxOutput);
             CreateStatButton(statRow, EngineStatId.IgnitionReliability);
 
-            RectTransform scoreRow = CreateGroup("ScoreButtons", selectedPanel);
-            AddHorizontalLayout(scoreRow, 0f, 0f, 0f, 6f);
-            scoreRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 36f;
-            CreateScoreButton(scoreRow, "낮음 35", 35);
-            CreateScoreButton(scoreRow, "보통 65", 65);
-            CreateScoreButton(scoreRow, "높음 85", 85);
-
             selectedStageText = CreateText("SelectedStageText", selectedPanel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
             selectedRequirementText = CreateText("SelectedRequirementText", selectedPanel, 14, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
 
@@ -304,20 +297,36 @@ namespace Border.Research
             });
         }
 
-        private void CreateScoreButton(RectTransform parent, string label, int score)
-        {
-            Button button = CreateButton($"ScoreButton_{score}", parent, label, 0f, 36f);
-            button.onClick.AddListener(() =>
-            {
-                selectedResearchScore = score;
-                Refresh();
-            });
-        }
-
         private void ExecuteResearch(bool focused)
         {
-            model.ExecuteEngineResearch(selectedEnginePreset, selectedStat, focused, selectedResearchScore);
+            ShowMiniGame(focused);
+        }
+
+        private void ShowMiniGame(bool focused)
+        {
+            if (activeMiniGameController != null)
+            {
+                return;
+            }
+
+            canvasTransform.gameObject.SetActive(false);
+            var host = new GameObject("Research Mini Game Controller");
+            host.transform.SetParent(transform, false);
+            activeMiniGameController = host.AddComponent<ResearchMiniGameController>();
+            activeMiniGameController.Initialize(selectedEnginePreset, selectedStat, focused, CompleteMiniGame);
+        }
+
+        private void CompleteMiniGame(ResearchMiniGameResult result)
+        {
+            if (activeMiniGameController != null)
+            {
+                DestroyUnityObject(activeMiniGameController.gameObject);
+                activeMiniGameController = null;
+            }
+
+            model.ExecuteEngineResearch(result.PresetId, result.StatId, result.Focused, result.Score);
             session.ClearPendingDesignEntry();
+            canvasTransform.gameObject.SetActive(true);
             Refresh();
         }
 
@@ -365,7 +374,7 @@ namespace Border.Research
             selectedEngineText.text = $"{selectedEngineConfig.DisplayName} Lv.{selectedEngine.Level}/{ResearchPrototypeModel.MaxEnginePresetLevel}  "
                 + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {selectedEngineConfig.InstallCost}\n"
                 + $"연료 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 출력 {selectedEngine.MaxOutput} / 점화 {selectedEngine.IgnitionReliability}\n"
-                + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)} / 임시 점수 {selectedResearchScore} / 시험 최고 {GetBestGradeText(selectedEngine)}";
+                + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)} / 미니게임 점수로 보상 결정 / 시험 최고 {GetBestGradeText(selectedEngine)}";
             selectedStageText.text = $"{selectedStageConfig.DisplayName}  발사비 {selectedStageConfig.LaunchCost} / 예상 성공 {model.CalculateSuccessChance(preview)}% / 경험 +{preview.ExperienceBonus}%p";
             selectedRequirementText.text = GetDesignEntryRequirementText(selectedStageConfig, selectedStageState, selectedEngine);
 
@@ -521,6 +530,11 @@ namespace Border.Research
         public ResearchDesignScreenController GetActiveDesignControllerForTests()
         {
             return activeDesignController;
+        }
+
+        public ResearchMiniGameController GetActiveMiniGameControllerForTests()
+        {
+            return activeMiniGameController;
         }
 
         public void ReturnFromDesignScreenForTests()

@@ -236,6 +236,129 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void MiniGameScoring_ClampsAllScoresToValidRange()
+        {
+            Assert.That(ResearchMiniGameController.CalculateFuelCapacityScore(2f, -2f), Is.InRange(0, 100));
+            Assert.That(ResearchMiniGameController.CalculateCoolingScore(10, 10, -1f), Is.InRange(0, 100));
+            Assert.That(ResearchMiniGameController.CalculateMaxOutputScore(2f, -2f), Is.InRange(0, 100));
+            Assert.That(ResearchMiniGameController.CalculateIgnitionReliabilityScore(20, 4, -1f), Is.InRange(0, 100));
+        }
+
+        [Test]
+        public void MiniGameScoring_FuelCapacity_RewardAccuracy()
+        {
+            int accurate = ResearchMiniGameController.CalculateFuelCapacityScore(0.01f, 0.02f, 0.01f);
+            int inaccurate = ResearchMiniGameController.CalculateFuelCapacityScore(0.35f, 0.4f, 0.3f);
+
+            Assert.That(accurate, Is.GreaterThan(inaccurate));
+            Assert.That(accurate, Is.GreaterThanOrEqualTo(80));
+        }
+
+        [Test]
+        public void MiniGameScoring_Cooling_RewardsCorrectFastInput()
+        {
+            int good = ResearchMiniGameController.CalculateCoolingScore(4, 0, 0.25f);
+            int poor = ResearchMiniGameController.CalculateCoolingScore(1, 3, 1.5f);
+
+            Assert.That(good, Is.GreaterThan(poor));
+            Assert.That(good, Is.GreaterThanOrEqualTo(80));
+        }
+
+        [Test]
+        public void MiniGameScoring_MaxOutput_RewardsSafeZoneCenter()
+        {
+            int centered = ResearchMiniGameController.CalculateMaxOutputScoreFromFills(0.35f, 0.6f, 0.85f);
+            int outside = ResearchMiniGameController.CalculateMaxOutputScoreFromFills(0.05f, 0.95f, 0.2f);
+
+            Assert.That(centered, Is.GreaterThan(outside));
+            Assert.That(centered, Is.GreaterThanOrEqualTo(80));
+        }
+
+        [Test]
+        public void MiniGameScoring_IgnitionReliability_RewardsSequenceAccuracy()
+        {
+            int correct = ResearchMiniGameController.CalculateIgnitionReliabilityScore(9, 9, 0.35f);
+            int wrong = ResearchMiniGameController.CalculateIgnitionReliabilityScore(3, 9, 1.4f);
+
+            Assert.That(correct, Is.GreaterThan(wrong));
+            Assert.That(correct, Is.GreaterThanOrEqualTo(80));
+        }
+
+        [Test]
+        public void MiniGameController_ForceComplete_ShowsResultBeforeCallback()
+        {
+            var host = new GameObject("Mini Game Test Host");
+            ResearchMiniGameResult completedResult = default;
+            bool completed = false;
+
+            try
+            {
+                ResearchMiniGameController controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine03, EngineStatId.Cooling, true, result =>
+                {
+                    completedResult = result;
+                    completed = true;
+                });
+
+                controller.ForceCompleteForTests(125);
+
+                Assert.That(completed, Is.False);
+                Assert.That(controller.IsShowingResult, Is.True);
+
+                controller.ForceDismissForTests();
+
+                Assert.That(completed, Is.True);
+                Assert.That(completedResult.PresetId, Is.EqualTo(EnginePresetId.Engine03));
+                Assert.That(completedResult.StatId, Is.EqualTo(EngineStatId.Cooling));
+                Assert.That(completedResult.Focused, Is.True);
+                Assert.That(completedResult.Score, Is.EqualTo(100));
+                Assert.That(completedResult.CompletedByTimeout, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_DismissesZeroScoreAsValidCompletion()
+        {
+            var host = new GameObject("Mini Game Test Host");
+            ResearchMiniGameResult completedResult = default;
+            bool completed = false;
+
+            try
+            {
+                ResearchMiniGameController controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, result =>
+                {
+                    completedResult = result;
+                    completed = true;
+                });
+
+                controller.ForceCompleteForTests(0);
+                controller.ForceDismissForTests();
+
+                Assert.That(completed, Is.True);
+                Assert.That(completedResult.Score, Is.EqualTo(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameStateText_AddsExampleLineWithoutAccumulating()
+        {
+            string firstFrame = ResearchMiniGameController.FormatStateText("밸브 1/4", true);
+            string nextFrame = ResearchMiniGameController.FormatStateText("밸브 1/4", true);
+
+            Assert.That(firstFrame, Is.EqualTo(nextFrame));
+            Assert.That(firstFrame.Split('\n'), Has.Length.EqualTo(2));
+        }
+
+        [Test]
         public void FlowSession_StoresUpdatesAndClearsPendingDesignEntry()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
@@ -292,7 +415,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void OperationUI_ResearchButtonUpdatesSelectedEngine()
+        public void OperationUI_ResearchButtonStartsMiniGameAndCompletionUpdatesSelectedEngine()
         {
             var host = new GameObject("Research UI Test Host");
 
@@ -302,6 +425,15 @@ namespace Border.Research.Tests
                 controller.InitializeForTests();
 
                 FindButton(host.transform, "NormalResearchButton").onClick.Invoke();
+
+                Assert.That(controller.Model.GetEnginePreset(EnginePresetId.Engine01).Level, Is.EqualTo(0));
+                Assert.That(controller.GetActiveMiniGameControllerForTests(), Is.Not.Null);
+
+                controller.GetActiveMiniGameControllerForTests().ForceCompleteForTests(65);
+
+                Assert.That(controller.Model.GetEnginePreset(EnginePresetId.Engine01).Level, Is.EqualTo(0));
+
+                controller.GetActiveMiniGameControllerForTests().ForceDismissForTests();
 
                 Assert.That(controller.Model.GetEnginePreset(EnginePresetId.Engine01).Level, Is.EqualTo(1));
                 Assert.That(GetText(FindText(host.transform, "SelectedRequirementText")), Does.Contain("설계 진입 가능"));
