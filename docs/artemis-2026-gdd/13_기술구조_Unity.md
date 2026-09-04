@@ -32,16 +32,6 @@ public enum StageId
     Moon
 }
 
-public enum EnvironmentId
-{
-    Stable,
-    Ideal,
-    HighWind,
-    Thunderstorm,
-    MeteorShower,
-    SolarStorm
-}
-
 public enum TestGrade
 {
     S,
@@ -49,6 +39,13 @@ public enum TestGrade
     B,
     C,
     F
+}
+
+public enum LaunchVisibility
+{
+    Private,
+    Public,
+    FinalMission
 }
 ```
 
@@ -70,7 +67,6 @@ public sealed class GameState
     public StageState orbit;
     public StageState moon;
 
-    public EnvironmentId[] environmentSchedule;
     public int totalFundsSpent;
     public int totalLaunches;
     public int totalFailures;
@@ -101,14 +97,14 @@ public sealed class DesignData
     public StageId stageId;
     public int year;
     public int quarter;
-    public EnvironmentId environmentId;
-
     public int mapSeed;
     public string targetPathId;
+    public LaunchVisibility launchVisibility;
 
     public RocketPartPlacement[] partPlacements;
     public float force;
     public float directionDegrees;
+    public EngineToggleEvent[] engineToggleSchedule;
     public int designFit;
 }
 ```
@@ -124,11 +120,11 @@ public sealed class SimRunData
     public StageId stageId;
     public int year;
     public int quarter;
-    public EnvironmentId environmentId;
-
     public int mapSeed;
     public string targetPathId;
+    public LaunchVisibility launchVisibility;
     public int designFit;
+    public EngineToggleEvent[] engineToggleSchedule;
 
     public int currentProgress;
     public float prerequisiteAverage;
@@ -185,17 +181,11 @@ public sealed class SimRunData
 - 단계 해금 검사
 - 이전 단계 평균 계산
 
-### ForecastManager
-
-- 36분기 환경 생성
-- 현재 포함 4분기 반환
-- 환경 연속 제약 처리
-- 단계별 환경 보정 반환
-
 ### ProbabilityResolver
 
 - 성공·부분 성공·실패 확률 계산
 - 설계 적합도 보정 반영
+- 테스트 공개성 보정 반영
 - 난수 생성
 - 등급 결정
 - 사고 선택
@@ -204,7 +194,6 @@ public sealed class SimRunData
 ### SimulationDirector
 
 - `SimRunData` 읽기
-- 환경 효과 활성화
 - 카운트다운
 - 정상 시퀀스
 - 사고 시퀀스
@@ -216,9 +205,10 @@ public sealed class SimRunData
 
 - 현재 단계와 분기 기준 맵 생성
 - 목표 경로 표시
-- 부품 위치, 힘, 방향 입력 처리
+- 부품 위치, 힘, 방향, 엔진 ON/OFF 타이밍 입력 처리
 - 설계 적합도 계산
 - 예상 성공률 표시
+- 공개 테스트와 비공개 테스트 선택
 - 연구 단계로 복귀
 - 발사 확인과 `SimRunData` 생성 요청
 
@@ -260,18 +250,15 @@ designSceneName
 simulationSceneName
 ```
 
-### EnvironmentConfig
+### LaunchVisibilityConfig
 
 ```text
-environmentId
-displayName
-weight
-engineModifier
-rocketModifier
-orbitModifier
-moonModifier
-icon
-environmentVfxPrefab
+visibility
+successModifier
+immediateFundingMultiplier
+quarterlyFundingMultiplier
+failureQuarterlyFundingDelta
+availableForFinalMission
 ```
 
 ### IncidentConfig
@@ -279,7 +266,7 @@ environmentVfxPrefab
 ```text
 incidentId
 stageId
-compatibleEnvironments
+relatedDesignFactors
 allowedGrades
 recoveredForGrades
 warningText
@@ -295,6 +282,8 @@ attachmentPoints
 forceMin
 forceMax
 targetPathPatterns
+engineToggleMode
+engineTogglePointCount
 designFitToleranceByProgress
 ```
 
@@ -351,15 +340,18 @@ function ReturnFromDesign():
 ### 발사 시작
 
 ```pseudo
-function ConfirmLaunch(stage, designData):
+function ConfirmLaunch(stage, designData, visibility):
     if funds < stage.launchCost:
         return NotEnoughFunds
+
+    if stage.id == Moon:
+        visibility = FinalMission
 
     funds -= stage.launchCost
     totalFundsSpent += stage.launchCost
 
-    currentEnvironment = forecast[currentTurn]
-    simRunData = ProbabilityResolver.Resolve(stage, currentEnvironment, designData)
+    designData.launchVisibility = visibility
+    simRunData = ProbabilityResolver.Resolve(stage, designData)
 
     Persist(simRunData)
     LoadScene(stage.simulationSceneName)
@@ -389,18 +381,18 @@ function FinishSimulation():
 function GetSuccessChance(stage, designData):
     current = stage.progress
     experience = min(stage.attemptCount * 3, 9)
-    environment = GetEnvironmentModifier(currentEnvironment, stage.id)
     design = round((designData.designFit - 50) * 0.4)
+    visibility = GetLaunchVisibilityModifier(designData.launchVisibility)
 
     if stage.id == Engine:
-        raw = 20 + current * 0.8 + experience + environment + design
+        raw = 20 + current * 0.8 + experience + design + visibility
     else:
         prerequisiteAverage = GetPrerequisiteAverage(stage.id)
         raw = 20 + current * 0.6
                  + prerequisiteAverage * 0.2
                  + experience
-                 + environment
                  + design
+                 + visibility
 
     return clamp(round(raw), 10, 90)
 ```
@@ -411,26 +403,13 @@ function GetSuccessChance(stage, designData):
 
 1. 세션 시드, 현재 분기, 단계 ID로 `mapSeed` 생성
 2. 단계별 목표 경로 패턴 중 하나 선택
-3. 현재 환경에 맞는 위험 구간 또는 보정 방향 표시
+3. 단계별 목표 난이도에 맞는 위험 구간 또는 보정 방향 표시
 4. 출발 지점과 목표 지점 배치
-5. 설계 입력으로 예상 경로와 `designFit` 계산
+5. 설계 입력과 엔진 ON/OFF 타이밍으로 예상 경로와 `designFit` 계산
 
 같은 분기와 같은 단계에서는 설계 씬을 다시 열어도 같은 맵과 목표 경로가 나와야 한다. 발사하지 않고 연구 단계로 돌아오면 비용과 시간은 그대로다.
 
-## 8. 환경 스케줄 생성
-
-단순 구현 방법:
-
-1. 0번 분기부터 순서대로 가중치 추첨
-2. 직전 2개와 같은 위험 환경이 뽑히면 다시 추첨
-3. 직전 3분기가 모두 위험 환경이면 현재 분기는 `Stable` 또는 `Ideal` 중 하나로 강제
-4. 36개를 생성해 결과 배열 저장
-5. UI에는 현재 인덱스부터 최대 4개를 표시
-6. 2026 Q4 이후 자리는 `PROJECT DEADLINE` 플레이스홀더로 채움
-
-이 방식이면 모든 연속 4분기 창에 안정 또는 최적 환경이 최소 한 번 존재한다. 복잡한 재귀 생성기나 백트래킹은 필요 없다.
-
-## 9. 3D 시퀀스 구현 방식
+## 8. 3D 시퀀스 구현 방식
 
 권장 우선순위:
 
@@ -443,7 +422,7 @@ function GetSuccessChance(stage, designData):
 
 성공 경로는 Transform 애니메이션으로 만들고, 실패 시점부터 Rigidbody를 켜는 방식이 가장 빠르다.
 
-## 10. 시뮬레이션 상태
+## 9. 시뮬레이션 상태
 
 ```csharp
 public enum SimulationPhase
@@ -471,7 +450,7 @@ public interface IStageSimulation
 }
 ```
 
-## 11. 결과 중복 방지
+## 10. 결과 중복 방지
 
 필수 안전장치:
 
@@ -493,7 +472,7 @@ ApplyRewardsAndProgress();
 - 결과 화면 중복 호출
 - 애니메이션 이벤트 중복
 
-## 12. 저장 정책
+## 11. 저장 정책
 
 게임잼 버전은 중간 저장을 제공하지 않는다. 그러나 씬 사이 상태 보존은 필요하다.
 
@@ -505,7 +484,7 @@ ApplyRewardsAndProgress();
 
 권장 방식은 `DontDestroyOnLoad GameSession` 하나다. 영구 저장 시스템은 만들지 않는다.
 
-## 13. 입력
+## 12. 입력
 
 메인 UI:
 
@@ -517,6 +496,8 @@ ApplyRewardsAndProgress();
 
 - 마우스 드래그: 부품 위치 또는 방향 조정
 - 슬라이더: 힘 조정
+- 타임라인 또는 경로 마커: 엔진 ON/OFF 타이밍 조정
+- 토글: 공개 테스트 / 비공개 테스트 선택
 - Esc: 연구 단계로 돌아가기 확인
 
 시뮬레이션:
@@ -525,20 +506,20 @@ ApplyRewardsAndProgress();
 - Esc: 일시정지
 - 결과 개입 입력 없음
 
-## 14. 오류 처리
+## 13. 오류 처리
 
 - `SimRunData` 없이 시뮬레이션 씬에 진입하면 메인으로 복귀
 - `DesignData` 없이 설계 씬에 진입하면 메인으로 복귀
 - 존재하지 않는 사고 ID면 등급 기본 시퀀스 사용
-- 환경 VFX가 없어도 확률과 결과는 정상 처리
+- 설계 실패 연출 VFX가 없어도 성공률과 결과는 정상 처리
 - 카메라가 누락되어도 기본 카메라 사용
 - 결과 보고서 데이터가 누락되면 등급과 경제 변화만 표시
 
-## 15. 성능 기준
+## 14. 성능 기준
 
 - 1080p에서 안정적 실행
 - 폭발 파편 수를 제한
-- 유성우는 풀링 또는 소수 파티클로 구현
+- 설계 오류 스파크와 연기는 풀링 또는 소수 파티클로 구현
 - 실시간 그림자 수를 최소화
 - 한 장면에 하나의 주요 광원
 - 시뮬레이션 씬 전환 중 짧은 로딩 화면 허용
