@@ -62,10 +62,11 @@ public sealed class GameState
     public int funds = 2200;
     public int quarterlyFunding = 600;
 
-    public StageState engine;
-    public StageState rocket;
-    public StageState orbit;
-    public StageState moon;
+    public EnginePresetState[] enginePresets;
+    public StageLaunchState engineTest;
+    public StageLaunchState rocket;
+    public StageLaunchState orbit;
+    public StageLaunchState moon;
 
     public int totalFundsSpent;
     public int totalLaunches;
@@ -74,14 +75,29 @@ public sealed class GameState
 }
 ```
 
-### StageState
+### EnginePresetState
 
 ```csharp
 [Serializable]
-public sealed class StageState
+public sealed class EnginePresetState
+{
+    public string presetId;
+    public int level;
+    public int fuelCapacity;
+    public int cooling;
+    public int maxOutput;
+    public int ignitionReliability;
+    public TestGrade? bestGrade;
+}
+```
+
+### StageLaunchState
+
+```csharp
+[Serializable]
+public sealed class StageLaunchState
 {
     public StageId id;
-    public int progress;
     public int attemptCount;
     public TestGrade? bestGrade;
     public bool unlocked;
@@ -102,6 +118,8 @@ public sealed class DesignData
     public LaunchVisibility launchVisibility;
 
     public RocketPartPlacement[] partPlacements;
+    public InstalledEngineData[] installedEngines;
+    public int reservedEngineInstallCost;
     public float force;
     public float directionDegrees;
     public EngineToggleEvent[] engineToggleSchedule;
@@ -110,6 +128,22 @@ public sealed class DesignData
 ```
 
 `DesignData`는 설계 씬에서 수정된다. 발사 전 연구 화면으로 돌아가면 버릴 수 있다. 같은 분기·단계·시드로 다시 설계 씬에 들어오면 같은 맵과 목표 경로를 생성해야 한다.
+
+### InstalledEngineData
+
+```csharp
+[Serializable]
+public sealed class InstalledEngineData
+{
+    public string instanceId;
+    public string presetId;
+    public Vector3 localPosition;
+    public Quaternion localRotation;
+    public int installCost;
+}
+```
+
+같은 `presetId`를 가진 엔진을 여러 개 설치할 수 있다. 연구 레벨과 스탯은 프리셋이 공유하고, 설치 비용과 위치·회전은 엔진 개체별로 따로 저장한다.
 
 ### SimRunData
 
@@ -125,9 +159,10 @@ public sealed class SimRunData
     public LaunchVisibility launchVisibility;
     public int designFit;
     public EngineToggleEvent[] engineToggleSchedule;
-
-    public int currentProgress;
-    public float prerequisiteAverage;
+    public InstalledEngineData[] installedEngines;
+    public int committedEngineInstallCost;
+    public float installedEngineScore;
+    public int previousCertificationBonus;
     public int experienceBonus;
 
     public int successChance;
@@ -176,10 +211,10 @@ public sealed class SimRunData
 
 ### ResearchManager
 
-- 일반·집중 연구
-- 진행도 상한 처리
+- 엔진 프리셋별 일반·집중 연구
+- 엔진 프리셋 레벨 상한 처리
 - 단계 해금 검사
-- 이전 단계 평균 계산
+- 엔진 프리셋 스탯 갱신
 
 ### ProbabilityResolver
 
@@ -205,7 +240,8 @@ public sealed class SimRunData
 
 - 현재 단계와 분기 기준 맵 생성
 - 목표 경로 표시
-- 부품 위치, 힘, 방향, 엔진 ON/OFF 타이밍 입력 처리
+- 부품 위치, 엔진 프리셋 배치, 힘, 방향, 엔진 ON/OFF 타이밍 입력 처리
+- 엔진 설치 예약 비용 계산
 - 설계 적합도 계산
 - 예상 성공률 표시
 - 공개 테스트와 비공개 테스트 선택
@@ -215,7 +251,6 @@ public sealed class SimRunData
 ### ResultApplier
 
 - 결과를 정확히 한 번 반영
-- 진행도 증가
 - 발사 횟수 증가
 - 최고 등급 갱신
 - 즉시 지원금
@@ -232,20 +267,35 @@ ScriptableObject 권장:
 - 시작 자금
 - 분기 연구비
 - 하한·상한
-- 연구 진행도
+- 엔진 프리셋 최대 개수 10
+- 엔진 프리셋별 연구 비용과 설치 비용
 - 등급 보상
 - 확률 하한·상한
+
+### EnginePresetConfig
+
+```text
+maxPresetCount
+presetId
+displayName
+normalResearchCost
+focusedResearchCost
+installCost
+baseFuelCapacity
+baseCooling
+baseMaxOutput
+baseIgnitionReliability
+statGainByLevel
+```
 
 ### StageConfig
 
 ```text
 stageId
 displayName
-normalResearchCost
-focusedResearchCost
 launchCost
-minimumLaunchProgress
-unlockProgressRequirement
+unlockRequiredPreviousStage
+unlockRequiredGrade
 designSceneName
 simulationSceneName
 ```
@@ -294,8 +344,8 @@ designFitToleranceByProgress
 ### 연구
 
 ```pseudo
-function ExecuteResearch(stage, mode):
-    cost = GetResearchCost(stage, mode)
+function ExecuteResearch(enginePreset, statId, mode):
+    cost = GetEngineResearchCost(enginePreset.id, mode)
 
     if funds < cost:
         return NotEnoughFunds
@@ -303,8 +353,11 @@ function ExecuteResearch(stage, mode):
     funds -= cost
     totalFundsSpent += cost
 
-    gain = mode == Normal ? 6 : 10
-    stage.progress = min(stage.progress + gain, 100)
+    levelGain = mode == Normal ? 1 : 2
+    statGain = ResolveMiniGameStatGain(mode)
+
+    enginePreset.level = min(enginePreset.level + levelGain, 5)
+    IncreaseEngineStat(enginePreset, statId, statGain)
 
     CheckStageUnlocks()
     EndQuarter()
@@ -316,9 +369,6 @@ function ExecuteResearch(stage, mode):
 function EnterDesign(stage):
     if not stage.unlocked:
         return Locked
-
-    if stage.progress < stage.minimumLaunchProgress:
-        return ProgressTooLow
 
     if funds < stage.launchCost:
         return NotEnoughFunds
@@ -341,14 +391,16 @@ function ReturnFromDesign():
 
 ```pseudo
 function ConfirmLaunch(stage, designData, visibility):
-    if funds < stage.launchCost:
+    totalCost = stage.launchCost + designData.reservedEngineInstallCost
+
+    if funds < totalCost:
         return NotEnoughFunds
 
     if stage.id == Moon:
         visibility = FinalMission
 
-    funds -= stage.launchCost
-    totalFundsSpent += stage.launchCost
+    funds -= totalCost
+    totalFundsSpent += totalCost
 
     designData.launchVisibility = visibility
     simRunData = ProbabilityResolver.Resolve(stage, designData)
@@ -379,17 +431,18 @@ function FinishSimulation():
 
 ```pseudo
 function GetSuccessChance(stage, designData):
-    current = stage.progress
     experience = min(stage.attemptCount * 3, 9)
     design = round((designData.designFit - 50) * 0.4)
     visibility = GetLaunchVisibilityModifier(designData.launchVisibility)
+    installedEngineScore = CalculateInstalledEngineScore(designData.installedEngines)
+    certification = GetPreviousCertificationBonus(stage.id)
 
     if stage.id == Engine:
-        raw = 20 + current * 0.8 + experience + design + visibility
+        selectedEngineScore = CalculateSelectedEngineScore(designData.installedEngines[0])
+        raw = 20 + selectedEngineScore * 0.8 + experience + design + visibility
     else:
-        prerequisiteAverage = GetPrerequisiteAverage(stage.id)
-        raw = 20 + current * 0.6
-                 + prerequisiteAverage * 0.2
+        raw = 20 + installedEngineScore * GetStageEngineWeight(stage.id)
+                 + certification
                  + experience
                  + design
                  + visibility
@@ -461,7 +514,7 @@ if (simRunData.resultApplied)
 }
 
 simRunData.resultApplied = true;
-ApplyRewardsAndProgress();
+ApplyRewardsAndStageRecord();
 ```
 
 아래 상황에서도 한 번만 적용되어야 한다.
