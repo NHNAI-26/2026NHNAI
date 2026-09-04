@@ -1,0 +1,22 @@
+{
+    "name": "Border.Audio.EditModeTests",
+    "rootNamespace": "Border.Audio.Tests",
+    "references": [
+        "Border",
+        "Border.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

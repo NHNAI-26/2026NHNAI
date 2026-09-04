@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 5f81b150f373e8840ab13769ce55ea16
+AssemblyDefinitionImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 170331
+  packageName: Light Weight ShaderGUI
+  packageVersion: 1.0
+  assetPath: Assets/com.jasonma.lwgui/Editor/LWGUI.asmdef
+  uploadId: 522442

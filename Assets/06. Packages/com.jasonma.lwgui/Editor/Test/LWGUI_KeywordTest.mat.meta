@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 64f63a798b03f4a448ef2a853da686c9
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 170331
+  packageName: Light Weight ShaderGUI
+  packageVersion: 1.0
+  assetPath: Assets/com.jasonma.lwgui/Editor/Test/LWGUI_KeywordTest.mat
+  uploadId: 522442

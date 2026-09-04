@@ -1,0 +1,103 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: UberPostProcessing
+  m_Shader: {fileID: 4800000, guid: 30f88fdf99949b17e1187c24eba8ed93, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _AsciiFontAtlas:
+        m_Texture: {fileID: -3501735882904893123, guid: ada3081128df5d947b56bd7bc721fb79, type: 2}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AsciiCellSize: 8
+    - _AsciiCharacterSpacing: -0.552
+    - _AsciiFontReady: 1
+    - _AsciiInvert: 1
+    - _AsciiLineSpacing: -0.257
+    - _AsciiSdfSoftness: 0.001
+    - _AsciiSdfThreshold: 0.514
+    - _AsciiSourceColor: 1
+    - _BlendStrength: 0
+    - _Brightness: 1
+    - _ColorLevels: 16
+    - _Contrast: 1
+    - _DitherStrength: 1
+    - _EdgeSourceMix: 1
+    - _EdgeStrength: 1
+    - _EdgeThreshold: 0.052
+    - _EdgeWidth: 0.911
+    - _GradientMidpoint: 0.01
+    - _GradientStrength: 1
+    - _HueShift: 0
+    - _OldFilmFlicker: 0.08
+    - _OldFilmGrain: 0.038
+    - _OldFilmJitter: 1
+    - _OldFilmScratch: 0.4
+    - _OldFilmSepia: 0.6
+    - _OldFilmVignette: 0.45
+    - _PixelSize: 4
+    - _Saturation: 1
+    - _ScreenFilterMode: 0
+    - _ScreenFilterOptions: 1
+    m_Colors:
+    - _AsciiBackgroundColor: {r: 0, g: 0, b: 0, a: 1}
+    - _AsciiForegroundColor: {r: 1, g: 1, b: 1, a: 1}
+    - _AsciiGlyphPlacement0: {r: 0.45753762, g: 0.23333333, b: 0.08405671, a: 0.08420139}
+    - _AsciiGlyphPlacement1: {r: 0.4388021, g: 0.15839121, b: 0.12167245, a: 0.15914352}
+    - _AsciiGlyphPlacement10: {r: 0.30591723, g: 0.2233507, b: 0.38744214, a: 0.5358796}
+    - _AsciiGlyphPlacement11: {r: 0.30591723, g: 0.2233507, b: 0.38744214, a: 0.5358796}
+    - _AsciiGlyphPlacement12: {r: 0.30591723, g: 0.14754051, b: 0.38744214, a: 0.6875}
+    - _AsciiGlyphPlacement13: {r: 0.2679398, g: 0.2233507, b: 0.4632523, a: 0.5358796}
+    - _AsciiGlyphPlacement14: {r: 0.30591723, g: 0.28498265, b: 0.38744214, a: 0.34751156}
+    - _AsciiGlyphPlacement2: {r: 0.45753762, g: 0.300897, b: 0.08405671, a: 0.23162615}
+    - _AsciiGlyphPlacement3: {r: 0.4388021, g: 0.22581019, b: 0.12167245, a: 0.30671296}
+    - _AsciiGlyphPlacement4: {r: 0.45753762, g: 0.2233507, b: 0.08405671, a: 0.5358796}
+    - _AsciiGlyphPlacement5: {r: 0.34382233, g: 0.22248265, b: 0.31163195, a: 0.3858507}
+    - _AsciiGlyphPlacement6: {r: 0.30591723, g: 0.2233507, b: 0.38744214, a: 0.5358796}
+    - _AsciiGlyphPlacement7: {r: 0.30591723, g: 0.2233507, b: 0.38744214, a: 0.5358796}
+    - _AsciiGlyphPlacement8: {r: 0.38172743, g: 0.2233507, b: 0.23582175, a: 0.5358796}
+    - _AsciiGlyphPlacement9: {r: 0.30591723, g: 0.2233507, b: 0.38744214, a: 0.38498265}
+    - _AsciiGlyphUV0: {r: 0.009765625, g: 0.009765625, b: 0.009765625, a: 0.009765625}
+    - _AsciiGlyphUV1: {r: 0.009765625, g: 0.038085938, b: 0.013671875, a: 0.018554688}
+    - _AsciiGlyphUV10: {r: 0.10253906, g: 0.009765625, b: 0.041992188, a: 0.057617188}
+    - _AsciiGlyphUV11: {r: 0.009765625, g: 0.3076172, b: 0.041992188, a: 0.057617188}
+    - _AsciiGlyphUV12: {r: 0.009765625, g: 0.38378906, b: 0.041992188, a: 0.07324219}
+    - _AsciiGlyphUV13: {r: 0.009765625, g: 0.47558594, b: 0.049804688, a: 0.057617188}
+    - _AsciiGlyphUV14: {r: 0.0625, g: 0.24707031, b: 0.041992188, a: 0.038085938}
+    - _AsciiGlyphUV2: {r: 0.009765625, g: 0.07519531, b: 0.009765625, a: 0.025390625}
+    - _AsciiGlyphUV3: {r: 0.009765625, g: 0.119140625, b: 0.013671875, a: 0.033203125}
+    - _AsciiGlyphUV4: {r: 0.009765625, g: 0.17089844, b: 0.009765625, a: 0.057617188}
+    - _AsciiGlyphUV5: {r: 0.009765625, g: 0.24707031, b: 0.034179688, a: 0.041992188}
+    - _AsciiGlyphUV6: {r: 0.038085938, g: 0.17089844, b: 0.041992188, a: 0.057617188}
+    - _AsciiGlyphUV7: {r: 0.041992188, g: 0.009765625, b: 0.041992188, a: 0.057617188}
+    - _AsciiGlyphUV8: {r: 0.041992188, g: 0.0859375, b: 0.025390625, a: 0.057617188}
+    - _AsciiGlyphUV9: {r: 0.0859375, g: 0.0859375, b: 0.041992188, a: 0.041992188}
+    - _ColorScreen: {r: 1, g: 1, b: 1, a: 1}
+    - _EdgeBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
+    - _EdgeColor: {r: 0.009433985, g: 0.009433985, b: 0.009433985, a: 1}
+    - _GradientHighlightColor: {r: 1, g: 0.78, b: 0.35, a: 1}
+    - _GradientMidtoneColor: {r: 0.35, g: 0.08, b: 0.45, a: 1}
+    - _GradientShadowColor: {r: 0.03, g: 0.015, b: 0.08, a: 1}
+    - _OldFilmTint: {r: 0.5849056, g: 0.3509434, b: 0, a: 0.35}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

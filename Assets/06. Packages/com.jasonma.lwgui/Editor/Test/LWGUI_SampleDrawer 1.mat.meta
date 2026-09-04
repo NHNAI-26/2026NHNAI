@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 3ac8efd3d4e6a214394f6e0e57d425a1
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 170331
+  packageName: Light Weight ShaderGUI
+  packageVersion: 1.0
+  assetPath: Assets/com.jasonma.lwgui/Editor/Test/LWGUI_SampleDrawer 1.mat
+  uploadId: 522442

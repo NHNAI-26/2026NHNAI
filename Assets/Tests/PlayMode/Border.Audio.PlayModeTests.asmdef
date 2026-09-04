@@ -1,0 +1,19 @@
+{
+    "name": "Border.Audio.PlayModeTests",
+    "rootNamespace": "Border.Audio.Tests",
+    "references": [
+        "Border"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

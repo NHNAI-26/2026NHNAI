@@ -1,0 +1,26 @@
+{
+    "name": "Border.Rendering.EditModeTests",
+    "rootNamespace": "Border.Rendering.Tests",
+    "references": [
+        "Border",
+        "UberShader.Editor",
+        "LWGUI",
+        "Unity.RenderPipelines.Universal.Editor",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}
