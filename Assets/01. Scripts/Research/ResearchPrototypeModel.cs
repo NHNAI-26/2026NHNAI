@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Border.Research
 {
-    public enum ResearchStageId
+    public enum LaunchStageId
     {
         Engine,
         Rocket,
@@ -52,19 +52,20 @@ namespace Border.Research
     public enum ResearchActionResult
     {
         Success,
-        StageLocked,
+        LaunchTargetLocked,
         NotEnoughFunds,
-        ProgressTooLow,
+        RequirementNotMet,
         DeadlineReached,
         NoPendingDesignEntry,
-        EngineLevelMaxed
+        EngineLevelMaxed,
+        EnginePresetLocked,
+        EnginePresetLimitReached
     }
 
     [Serializable]
-    public sealed class ResearchStageState
+    public sealed class LaunchStageState
     {
-        public ResearchStageId Id;
-        public int Progress;
+        public LaunchStageId Id;
         public int AttemptCount;
         public ResearchGrade BestGrade;
         public bool HasBestGrade;
@@ -83,6 +84,7 @@ namespace Border.Research
         public int AttemptCount;
         public ResearchGrade BestGrade;
         public bool HasBestGrade;
+        public bool Unlocked;
 
         public int GetStat(EngineStatId statId)
         {
@@ -150,36 +152,28 @@ namespace Border.Research
         public int InitialIgnitionReliability { get; }
     }
 
-    public readonly struct ResearchStageConfig
+    public readonly struct LaunchStageConfig
     {
-        public ResearchStageConfig(ResearchStageId id, string displayName, int launchCost, string requirementText)
+        public LaunchStageConfig(LaunchStageId id, string displayName, int launchCost, string requirementText)
         {
             Id = id;
             DisplayName = displayName;
             LaunchCost = launchCost;
             TestCost = launchCost;
             RequirementText = requirementText;
-            NormalResearchCost = 0;
-            FocusedResearchCost = 0;
-            MinimumTestProgress = 0;
-            UnlockProgressRequirement = 0;
         }
 
-        public ResearchStageId Id { get; }
+        public LaunchStageId Id { get; }
         public string DisplayName { get; }
         public int LaunchCost { get; }
         public int TestCost { get; }
         public string RequirementText { get; }
-        public int NormalResearchCost { get; }
-        public int FocusedResearchCost { get; }
-        public int MinimumTestProgress { get; }
-        public int UnlockProgressRequirement { get; }
     }
 
     public readonly struct ResearchDesignEntryData
     {
         public ResearchDesignEntryData(
-            ResearchStageId stageId,
+            LaunchStageId stageId,
             EnginePresetId selectedEnginePresetId,
             int year,
             int quarter,
@@ -214,7 +208,7 @@ namespace Border.Research
             ExperienceBonus = experienceBonus;
         }
 
-        public ResearchStageId StageId { get; }
+        public LaunchStageId StageId { get; }
         public EnginePresetId SelectedEnginePresetId { get; }
         public int Year { get; }
         public int Quarter { get; }
@@ -230,8 +224,6 @@ namespace Border.Research
         public TestVisibility Visibility { get; }
         public int PreviousCertificationBonus { get; }
         public int ExperienceBonus { get; }
-        public int CurrentProgress => SelectedEngineLevel;
-        public double PrerequisiteAverage => PreviousCertificationBonus;
 
         public int InstalledEngineCount
         {
@@ -268,7 +260,7 @@ namespace Border.Research
     public readonly struct ResearchLaunchResultData
     {
         public ResearchLaunchResultData(
-            ResearchStageId stageId,
+            LaunchStageId stageId,
             EnginePresetId selectedEnginePresetId,
             int year,
             int quarter,
@@ -309,7 +301,7 @@ namespace Border.Research
             DeadlineMissed = deadlineMissed;
         }
 
-        public ResearchStageId StageId { get; }
+        public LaunchStageId StageId { get; }
         public EnginePresetId SelectedEnginePresetId { get; }
         public int Year { get; }
         public int Quarter { get; }
@@ -369,18 +361,18 @@ namespace Border.Research
             new(EnginePresetId.Engine10, "엔진 10"),
         };
 
-        private static readonly ResearchStageConfig[] StageConfigs =
+        private static readonly LaunchStageConfig[] StageConfigs =
         {
-            new(ResearchStageId.Engine, "엔진 테스트", 600, "시험할 엔진 레벨 1 이상"),
-            new(ResearchStageId.Rocket, "로켓 테스트", 900, "엔진 테스트 C 이상"),
-            new(ResearchStageId.Orbit, "궤도 테스트", 1200, "로켓 테스트 C 이상"),
-            new(ResearchStageId.Moon, "달 착륙", 1800, "궤도 테스트 C 이상"),
+            new(LaunchStageId.Engine, "초기 목표", 600, "엔진 레벨 1 이상"),
+            new(LaunchStageId.Rocket, "확장 목표", 900, "직전 목표 C 이상"),
+            new(LaunchStageId.Orbit, "궤도 목표", 1200, "직전 목표 C 이상"),
+            new(LaunchStageId.Moon, "달 착륙", 1800, "직전 목표 C 이상"),
         };
 
         public ResearchPrototypeModel(int seed = 20260904)
         {
             Seed = seed;
-            Stages = new ResearchStageState[StageConfigs.Length];
+            Stages = new LaunchStageState[StageConfigs.Length];
             EnginePresets = new EnginePresetState[EnginePresetConfigs.Length];
             Reset();
         }
@@ -394,8 +386,9 @@ namespace Border.Research
         public int CurrentTurnIndex => MaxTurns - RemainingTurns;
         public bool DeadlineReached => RemainingTurns <= 0;
         public string LastMessage { get; private set; }
-        public ResearchStageState[] Stages { get; }
+        public LaunchStageState[] Stages { get; }
         public EnginePresetState[] EnginePresets { get; }
+        public int ActiveEnginePresetCount { get; private set; }
 
         public void Reset()
         {
@@ -404,19 +397,19 @@ namespace Border.Research
             RemainingTurns = MaxTurns;
             Funds = InitialFunds;
             QuarterlyFunding = InitialQuarterlyFunding;
-            LastMessage = "2018 Q1. 엔진 프리셋 연구 판단을 시작합니다.";
+            ActiveEnginePresetCount = 1;
+            LastMessage = "2018 Q1. 첫 엔진 프리셋 연구 판단을 시작합니다.";
 
             for (int i = 0; i < Stages.Length; i++)
             {
-                ResearchStageConfig config = StageConfigs[i];
-                Stages[i] = new ResearchStageState
+                LaunchStageConfig config = StageConfigs[i];
+                Stages[i] = new LaunchStageState
                 {
                     Id = config.Id,
-                    Progress = 0,
                     AttemptCount = 0,
                     BestGrade = ResearchGrade.F,
                     HasBestGrade = false,
-                    Unlocked = config.Id == ResearchStageId.Engine
+                    Unlocked = config.Id == LaunchStageId.Engine
                 };
             }
 
@@ -433,12 +426,13 @@ namespace Border.Research
                     IgnitionReliability = config.InitialIgnitionReliability,
                     AttemptCount = 0,
                     BestGrade = ResearchGrade.F,
-                    HasBestGrade = false
+                    HasBestGrade = false,
+                    Unlocked = i == 0
                 };
             }
         }
 
-        public static IReadOnlyList<ResearchStageConfig> GetStageConfigs()
+        public static IReadOnlyList<LaunchStageConfig> GetStageConfigs()
         {
             return StageConfigs;
         }
@@ -448,7 +442,7 @@ namespace Border.Research
             return EnginePresetConfigs;
         }
 
-        public static ResearchStageConfig GetStageConfig(ResearchStageId stageId)
+        public static LaunchStageConfig GetStageConfig(LaunchStageId stageId)
         {
             return StageConfigs[(int)stageId];
         }
@@ -458,9 +452,29 @@ namespace Border.Research
             return EnginePresetConfigs[(int)presetId];
         }
 
-        public ResearchStageState GetStage(ResearchStageId stageId)
+        public LaunchStageState GetStage(LaunchStageId stageId)
         {
             return Stages[(int)stageId];
+        }
+
+        public LaunchStageId GetCurrentLaunchTarget()
+        {
+            if (GetStage(LaunchStageId.Moon).Unlocked)
+            {
+                return LaunchStageId.Moon;
+            }
+
+            if (GetStage(LaunchStageId.Orbit).Unlocked)
+            {
+                return LaunchStageId.Orbit;
+            }
+
+            if (GetStage(LaunchStageId.Rocket).Unlocked)
+            {
+                return LaunchStageId.Rocket;
+            }
+
+            return LaunchStageId.Engine;
         }
 
         public EnginePresetState GetEnginePreset(EnginePresetId presetId)
@@ -468,9 +482,47 @@ namespace Border.Research
             return EnginePresets[(int)presetId];
         }
 
-#if UNITY_EDITOR
-        public void PrepareDebugDesignEntryState(ResearchStageId stageId, EnginePresetId presetId = EnginePresetId.Engine01)
+        public bool IsEnginePresetUnlocked(EnginePresetId presetId)
         {
+            int index = (int)presetId;
+            return index >= 0
+                && index < EnginePresets.Length
+                && index < ActiveEnginePresetCount
+                && EnginePresets[index].Unlocked;
+        }
+
+        public ResearchActionResult CreateNewEnginePreset(out EnginePresetId presetId)
+        {
+            presetId = default;
+            if (DeadlineReached)
+            {
+                LastMessage = "마감 도달. 새 엔진을 개발할 수 없습니다.";
+                return ResearchActionResult.DeadlineReached;
+            }
+
+            if (ActiveEnginePresetCount >= MaxEnginePresetCount)
+            {
+                presetId = EnginePresetId.Engine10;
+                LastMessage = "엔진 프리셋은 최대 10개입니다.";
+                return ResearchActionResult.EnginePresetLimitReached;
+            }
+
+            int index = ActiveEnginePresetCount;
+            EnginePresets[index].Unlocked = true;
+            ActiveEnginePresetCount++;
+            presetId = EnginePresets[index].PresetId;
+            LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName} 개발 슬롯이 열렸습니다. 비용과 시간 대가는 아직 적용하지 않습니다.";
+            return ResearchActionResult.Success;
+        }
+
+#if UNITY_EDITOR
+        public void PrepareDebugDesignEntryState(LaunchStageId stageId, EnginePresetId presetId = EnginePresetId.Engine01)
+        {
+            while (!IsEnginePresetUnlocked(presetId) && ActiveEnginePresetCount < MaxEnginePresetCount)
+            {
+                CreateNewEnginePreset(out _);
+            }
+
             EnginePresetState preset = GetEnginePreset(presetId);
             preset.Level = Math.Max(preset.Level, 3);
             preset.FuelCapacity = Math.Max(preset.FuelCapacity, 65);
@@ -483,22 +535,11 @@ namespace Border.Research
                 Stages[i].Unlocked = true;
             }
 
-            ResearchStageConfig config = GetStageConfig(stageId);
+            LaunchStageConfig config = GetStageConfig(stageId);
             Funds = Math.Max(Funds, config.LaunchCost + EngineInstallCost * 2);
         }
 
 #endif
-        public ResearchActionResult ExecuteResearch(ResearchStageId stageId, bool focused)
-        {
-            if (stageId != ResearchStageId.Engine)
-            {
-                LastMessage = "로켓, 궤도, 달 착륙은 연구 대상이 아닙니다. 설계와 발사로만 진행합니다.";
-                return ResearchActionResult.StageLocked;
-            }
-
-            return ExecuteEngineResearch(EnginePresetId.Engine01, EngineStatId.FuelCapacity, focused, 80);
-        }
-
         public ResearchActionResult ExecuteEngineResearch(EnginePresetId presetId, EngineStatId statId, bool focused, int score)
         {
             if (DeadlineReached)
@@ -508,6 +549,12 @@ namespace Border.Research
             }
 
             EnginePresetState preset = GetEnginePreset(presetId);
+            if (!IsEnginePresetUnlocked(presetId))
+            {
+                LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName}은 아직 개발되지 않았습니다.";
+                return ResearchActionResult.EnginePresetLocked;
+            }
+
             if (preset.Level >= MaxEnginePresetLevel)
             {
                 LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName}은 이미 최대 레벨입니다.";
@@ -544,16 +591,21 @@ namespace Border.Research
             return DeadlineReached ? ResearchActionResult.DeadlineReached : ResearchActionResult.Success;
         }
 
-        public ResearchActionResult TryEnterDesign(ResearchStageId stageId, out ResearchDesignEntryData data)
+        public ResearchActionResult TryEnterDesign(LaunchStageId stageId, out ResearchDesignEntryData data)
         {
             return TryEnterDesign(stageId, EnginePresetId.Engine01, out data);
         }
 
-        public ResearchActionResult TryEnterDesign(ResearchStageId stageId, EnginePresetId presetId, out ResearchDesignEntryData data)
+        public ResearchActionResult TryEnterDesign(LaunchStageId stageId, EnginePresetId presetId, out ResearchDesignEntryData data)
         {
             data = default;
-            ResearchStageState stage = GetStage(stageId);
-            ResearchStageConfig config = GetStageConfig(stageId);
+            LaunchStageState stage = GetStage(stageId);
+            LaunchStageConfig config = GetStageConfig(stageId);
+            if (!IsEnginePresetUnlocked(presetId))
+            {
+                LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName}은 아직 개발되지 않았습니다.";
+                return ResearchActionResult.EnginePresetLocked;
+            }
 
             if (DeadlineReached)
             {
@@ -564,13 +616,13 @@ namespace Border.Research
             if (!stage.Unlocked)
             {
                 LastMessage = $"{config.DisplayName} 단계는 아직 잠겨 있습니다.";
-                return ResearchActionResult.StageLocked;
+                return ResearchActionResult.LaunchTargetLocked;
             }
 
-            if (stageId == ResearchStageId.Engine && GetEnginePreset(presetId).Level < 1)
+            if (stageId == LaunchStageId.Engine && GetEnginePreset(presetId).Level < 1)
             {
                 LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName} 시험 조건 부족. 엔진 레벨 1 필요.";
-                return ResearchActionResult.ProgressTooLow;
+                return ResearchActionResult.RequirementNotMet;
             }
 
             if (Funds < config.LaunchCost)
@@ -585,26 +637,27 @@ namespace Border.Research
         }
 
         public ResearchDesignEntryData CreateDesignEntry(
-            ResearchStageId stageId,
+            LaunchStageId stageId,
             EnginePresetId presetId,
             int[] installedEngineCounts,
             int designFit,
             TestVisibility visibility)
         {
-            ResearchStageConfig stageConfig = GetStageConfig(stageId);
+            LaunchStageConfig stageConfig = GetStageConfig(stageId);
             EnginePresetState selectedEngine = GetEnginePreset(presetId);
             int clampedFit = ClampInt(designFit, MinDesignFit, MaxDesignFit);
-            TestVisibility normalizedVisibility = stageId == ResearchStageId.Moon ? TestVisibility.FinalMission : visibility;
+            TestVisibility normalizedVisibility = stageId == LaunchStageId.Moon ? TestVisibility.FinalMission : visibility;
             int mapSeed = CreateDesignMapSeed(stageId, presetId);
             int[] counts = CopyAndNormalizeEngineCounts(installedEngineCounts);
+            ClearLockedEngineCounts(counts);
 
-            if (stageId == ResearchStageId.Engine)
+            if (stageId == LaunchStageId.Engine)
             {
                 Array.Clear(counts, 0, counts.Length);
             }
 
-            int reservedInstallCost = stageId == ResearchStageId.Engine ? 0 : CalculateReservedInstallCost(counts);
-            int installedScore = stageId == ResearchStageId.Engine
+            int reservedInstallCost = stageId == LaunchStageId.Engine ? 0 : CalculateReservedInstallCost(counts);
+            int installedScore = stageId == LaunchStageId.Engine
                 ? CalculateEnginePerformanceScore(presetId)
                 : CalculateInstalledEngineScore(counts);
 
@@ -630,8 +683,8 @@ namespace Border.Research
         public ResearchActionResult CommitLaunch(ResearchDesignEntryData designEntry, out ResearchLaunchResultData result)
         {
             result = default;
-            ResearchStageConfig config = GetStageConfig(designEntry.StageId);
-            ResearchStageState stage = GetStage(designEntry.StageId);
+            LaunchStageConfig config = GetStageConfig(designEntry.StageId);
+            LaunchStageState stage = GetStage(designEntry.StageId);
 
             if (DeadlineReached)
             {
@@ -639,16 +692,22 @@ namespace Border.Research
                 return ResearchActionResult.DeadlineReached;
             }
 
+            if (!IsEnginePresetUnlocked(designEntry.SelectedEnginePresetId))
+            {
+                LastMessage = $"{GetEnginePresetConfig(designEntry.SelectedEnginePresetId).DisplayName}은 아직 개발되지 않았습니다.";
+                return ResearchActionResult.EnginePresetLocked;
+            }
+
             if (!stage.Unlocked)
             {
                 LastMessage = $"{config.DisplayName} 단계는 아직 잠겨 있습니다.";
-                return ResearchActionResult.StageLocked;
+                return ResearchActionResult.LaunchTargetLocked;
             }
 
-            if (designEntry.StageId == ResearchStageId.Engine && GetEnginePreset(designEntry.SelectedEnginePresetId).Level < 1)
+            if (designEntry.StageId == LaunchStageId.Engine && GetEnginePreset(designEntry.SelectedEnginePresetId).Level < 1)
             {
                 LastMessage = $"{GetEnginePresetConfig(designEntry.SelectedEnginePresetId).DisplayName} 시험 조건 부족. 엔진 레벨 1 필요.";
-                return ResearchActionResult.ProgressTooLow;
+                return ResearchActionResult.RequirementNotMet;
             }
 
             int totalCost = designEntry.LaunchCost + designEntry.ReservedInstallCost;
@@ -668,7 +727,7 @@ namespace Border.Research
             Funds -= totalCost;
             stage.AttemptCount++;
             ApplyBestGrade(stage, grade);
-            if (designEntry.StageId == ResearchStageId.Engine)
+            if (designEntry.StageId == LaunchStageId.Engine)
             {
                 EnginePresetState preset = GetEnginePreset(designEntry.SelectedEnginePresetId);
                 preset.AttemptCount++;
@@ -680,7 +739,7 @@ namespace Border.Research
             AdvanceQuarter();
             CheckUnlocks();
 
-            bool moonMissionWon = designEntry.StageId == ResearchStageId.Moon && grade <= ResearchGrade.B;
+            bool moonMissionWon = designEntry.StageId == LaunchStageId.Moon && grade <= ResearchGrade.B;
             bool deadlineMissed = DeadlineReached && !moonMissionWon;
             result = new ResearchLaunchResultData(
                 designEntry.StageId,
@@ -716,7 +775,7 @@ namespace Border.Research
             return ResearchActionResult.Success;
         }
 
-        public int CalculateSuccessChance(ResearchStageId stageId)
+        public int CalculateSuccessChance(LaunchStageId stageId)
         {
             EnginePresetId presetId = GetDefaultCertifiedEnginePreset();
             ResearchDesignEntryData designEntry = CreateDesignEntry(stageId, presetId, CreateDefaultInstalledEngineCounts(stageId, presetId), 50, GetDefaultVisibility(stageId));
@@ -729,7 +788,7 @@ namespace Border.Research
             int visibilityModifier = GetVisibilitySuccessModifier(designEntry.Visibility);
             double raw;
 
-            if (designEntry.StageId == ResearchStageId.Engine)
+            if (designEntry.StageId == LaunchStageId.Engine)
             {
                 raw = 20
                     + designEntry.SelectedEngineScore * 0.8d
@@ -764,6 +823,7 @@ namespace Border.Research
         public int CalculateInstalledEngineScore(int[] installedEngineCounts)
         {
             int[] counts = CopyAndNormalizeEngineCounts(installedEngineCounts);
+            ClearLockedEngineCounts(counts);
             int count = 0;
             double total = 0;
             for (int i = 0; i < counts.Length; i++)
@@ -783,33 +843,33 @@ namespace Border.Research
             return ClampInt((int)Math.Round(average + countBonus - overweightPenalty, MidpointRounding.AwayFromZero), 0, 100);
         }
 
-        public bool CanUnlockNext(ResearchStageId stageId)
+        public bool CanUnlockNext(LaunchStageId stageId)
         {
             switch (stageId)
             {
-                case ResearchStageId.Engine:
+                case LaunchStageId.Engine:
                     return HasAnyCertifiedEngine();
-                case ResearchStageId.Rocket:
-                case ResearchStageId.Orbit:
-                    ResearchStageState stage = GetStage(stageId);
+                case LaunchStageId.Rocket:
+                case LaunchStageId.Orbit:
+                    LaunchStageState stage = GetStage(stageId);
                     return stage.HasBestGrade && stage.BestGrade <= ResearchGrade.C;
                 default:
                     return false;
             }
         }
 
-        public string GetUnlockConditionText(ResearchStageId stageId)
+        public string GetUnlockConditionText(LaunchStageId stageId)
         {
             switch (stageId)
             {
-                case ResearchStageId.Engine:
+                case LaunchStageId.Engine:
                     return "기본 해금";
-                case ResearchStageId.Rocket:
-                    return "필요: 엔진 테스트 C 이상";
-                case ResearchStageId.Orbit:
-                    return "필요: 로켓 테스트 C 이상";
-                case ResearchStageId.Moon:
-                    return "필요: 궤도 테스트 C 이상";
+                case LaunchStageId.Rocket:
+                    return "필요: 직전 목표 C 이상";
+                case LaunchStageId.Orbit:
+                    return "필요: 직전 목표 C 이상";
+                case LaunchStageId.Moon:
+                    return "필요: 직전 목표 C 이상";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(stageId), stageId, null);
             }
@@ -881,16 +941,16 @@ namespace Border.Research
         {
             if (HasAnyCertifiedEngine())
             {
-                GetStage(ResearchStageId.Rocket).Unlocked = true;
+                GetStage(LaunchStageId.Rocket).Unlocked = true;
             }
 
-            UnlockIfReady(ResearchStageId.Rocket, ResearchStageId.Orbit);
-            UnlockIfReady(ResearchStageId.Orbit, ResearchStageId.Moon);
+            UnlockIfReady(LaunchStageId.Rocket, LaunchStageId.Orbit);
+            UnlockIfReady(LaunchStageId.Orbit, LaunchStageId.Moon);
         }
 
-        private void UnlockIfReady(ResearchStageId current, ResearchStageId next)
+        private void UnlockIfReady(LaunchStageId current, LaunchStageId next)
         {
-            ResearchStageState currentStage = GetStage(current);
+            LaunchStageState currentStage = GetStage(current);
             if (currentStage.HasBestGrade && currentStage.BestGrade <= ResearchGrade.C)
             {
                 GetStage(next).Unlocked = true;
@@ -902,7 +962,7 @@ namespace Border.Research
             for (int i = 0; i < EnginePresets.Length; i++)
             {
                 EnginePresetState preset = EnginePresets[i];
-                if (preset.HasBestGrade && preset.BestGrade <= ResearchGrade.C)
+                if (preset.Unlocked && preset.HasBestGrade && preset.BestGrade <= ResearchGrade.C)
                 {
                     return true;
                 }
@@ -932,30 +992,30 @@ namespace Border.Research
             }
         }
 
-        private int GetPreviousCertificationBonus(ResearchStageId stageId, EnginePresetId presetId)
+        private int GetPreviousCertificationBonus(LaunchStageId stageId, EnginePresetId presetId)
         {
             switch (stageId)
             {
-                case ResearchStageId.Engine:
+                case LaunchStageId.Engine:
                     return 0;
-                case ResearchStageId.Rocket:
+                case LaunchStageId.Rocket:
                     EnginePresetState preset = GetEnginePreset(presetId);
                     return GetGradeBonus(preset.BestGrade, preset.HasBestGrade);
-                case ResearchStageId.Orbit:
-                    return GetGradeBonus(GetStage(ResearchStageId.Rocket));
-                case ResearchStageId.Moon:
-                    return GetGradeBonus(GetStage(ResearchStageId.Orbit));
+                case LaunchStageId.Orbit:
+                    return GetGradeBonus(GetStage(LaunchStageId.Rocket));
+                case LaunchStageId.Moon:
+                    return GetGradeBonus(GetStage(LaunchStageId.Orbit));
                 default:
                     throw new ArgumentOutOfRangeException(nameof(stageId), stageId, null);
             }
         }
 
-        private int GetExperienceBonus(ResearchStageId stageId)
+        private int GetExperienceBonus(LaunchStageId stageId)
         {
             return Math.Min(GetStage(stageId).AttemptCount * 3, 9);
         }
 
-        private static int GetGradeBonus(ResearchStageState stage)
+        private static int GetGradeBonus(LaunchStageState stage)
         {
             return GetGradeBonus(stage.BestGrade, stage.HasBestGrade);
         }
@@ -982,15 +1042,15 @@ namespace Border.Research
             }
         }
 
-        private double GetStageEngineWeight(ResearchStageId stageId)
+        private double GetStageEngineWeight(LaunchStageId stageId)
         {
             switch (stageId)
             {
-                case ResearchStageId.Rocket:
+                case LaunchStageId.Rocket:
                     return 0.55d;
-                case ResearchStageId.Orbit:
+                case LaunchStageId.Orbit:
                     return 0.45d;
-                case ResearchStageId.Moon:
+                case LaunchStageId.Moon:
                     return 0.40d;
                 default:
                     return 0d;
@@ -1000,6 +1060,7 @@ namespace Border.Research
         private int CalculateReservedInstallCost(int[] installedEngineCounts)
         {
             int[] counts = CopyAndNormalizeEngineCounts(installedEngineCounts);
+            ClearLockedEngineCounts(counts);
             int totalCount = 0;
             for (int i = 0; i < counts.Length; i++)
             {
@@ -1009,10 +1070,10 @@ namespace Border.Research
             return totalCount * EngineInstallCost;
         }
 
-        private int[] CreateDefaultInstalledEngineCounts(ResearchStageId stageId, EnginePresetId presetId)
+        private int[] CreateDefaultInstalledEngineCounts(LaunchStageId stageId, EnginePresetId presetId)
         {
             var counts = new int[MaxEnginePresetCount];
-            if (stageId != ResearchStageId.Engine)
+            if (stageId != LaunchStageId.Engine)
             {
                 counts[(int)presetId] = 1;
             }
@@ -1024,7 +1085,7 @@ namespace Border.Research
         {
             for (int i = 0; i < EnginePresets.Length; i++)
             {
-                if (EnginePresets[i].HasBestGrade && EnginePresets[i].BestGrade <= ResearchGrade.C)
+                if (EnginePresets[i].Unlocked && EnginePresets[i].HasBestGrade && EnginePresets[i].BestGrade <= ResearchGrade.C)
                 {
                     return EnginePresets[i].PresetId;
                 }
@@ -1033,9 +1094,9 @@ namespace Border.Research
             return EnginePresetId.Engine01;
         }
 
-        private static TestVisibility GetDefaultVisibility(ResearchStageId stageId)
+        private static TestVisibility GetDefaultVisibility(LaunchStageId stageId)
         {
-            return stageId == ResearchStageId.Moon ? TestVisibility.FinalMission : TestVisibility.Private;
+            return stageId == LaunchStageId.Moon ? TestVisibility.FinalMission : TestVisibility.Private;
         }
 
         private double CalculateEngineImbalancePenalty(EnginePresetState preset)
@@ -1065,7 +1126,7 @@ namespace Border.Research
             return focused ? 26 : 16;
         }
 
-        private static void ApplyBestGrade(ResearchStageState stage, ResearchGrade grade)
+        private static void ApplyBestGrade(LaunchStageState stage, ResearchGrade grade)
         {
             if (!stage.HasBestGrade || grade < stage.BestGrade)
             {
@@ -1125,7 +1186,7 @@ namespace Border.Research
             }
         }
 
-        private int CreateDesignMapSeed(ResearchStageId stageId, EnginePresetId presetId)
+        private int CreateDesignMapSeed(LaunchStageId stageId, EnginePresetId presetId)
         {
             unchecked
             {
@@ -1139,7 +1200,7 @@ namespace Border.Research
             }
         }
 
-        private static string CreateTargetPathId(ResearchStageId stageId, int mapSeed)
+        private static string CreateTargetPathId(LaunchStageId stageId, int mapSeed)
         {
             int pathIndex = mapSeed % 3 + 1;
             return $"{stageId}_Path_{pathIndex}";
@@ -1233,6 +1294,22 @@ namespace Border.Research
             }
 
             return copy;
+        }
+
+        private void ClearLockedEngineCounts(int[] counts)
+        {
+            if (counts == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < counts.Length; i++)
+            {
+                if (!IsEnginePresetUnlocked((EnginePresetId)i))
+                {
+                    counts[i] = 0;
+                }
+            }
         }
     }
 }

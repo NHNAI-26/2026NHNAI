@@ -9,17 +9,20 @@ namespace Border.Research
 {
     public sealed class ResearchOperationUIController : MonoBehaviour
     {
-        private const int StageCount = 4;
         private const int EngineCount = ResearchPrototypeModel.MaxEnginePresetCount;
+        private const string OperationScreenPrefabPath = "ResearchUI/ResearchOperationScreen";
+        private const string EnginePresetCardPrefabPath = "ResearchUI/EnginePresetCard";
+
+        [SerializeField] private GameObject operationScreenPrefab;
+        [SerializeField] private Button enginePresetCardPrefab;
 
         private readonly EngineCardView[] engineCards = new EngineCardView[EngineCount];
-        private readonly StageCardView[] stageCards = new StageCardView[StageCount];
 
         private ResearchFlowSession session;
         private ResearchPrototypeModel model;
         private EnginePresetId selectedEnginePreset = EnginePresetId.Engine01;
         private EngineStatId selectedStat = EngineStatId.FuelCapacity;
-        private ResearchStageId selectedStage = ResearchStageId.Engine;
+        private LaunchStageId selectedStage = LaunchStageId.Engine;
         private bool initialized;
         private RectTransform canvasTransform;
         private ResearchDesignScreenController activeDesignController;
@@ -38,13 +41,15 @@ namespace Border.Research
         private TMP_Text normalResearchButtonText;
         private Button focusedResearchButton;
         private TMP_Text focusedResearchButtonText;
+        private Button createEnginePresetButton;
+        private TMP_Text createEnginePresetButtonText;
         private Button enterDesignButton;
         private TMP_Text enterDesignButtonText;
         private Button waitButton;
         private TMP_Text waitButtonText;
 
         public ResearchPrototypeModel Model => model;
-        public ResearchStageId SelectedStage => selectedStage;
+        public LaunchStageId SelectedStage => selectedStage;
         public EnginePresetId SelectedEnginePreset => selectedEnginePreset;
         public string RequestedScreenName { get; private set; } = ResearchFlowSession.ResearchScreenName;
 
@@ -82,6 +87,16 @@ namespace Border.Research
             Refresh();
         }
 
+        public void ConfigureCardPrefabsForTests(Button enginePresetCardTemplate, Button launchTargetCardTemplate)
+        {
+            enginePresetCardPrefab = enginePresetCardTemplate;
+        }
+
+        public void ConfigureScreenPrefabForTests(GameObject screenTemplate)
+        {
+            operationScreenPrefab = screenTemplate;
+        }
+
         private void Initialize()
         {
             if (initialized)
@@ -92,161 +107,160 @@ namespace Border.Research
             session = ResearchFlowSession.GetOrCreate();
             model = session.Model;
             RemoveLegacyPrototypeControllers();
-            BuildInterface();
+            if (!BuildInterface())
+            {
+                return;
+            }
+
             initialized = true;
             Refresh();
         }
 
-        private void BuildInterface()
+        private bool BuildInterface()
         {
             EnsureEventSystem();
+            EnsureDefaultPrefabs();
 
-            canvasTransform = CreateGroup("ResearchOperationCanvas", transform);
-            Canvas canvas = canvasTransform.gameObject.AddComponent<Canvas>();
+            if (TryBuildInterfaceFromPrefab())
+            {
+                return true;
+            }
+
+            Debug.LogError("Research operation UI prefab is missing or invalid. Expected Resources/ResearchUI/ResearchOperationScreen plus EnginePresetCard.");
+            return false;
+        }
+
+        private bool TryBuildInterfaceFromPrefab()
+        {
+            GameObject prefab = operationScreenPrefab != null
+                ? operationScreenPrefab
+                : Resources.Load<GameObject>(OperationScreenPrefabPath);
+            if (prefab == null)
+            {
+                return false;
+            }
+
+            GameObject instance = Instantiate(prefab, transform);
+            instance.name = "ResearchOperationCanvas";
+            canvasTransform = instance.GetComponent<RectTransform>();
+            if (canvasTransform == null)
+            {
+                canvasTransform = instance.AddComponent<RectTransform>();
+            }
+
+            Canvas canvas = instance.GetComponent<Canvas>() ?? instance.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvasTransform.gameObject.AddComponent<GraphicRaycaster>();
+            if (instance.GetComponent<GraphicRaycaster>() == null)
+            {
+                instance.AddComponent<GraphicRaycaster>();
+            }
 
-            var scaler = canvasTransform.gameObject.AddComponent<CanvasScaler>();
+            CanvasScaler scaler = instance.GetComponent<CanvasScaler>() ?? instance.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280f, 720f);
             scaler.matchWidthOrHeight = 0.5f;
 
-            RectTransform background = CreatePanel("Background", canvasTransform, new Color(0.08f, 0.1f, 0.13f, 0.88f));
-            Stretch(background, 0f);
-
-            RectTransform panel = CreatePanel("ResearchOperationPanel", canvasTransform, new Color(0.15f, 0.18f, 0.22f, 0.97f));
-            panel.anchorMin = new Vector2(0.5f, 0.5f);
-            panel.anchorMax = new Vector2(0.5f, 0.5f);
-            panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.anchoredPosition = Vector2.zero;
-            panel.sizeDelta = new Vector2(1180f, 660f);
-            AddVerticalLayout(panel, 16f, 16f, 14f, 12f);
-
-            BuildTopBar(panel);
-            BuildBody(panel);
-        }
-
-        private void BuildTopBar(RectTransform parent)
-        {
-            RectTransform topBar = CreatePanel("TopInfoBar", parent, new Color(0.2f, 0.25f, 0.31f, 1f));
-            AddHorizontalLayout(topBar, 12f, 12f, 8f, 8f);
-            topBar.gameObject.AddComponent<LayoutElement>().preferredHeight = 88f;
-
-            RectTransform titleGroup = CreateGroup("ProjectTitleGroup", topBar);
-            AddVerticalLayout(titleGroup, 0f, 0f, 0f, 2f);
-            titleGroup.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            CreateText("Title", titleGroup, 27, FontStyles.Bold, TextAlignmentOptions.Left, "ARTEMIS: 2026 연구 단계");
-            CreateText("Subtitle", titleGroup, 14, FontStyles.Normal, TextAlignmentOptions.Left, "10개 엔진 프리셋을 연구하고, 해금된 발사 단계로 설계 진입");
-
-            dateText = CreateInfoChip("Date", topBar);
-            remainingTurnsText = CreateInfoChip("RemainingTurns", topBar);
-            fundsText = CreateInfoChip("Funds", topBar);
-            quarterlyFundingText = CreateInfoChip("QuarterlyFunding", topBar);
-
-            Button resetButton = CreateButton("ResetButton", topBar, "초기화", 86f, 50f);
-            resetButton.onClick.AddListener(() =>
+            RectTransform engineColumn = FindChildRectTransform(canvasTransform, "EnginePresetCards")
+                ?? FindChildRectTransform(canvasTransform, "EnginePresetColumn");
+            RectTransform launchTargetColumn = FindChildRectTransform(canvasTransform, "LaunchTargetColumn");
+            if (launchTargetColumn != null)
             {
-                session.ResetResearch();
-                selectedEnginePreset = EnginePresetId.Engine01;
-                selectedStage = ResearchStageId.Engine;
-                Refresh();
-            });
-        }
+                launchTargetColumn.gameObject.SetActive(false);
+            }
 
-        private void BuildBody(RectTransform parent)
-        {
-            RectTransform columns = CreateGroup("MainColumns", parent);
-            AddHorizontalLayout(columns, 0f, 0f, 0f, 12f);
-            columns.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            dateText = FindRequiredText(canvasTransform, "Date");
+            remainingTurnsText = FindRequiredText(canvasTransform, "RemainingTurns");
+            fundsText = FindRequiredText(canvasTransform, "Funds");
+            quarterlyFundingText = FindRequiredText(canvasTransform, "QuarterlyFunding");
+            selectedEngineText = FindRequiredText(canvasTransform, "SelectedEngineText");
+            selectedStageText = FindRequiredText(canvasTransform, "SelectedStageText");
+            selectedRequirementText = FindRequiredText(canvasTransform, "SelectedRequirementText");
+            designEntryText = FindRequiredText(canvasTransform, "DesignEntryText");
+            statusText = FindRequiredText(canvasTransform, "StatusText");
+            normalResearchButton = FindRequiredButton(canvasTransform, "NormalResearchButton");
+            focusedResearchButton = FindRequiredButton(canvasTransform, "FocusedResearchButton");
+            createEnginePresetButton = FindRequiredButton(canvasTransform, "CreateEnginePresetButton");
+            enterDesignButton = FindRequiredButton(canvasTransform, "EnterDesignButton");
+            waitButton = FindRequiredButton(canvasTransform, "WaitQuarterButton");
+            Button resetButton = FindRequiredButton(canvasTransform, "ResetButton");
+            Button fuelCapacityButton = FindRequiredButton(canvasTransform, "StatButton_FuelCapacity");
+            Button coolingButton = FindRequiredButton(canvasTransform, "StatButton_Cooling");
+            Button maxOutputButton = FindRequiredButton(canvasTransform, "StatButton_MaxOutput");
+            Button ignitionReliabilityButton = FindRequiredButton(canvasTransform, "StatButton_IgnitionReliability");
 
-            RectTransform engineColumn = CreatePanel("EnginePresetColumn", columns, new Color(0.11f, 0.14f, 0.18f, 1f));
-            AddVerticalLayout(engineColumn, 10f, 10f, 10f, 6f);
-            engineColumn.gameObject.AddComponent<LayoutElement>().preferredWidth = 300f;
-            CreateText("EngineColumnTitle", engineColumn, 18, FontStyles.Bold, TextAlignmentOptions.Left, "엔진 프리셋");
+            if (enginePresetCardPrefab == null
+                || engineColumn == null
+                || dateText == null
+                || remainingTurnsText == null
+                || fundsText == null
+                || quarterlyFundingText == null
+                || selectedEngineText == null
+                || selectedStageText == null
+                || selectedRequirementText == null
+                || designEntryText == null
+                || statusText == null
+                || normalResearchButton == null
+                || focusedResearchButton == null
+                || createEnginePresetButton == null
+                || enterDesignButton == null
+                || waitButton == null
+                || resetButton == null
+                || fuelCapacityButton == null
+                || coolingButton == null
+                || maxOutputButton == null
+                || ignitionReliabilityButton == null)
+            {
+                DestroyUnityObject(instance);
+                return false;
+            }
+
+            normalResearchButtonText = normalResearchButton.GetComponentInChildren<TMP_Text>(true);
+            focusedResearchButtonText = focusedResearchButton.GetComponentInChildren<TMP_Text>(true);
+            createEnginePresetButtonText = createEnginePresetButton.GetComponentInChildren<TMP_Text>(true);
+            enterDesignButtonText = enterDesignButton.GetComponentInChildren<TMP_Text>(true);
+            waitButtonText = waitButton.GetComponentInChildren<TMP_Text>(true);
+
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
                 engineCards[(int)config.Id] = CreateEngineCard(engineColumn, config);
             }
 
-            RectTransform stageColumn = CreatePanel("StageColumn", columns, new Color(0.11f, 0.14f, 0.18f, 1f));
-            AddVerticalLayout(stageColumn, 10f, 10f, 10f, 8f);
-            stageColumn.gameObject.AddComponent<LayoutElement>().preferredWidth = 250f;
-            CreateText("StageColumnTitle", stageColumn, 18, FontStyles.Bold, TextAlignmentOptions.Left, "발사 단계");
-            foreach (ResearchStageConfig config in ResearchPrototypeModel.GetStageConfigs())
-            {
-                stageCards[(int)config.Id] = CreateStageCard(stageColumn, config);
-            }
-
-            RectTransform detailColumn = CreatePanel("DetailColumn", columns, new Color(0.12f, 0.15f, 0.19f, 1f));
-            AddVerticalLayout(detailColumn, 14f, 14f, 12f, 10f);
-            detailColumn.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            BuildDetails(detailColumn);
-        }
-
-        private void BuildDetails(RectTransform parent)
-        {
-            RectTransform selectedPanel = CreatePanel("SelectedPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
-            AddVerticalLayout(selectedPanel, 12f, 12f, 10f, 7f);
-            selectedPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 215f;
-            selectedEngineText = CreateText("SelectedEngineText", selectedPanel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-
-            RectTransform statRow = CreateGroup("StatButtons", selectedPanel);
-            AddHorizontalLayout(statRow, 0f, 0f, 0f, 6f);
-            statRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 36f;
-            CreateStatButton(statRow, EngineStatId.FuelCapacity);
-            CreateStatButton(statRow, EngineStatId.Cooling);
-            CreateStatButton(statRow, EngineStatId.MaxOutput);
-            CreateStatButton(statRow, EngineStatId.IgnitionReliability);
-
-            selectedStageText = CreateText("SelectedStageText", selectedPanel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-            selectedRequirementText = CreateText("SelectedRequirementText", selectedPanel, 14, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
-
-            RectTransform actionPanel = CreatePanel("ActionPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
-            AddVerticalLayout(actionPanel, 12f, 12f, 10f, 8f);
-            actionPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 160f;
-            CreateText("ActionTitle", actionPanel, 18, FontStyles.Bold, TextAlignmentOptions.Left, "행동");
-            RectTransform actionRow = CreateGroup("ActionRow", actionPanel);
-            AddHorizontalLayout(actionRow, 0f, 0f, 0f, 8f);
-            actionRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 58f;
-            normalResearchButton = CreateButton("NormalResearchButton", actionRow, string.Empty, 0f, 58f);
-            normalResearchButtonText = normalResearchButton.GetComponentInChildren<TMP_Text>();
-            focusedResearchButton = CreateButton("FocusedResearchButton", actionRow, string.Empty, 0f, 58f);
-            focusedResearchButtonText = focusedResearchButton.GetComponentInChildren<TMP_Text>();
-            enterDesignButton = CreateButton("EnterDesignButton", actionRow, string.Empty, 0f, 58f);
-            enterDesignButtonText = enterDesignButton.GetComponentInChildren<TMP_Text>();
-            waitButton = CreateButton("WaitQuarterButton", actionPanel, string.Empty, 0f, 42f);
-            waitButtonText = waitButton.GetComponentInChildren<TMP_Text>();
-
-            normalResearchButton.onClick.AddListener(() => ExecuteResearch(false));
-            focusedResearchButton.onClick.AddListener(() => ExecuteResearch(true));
+            normalResearchButton.onClick.AddListener(() => StartEngineResearch(false));
+            focusedResearchButton.onClick.AddListener(() => StartEngineResearch(true));
+            createEnginePresetButton.onClick.AddListener(CreateNewEnginePreset);
             enterDesignButton.onClick.AddListener(EnterDesign);
             waitButton.onClick.AddListener(WaitQuarter);
+            resetButton.onClick.AddListener(() =>
+            {
+                session.ResetResearch();
+                selectedEnginePreset = EnginePresetId.Engine01;
+                selectedStage = model.GetCurrentLaunchTarget();
+                Refresh();
+            });
+            fuelCapacityButton.onClick.AddListener(() => SelectStat(EngineStatId.FuelCapacity));
+            coolingButton.onClick.AddListener(() => SelectStat(EngineStatId.Cooling));
+            maxOutputButton.onClick.AddListener(() => SelectStat(EngineStatId.MaxOutput));
+            ignitionReliabilityButton.onClick.AddListener(() => SelectStat(EngineStatId.IgnitionReliability));
+            return true;
+        }
 
-            RectTransform designPanel = CreatePanel("DesignEntryPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
-            AddVerticalLayout(designPanel, 12f, 12f, 10f, 6f);
-            designPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 102f;
-            CreateText("DesignEntryTitle", designPanel, 17, FontStyles.Bold, TextAlignmentOptions.Left, "설계/발사 결과");
-            designEntryText = CreateText("DesignEntryText", designPanel, 13, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
+        private void EnsureDefaultPrefabs()
+        {
+            if (operationScreenPrefab == null)
+            {
+                operationScreenPrefab = Resources.Load<GameObject>(OperationScreenPrefabPath);
+            }
 
-            RectTransform statusPanel = CreatePanel("StatusPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
-            AddVerticalLayout(statusPanel, 12f, 12f, 10f, 6f);
-            statusPanel.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
-            CreateText("StatusTitle", statusPanel, 17, FontStyles.Bold, TextAlignmentOptions.Left, "상태");
-            statusText = CreateText("StatusText", statusPanel, 14, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
+            if (enginePresetCardPrefab == null)
+            {
+                enginePresetCardPrefab = Resources.Load<Button>(EnginePresetCardPrefabPath);
+            }
+
         }
 
         private EngineCardView CreateEngineCard(RectTransform parent, EnginePresetConfig config)
         {
-            Button button = CreateButton($"EngineCard_{config.Id}", parent, string.Empty, 0f, 46f);
-            DestroyUnityObject(button.GetComponentInChildren<TMP_Text>().gameObject);
-
-            RectTransform content = CreateGroup("Content", button.transform);
-            Stretch(content, 7f);
-            AddHorizontalLayout(content, 0f, 0f, 0f, 4f);
-            TMP_Text title = CreateText("Title", content, 13, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
-            title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            TMP_Text detail = CreateText("Detail", content, 12, FontStyles.Normal, TextAlignmentOptions.Right, string.Empty);
-            detail.gameObject.AddComponent<LayoutElement>().preferredWidth = 150f;
+            Button button = CreateCardButton(enginePresetCardPrefab, $"EngineCard_{config.Id}", parent, 46f, out TMP_Text title, out TMP_Text detail);
 
             EnginePresetId presetId = config.Id;
             button.onClick.AddListener(() =>
@@ -259,47 +273,27 @@ namespace Border.Research
             return new EngineCardView(button, title, detail);
         }
 
-        private StageCardView CreateStageCard(RectTransform parent, ResearchStageConfig config)
+        private void SelectStat(EngineStatId statId)
         {
-            Button button = CreateButton($"StageCard_{config.Id}", parent, string.Empty, 0f, 86f);
-            DestroyUnityObject(button.GetComponentInChildren<TMP_Text>().gameObject);
-
-            RectTransform content = CreateGroup("Content", button.transform);
-            Stretch(content, 8f);
-            AddVerticalLayout(content, 0f, 0f, 0f, 4f);
-            TMP_Text title = CreateText("Title", content, 15, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
-            TMP_Text requirement = CreateText("Requirement", content, 12, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-            TMP_Text detail = CreateText("Detail", content, 12, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-
-            ResearchStageId stageId = config.Id;
-            button.onClick.AddListener(() =>
-            {
-                if (!model.GetStage(stageId).Unlocked)
-                {
-                    return;
-                }
-
-                selectedStage = stageId;
-                session.ClearPendingDesignEntry();
-                Refresh();
-            });
-
-            return new StageCardView(button, title, requirement, detail);
+            selectedStat = statId;
+            Refresh();
         }
 
-        private void CreateStatButton(RectTransform parent, EngineStatId statId)
-        {
-            Button button = CreateButton($"StatButton_{statId}", parent, ResearchPrototypeModel.GetStatDisplayName(statId), 0f, 36f);
-            button.onClick.AddListener(() =>
-            {
-                selectedStat = statId;
-                Refresh();
-            });
-        }
-
-        private void ExecuteResearch(bool focused)
+        private void StartEngineResearch(bool focused)
         {
             ShowMiniGame(focused);
+        }
+
+        private void CreateNewEnginePreset()
+        {
+            ResearchActionResult result = model.CreateNewEnginePreset(out EnginePresetId newPresetId);
+            if (result == ResearchActionResult.Success)
+            {
+                selectedEnginePreset = newPresetId;
+            }
+
+            session.ClearPendingDesignEntry();
+            Refresh();
         }
 
         private void ShowMiniGame(bool focused)
@@ -332,6 +326,7 @@ namespace Border.Research
 
         private void EnterDesign()
         {
+            selectedStage = model.GetCurrentLaunchTarget();
             if (session.TryEnterDesign(selectedStage, selectedEnginePreset, out _) == ResearchActionResult.Success)
             {
                 ShowDesignScreen();
@@ -350,6 +345,8 @@ namespace Border.Research
 
         private void Refresh()
         {
+            EnsureSelectedEnginePresetUnlocked();
+            selectedStage = model.GetCurrentLaunchTarget();
             dateText.text = $"날짜\n{model.Year} Q{model.Quarter}";
             remainingTurnsText.text = $"남은 분기\n{model.RemainingTurns}";
             fundsText.text = $"연구비\n{model.Funds}";
@@ -360,31 +357,30 @@ namespace Border.Research
                 RefreshEngineCard(config);
             }
 
-            foreach (ResearchStageConfig config in ResearchPrototypeModel.GetStageConfigs())
-            {
-                RefreshStageCard(config);
-            }
-
             EnginePresetConfig selectedEngineConfig = ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset);
             EnginePresetState selectedEngine = model.GetEnginePreset(selectedEnginePreset);
-            ResearchStageConfig selectedStageConfig = ResearchPrototypeModel.GetStageConfig(selectedStage);
-            ResearchStageState selectedStageState = model.GetStage(selectedStage);
-            ResearchDesignEntryData preview = model.CreateDesignEntry(selectedStage, selectedEnginePreset, CreatePreviewInstalledCounts(selectedStage, selectedEnginePreset), 50, selectedStage == ResearchStageId.Moon ? TestVisibility.FinalMission : TestVisibility.Private);
+            LaunchStageConfig selectedStageConfig = ResearchPrototypeModel.GetStageConfig(selectedStage);
+            LaunchStageState selectedStageState = model.GetStage(selectedStage);
+            ResearchDesignEntryData preview = model.CreateDesignEntry(selectedStage, selectedEnginePreset, CreatePreviewInstalledCounts(selectedStage, selectedEnginePreset), 50, selectedStage == LaunchStageId.Moon ? TestVisibility.FinalMission : TestVisibility.Private);
 
             selectedEngineText.text = $"{selectedEngineConfig.DisplayName} Lv.{selectedEngine.Level}/{ResearchPrototypeModel.MaxEnginePresetLevel}  "
                 + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {selectedEngineConfig.InstallCost}\n"
                 + $"연료 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 출력 {selectedEngine.MaxOutput} / 점화 {selectedEngine.IgnitionReliability}\n"
                 + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)} / 미니게임 점수로 보상 결정 / 시험 최고 {GetBestGradeText(selectedEngine)}";
-            selectedStageText.text = $"{selectedStageConfig.DisplayName}  발사비 {selectedStageConfig.LaunchCost} / 예상 성공 {model.CalculateSuccessChance(preview)}% / 경험 +{preview.ExperienceBonus}%p";
+            selectedStageText.text = $"현재 설계 목표  발사비 {selectedStageConfig.LaunchCost} / 예상 성공 {model.CalculateSuccessChance(preview)}% / 경험 +{preview.ExperienceBonus}%p";
             selectedRequirementText.text = GetDesignEntryRequirementText(selectedStageConfig, selectedStageState, selectedEngine);
 
             normalResearchButtonText.text = $"일반 연구\n{selectedEngineConfig.NormalResearchCost} / Lv +{ResearchPrototypeModel.NormalResearchLevelGain}";
             focusedResearchButtonText.text = $"집중 연구\n{selectedEngineConfig.FocusedResearchCost} / Lv +{ResearchPrototypeModel.FocusedResearchLevelGain}";
+            createEnginePresetButtonText.text = model.ActiveEnginePresetCount >= ResearchPrototypeModel.MaxEnginePresetCount
+                ? "새로운 엔진 개발\n최대 10개"
+                : $"새로운 엔진 개발\n현재 {model.ActiveEnginePresetCount}/{ResearchPrototypeModel.MaxEnginePresetCount}";
             enterDesignButtonText.text = $"설계 진입\n발사비 {selectedStageConfig.LaunchCost}";
             waitButtonText.text = $"1분기 대기   비용 0 / 분기 연구비 +{model.QuarterlyFunding}";
 
             normalResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.NormalResearchCost);
             focusedResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.FocusedResearchCost);
+            createEnginePresetButton.interactable = !model.DeadlineReached && model.ActiveEnginePresetCount < ResearchPrototypeModel.MaxEnginePresetCount;
             enterDesignButton.interactable = CanEnterDesign(selectedStageState, selectedStageConfig, selectedEngine);
             waitButton.interactable = !model.DeadlineReached;
 
@@ -410,50 +406,43 @@ namespace Border.Research
         {
             EnginePresetState engine = model.GetEnginePreset(config.Id);
             EngineCardView card = engineCards[(int)config.Id];
+            card.Button.gameObject.SetActive(model.IsEnginePresetUnlocked(config.Id));
             bool selected = selectedEnginePreset == config.Id;
             card.Button.GetComponent<Image>().color = selected ? new Color(0.28f, 0.35f, 0.42f, 1f) : new Color(0.19f, 0.23f, 0.28f, 1f);
             card.Title.text = config.DisplayName;
             card.Detail.text = $"Lv.{engine.Level} 성능 {model.CalculateEnginePerformanceScore(config.Id)} 최고 {GetBestGradeText(engine)}";
         }
 
-        private void RefreshStageCard(ResearchStageConfig config)
-        {
-            ResearchStageState stage = model.GetStage(config.Id);
-            StageCardView card = stageCards[(int)config.Id];
-            bool selected = selectedStage == config.Id;
-            bool unlocked = stage.Unlocked;
-            card.Button.interactable = unlocked && !model.DeadlineReached;
-            card.Button.GetComponent<Image>().color = !unlocked
-                ? new Color(0.12f, 0.13f, 0.15f, 1f)
-                : selected
-                    ? new Color(0.28f, 0.35f, 0.42f, 1f)
-                    : new Color(0.19f, 0.23f, 0.28f, 1f);
-            card.Title.text = unlocked ? config.DisplayName : $"{config.DisplayName} LOCK";
-            card.Requirement.text = unlocked ? "설계/발사 가능 단계" : model.GetUnlockConditionText(config.Id);
-            card.Detail.text = $"최고 {GetBestGradeText(stage)} / 발사 {stage.AttemptCount}회";
-        }
-
         private bool CanResearch(EnginePresetState engine, int cost)
         {
-            return !model.DeadlineReached && engine.Level < ResearchPrototypeModel.MaxEnginePresetLevel && model.Funds >= cost;
+            return !model.DeadlineReached
+                && engine.Unlocked
+                && engine.Level < ResearchPrototypeModel.MaxEnginePresetLevel
+                && model.Funds >= cost;
         }
 
-        private bool CanEnterDesign(ResearchStageState stage, ResearchStageConfig config, EnginePresetState engine)
+        private bool CanEnterDesign(LaunchStageState stage, LaunchStageConfig config, EnginePresetState engine)
         {
             return !model.DeadlineReached
+                && engine.Unlocked
                 && stage.Unlocked
-                && (selectedStage != ResearchStageId.Engine || engine.Level >= 1)
+                && (selectedStage != LaunchStageId.Engine || engine.Level >= 1)
                 && model.Funds >= config.LaunchCost;
         }
 
-        private string GetDesignEntryRequirementText(ResearchStageConfig config, ResearchStageState stage, EnginePresetState engine)
+        private string GetDesignEntryRequirementText(LaunchStageConfig config, LaunchStageState stage, EnginePresetState engine)
         {
             if (!stage.Unlocked)
             {
                 return $"설계 진입 불가: {model.GetUnlockConditionText(config.Id)}";
             }
 
-            if (selectedStage == ResearchStageId.Engine && engine.Level < 1)
+            if (!engine.Unlocked)
+            {
+                return $"설계 진입 불가: {ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset).DisplayName} 개발 필요";
+            }
+
+            if (selectedStage == LaunchStageId.Engine && engine.Level < 1)
             {
                 return $"설계 진입 불가: {ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset).DisplayName} 레벨 1 필요";
             }
@@ -466,15 +455,25 @@ namespace Border.Research
             return "설계 진입 가능: 비용과 분기는 발사 전까지 소비하지 않음";
         }
 
-        private int[] CreatePreviewInstalledCounts(ResearchStageId stageId, EnginePresetId presetId)
+        private int[] CreatePreviewInstalledCounts(LaunchStageId stageId, EnginePresetId presetId)
         {
             var counts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
-            if (stageId != ResearchStageId.Engine)
+            if (stageId != LaunchStageId.Engine)
             {
                 counts[(int)presetId] = 1;
             }
 
             return counts;
+        }
+
+        private void EnsureSelectedEnginePresetUnlocked()
+        {
+            if (model.IsEnginePresetUnlocked(selectedEnginePreset))
+            {
+                return;
+            }
+
+            selectedEnginePreset = EnginePresetId.Engine01;
         }
 
         private string FormatDesignEntry(ResearchDesignEntryData data)
@@ -548,7 +547,7 @@ namespace Border.Research
             Initialize();
             session.ResetResearch();
             selectedEnginePreset = EnginePresetId.Engine01;
-            selectedStage = ResearchStageId.Engine;
+            selectedStage = model.GetCurrentLaunchTarget();
             model.PrepareDebugDesignEntryState(selectedStage, selectedEnginePreset);
 
             if (session.TryEnterDesign(selectedStage, selectedEnginePreset, out _) == ResearchActionResult.Success)
@@ -558,7 +557,7 @@ namespace Border.Research
         }
 
 #endif
-        private static string GetBestGradeText(ResearchStageState stage)
+        private static string GetBestGradeText(LaunchStageState stage)
         {
             return stage.HasBestGrade ? stage.BestGrade.ToString() : "-";
         }
@@ -568,108 +567,79 @@ namespace Border.Research
             return engine.HasBestGrade ? engine.BestGrade.ToString() : "-";
         }
 
-        private static TMP_Text CreateInfoChip(string name, Transform parent)
+        private static Button CreateCardButton(Button prefab, string name, Transform parent, float preferredHeight, out TMP_Text title, out TMP_Text detail)
         {
-            RectTransform chip = CreatePanel(name, parent, new Color(0.11f, 0.13f, 0.17f, 1f));
-            AddVerticalLayout(chip, 6f, 6f, 5f, 2f);
-            chip.gameObject.AddComponent<LayoutElement>().preferredWidth = 112f;
-            return CreateText("Text", chip, 13, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-        }
-
-        private static Button CreateButton(string name, Transform parent, string text, float preferredWidth, float preferredHeight)
-        {
-            RectTransform rectTransform = CreatePanel(name, parent, new Color(0.24f, 0.29f, 0.36f, 1f));
-            LayoutElement layout = rectTransform.gameObject.AddComponent<LayoutElement>();
-            if (preferredWidth > 0f)
+            title = null;
+            detail = null;
+            if (prefab == null)
             {
-                layout.preferredWidth = preferredWidth;
-            }
-            else
-            {
-                layout.flexibleWidth = 1f;
+                return null;
             }
 
+            Button button = Instantiate(prefab, parent);
+            button.name = name;
+
+            LayoutElement layout = button.GetComponent<LayoutElement>();
+            if (layout == null)
+            {
+                layout = button.gameObject.AddComponent<LayoutElement>();
+            }
+
+            layout.flexibleWidth = 1f;
             layout.preferredHeight = preferredHeight;
 
-            Button button = rectTransform.gameObject.AddComponent<Button>();
-            button.targetGraphic = rectTransform.GetComponent<Image>();
-            button.colors = CreateButtonColors();
+            title = FindChildText(button.transform, "Title");
+            detail = FindChildText(button.transform, "Detail");
+            if (title != null && detail != null)
+            {
+                return button;
+            }
 
-            TMP_Text label = CreateText("Label", rectTransform, 13, FontStyles.Bold, TextAlignmentOptions.Center, text);
-            Stretch(label.rectTransform, 6f);
             return button;
         }
 
-        private static ColorBlock CreateButtonColors()
+        private static TMP_Text FindChildText(Transform root, string name)
         {
-            ColorBlock colors = ColorBlock.defaultColorBlock;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.92f, 0.96f, 1f, 1f);
-            colors.pressedColor = new Color(0.78f, 0.86f, 0.94f, 1f);
-            colors.selectedColor = new Color(0.9f, 0.95f, 1f, 1f);
-            colors.disabledColor = new Color(0.42f, 0.45f, 0.48f, 0.72f);
-            return colors;
+            foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (text.name == name)
+                {
+                    return text;
+                }
+            }
+
+            return null;
         }
 
-        private static TMP_Text CreateText(string name, Transform parent, int fontSize, FontStyles fontStyle, TextAlignmentOptions alignment, string text)
+        private static TMP_Text FindRequiredText(Transform root, string name)
         {
-            var textObject = new GameObject(name, typeof(RectTransform));
-            textObject.transform.SetParent(parent, false);
-            TMP_Text label = textObject.AddComponent<TextMeshProUGUI>();
-            label.text = text;
-            label.fontSize = fontSize;
-            label.fontStyle = fontStyle;
-            label.alignment = alignment;
-            label.color = Color.white;
-            label.textWrappingMode = TextWrappingModes.Normal;
-            label.raycastTarget = false;
-            return label;
+            return FindChildText(root, name);
         }
 
-        private static RectTransform CreatePanel(string name, Transform parent, Color color)
+        private static Button FindRequiredButton(Transform root, string name)
         {
-            var panel = new GameObject(name, typeof(RectTransform));
-            panel.transform.SetParent(parent, false);
-            Image image = panel.AddComponent<Image>();
-            image.color = color;
-            return (RectTransform)panel.transform;
+            foreach (Button button in root.GetComponentsInChildren<Button>(true))
+            {
+                if (button.name == name)
+                {
+                    return button;
+                }
+            }
+
+            return null;
         }
 
-        private static RectTransform CreateGroup(string name, Transform parent)
+        private static RectTransform FindChildRectTransform(Transform root, string name)
         {
-            var group = new GameObject(name, typeof(RectTransform));
-            group.transform.SetParent(parent, false);
-            return (RectTransform)group.transform;
-        }
+            foreach (RectTransform rectTransform in root.GetComponentsInChildren<RectTransform>(true))
+            {
+                if (rectTransform.name == name)
+                {
+                    return rectTransform;
+                }
+            }
 
-        private static void AddVerticalLayout(RectTransform target, float left, float right, float top, float spacing)
-        {
-            VerticalLayoutGroup layout = target.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset((int)left, (int)right, (int)top, (int)top);
-            layout.spacing = spacing;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-        }
-
-        private static void AddHorizontalLayout(RectTransform target, float left, float right, float top, float spacing)
-        {
-            HorizontalLayoutGroup layout = target.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset((int)left, (int)right, (int)top, (int)top);
-            layout.spacing = spacing;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = true;
-        }
-
-        private static void Stretch(RectTransform target, float padding)
-        {
-            target.anchorMin = Vector2.zero;
-            target.anchorMax = Vector2.one;
-            target.offsetMin = new Vector2(padding, padding);
-            target.offsetMax = new Vector2(-padding, -padding);
+            return null;
         }
 
         private static void EnsureEventSystem()
@@ -733,20 +703,5 @@ namespace Border.Research
             public TMP_Text Detail { get; }
         }
 
-        private readonly struct StageCardView
-        {
-            public StageCardView(Button button, TMP_Text title, TMP_Text requirement, TMP_Text detail)
-            {
-                Button = button;
-                Title = title;
-                Requirement = requirement;
-                Detail = detail;
-            }
-
-            public Button Button { get; }
-            public TMP_Text Title { get; }
-            public TMP_Text Requirement { get; }
-            public TMP_Text Detail { get; }
-        }
     }
 }

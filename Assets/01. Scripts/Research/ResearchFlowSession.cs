@@ -64,12 +64,12 @@ namespace Border.Research
             }
         }
 
-        public ResearchActionResult TryEnterDesign(ResearchStageId stageId, out ResearchDesignEntryData data)
+        public ResearchActionResult TryEnterDesign(LaunchStageId stageId, out ResearchDesignEntryData data)
         {
             return TryEnterDesign(stageId, EnginePresetId.Engine01, out data);
         }
 
-        public ResearchActionResult TryEnterDesign(ResearchStageId stageId, EnginePresetId presetId, out ResearchDesignEntryData data)
+        public ResearchActionResult TryEnterDesign(LaunchStageId stageId, EnginePresetId presetId, out ResearchDesignEntryData data)
         {
             ResearchActionResult result = Model.TryEnterDesign(stageId, presetId, out data);
             if (result == ResearchActionResult.Success)

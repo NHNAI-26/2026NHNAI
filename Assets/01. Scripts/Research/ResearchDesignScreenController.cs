@@ -8,6 +8,12 @@ namespace Border.Research
 {
     public sealed class ResearchDesignScreenController : MonoBehaviour
     {
+        private const string DesignScreenPrefabPath = "ResearchUI/ResearchDesignScreen";
+        private const string DesignEnginePresetButtonPrefabPath = "ResearchUI/DesignEnginePresetButton";
+
+        [SerializeField] private GameObject designScreenPrefab;
+        [SerializeField] private Button enginePresetButtonPrefab;
+
         private ResearchFlowSession session;
         private Action returnToResearchCallback;
         private bool initialized;
@@ -24,12 +30,23 @@ namespace Border.Research
         private Button publicButton;
         private Button privateButton;
         private Button launchButton;
+        private Button[] presetButtons;
 
         public bool RequestedResearchReturn { get; private set; }
 
         public void InitializeForTests()
         {
             Initialize(ResearchFlowSession.GetOrCreate(), null);
+        }
+
+        public void ConfigurePresetButtonPrefabForTests(Button enginePresetButtonTemplate)
+        {
+            enginePresetButtonPrefab = enginePresetButtonTemplate;
+        }
+
+        public void ConfigureScreenPrefabForTests(GameObject screenTemplate)
+        {
+            designScreenPrefab = screenTemplate;
         }
 
         public void Initialize(ResearchFlowSession activeSession, Action onReturnToResearch)
@@ -41,7 +58,11 @@ namespace Border.Research
 
             session = activeSession ?? ResearchFlowSession.GetOrCreate();
             returnToResearchCallback = onReturnToResearch;
-            BuildInterface();
+            if (!BuildInterface())
+            {
+                return;
+            }
+
             initialized = true;
 
             if (!session.HasPendingDesignEntry)
@@ -68,147 +89,136 @@ namespace Border.Research
             return LaunchInternal(out result);
         }
 
-        private void BuildInterface()
+        private bool BuildInterface()
         {
             EnsureEventSystem();
+            EnsureDefaultPrefabs();
 
-            RectTransform canvasTransform = CreateGroup("ResearchDesignCanvas", transform);
-            Canvas canvas = canvasTransform.gameObject.AddComponent<Canvas>();
+            if (TryBuildInterfaceFromPrefab())
+            {
+                return true;
+            }
+
+            Debug.LogError("Research design UI prefab is missing or invalid. Expected Resources/ResearchUI/ResearchDesignScreen plus DesignEnginePresetButton.");
+            return false;
+        }
+
+        private bool TryBuildInterfaceFromPrefab()
+        {
+            GameObject prefab = designScreenPrefab != null
+                ? designScreenPrefab
+                : Resources.Load<GameObject>(DesignScreenPrefabPath);
+            if (prefab == null)
+            {
+                return false;
+            }
+
+            GameObject instance = Instantiate(prefab, transform);
+            instance.name = "ResearchDesignCanvas";
+            if (instance.GetComponent<RectTransform>() == null)
+            {
+                instance.AddComponent<RectTransform>();
+            }
+
+            Canvas canvas = instance.GetComponent<Canvas>() ?? instance.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvasTransform.gameObject.AddComponent<GraphicRaycaster>();
+            if (instance.GetComponent<GraphicRaycaster>() == null)
+            {
+                instance.AddComponent<GraphicRaycaster>();
+            }
 
-            var scaler = canvasTransform.gameObject.AddComponent<CanvasScaler>();
+            CanvasScaler scaler = instance.GetComponent<CanvasScaler>() ?? instance.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280f, 720f);
             scaler.matchWidthOrHeight = 0.5f;
 
-            RectTransform background = CreatePanel("Background", canvasTransform, new Color(0.07f, 0.08f, 0.11f, 0.93f));
-            Stretch(background, 0f);
+            Transform root = instance.transform;
+            RectTransform presetRow = FindChildRectTransform(root, "PresetButtons");
+            headerText = FindRequiredText(root, "Header");
+            designDataText = FindRequiredText(root, "DesignDataText");
+            installedEngineText = FindRequiredText(root, "InstalledEngineText");
+            statusText = FindRequiredText(root, "StatusText");
+            publicButton = FindRequiredButton(root, "PublicTestButton");
+            privateButton = FindRequiredButton(root, "PrivateTestButton");
+            launchButton = FindRequiredButton(root, "LaunchButton");
+            Button backButton = FindRequiredButton(root, "ReturnToResearchButton");
+            Button removeButton = FindRequiredButton(root, "RemoveEngineButton");
+            Button addButton = FindRequiredButton(root, "AddEngineButton");
+            Button fitDownButton = FindRequiredButton(root, "DesignFitDownButton");
+            Button fitUpButton = FindRequiredButton(root, "DesignFitUpButton");
 
-            RectTransform panel = CreatePanel("DesignBoundaryPanel", canvasTransform, new Color(0.15f, 0.18f, 0.23f, 0.98f));
-            panel.anchorMin = new Vector2(0.5f, 0.5f);
-            panel.anchorMax = new Vector2(0.5f, 0.5f);
-            panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.anchoredPosition = Vector2.zero;
-            panel.sizeDelta = new Vector2(1120f, 660f);
-            AddVerticalLayout(panel, 16f, 16f, 14f, 12f);
+            if (enginePresetButtonPrefab == null
+                || presetRow == null
+                || headerText == null
+                || designDataText == null
+                || installedEngineText == null
+                || statusText == null
+                || publicButton == null
+                || privateButton == null
+                || launchButton == null
+                || backButton == null
+                || removeButton == null
+                || addButton == null
+                || fitDownButton == null
+                || fitUpButton == null)
+            {
+                DestroyUnityObject(instance);
+                return false;
+            }
 
-            headerText = CreateText("Header", panel, 28, FontStyles.Bold, TextAlignmentOptions.Left, "설계 테스트");
-
-            RectTransform columns = CreateGroup("Columns", panel);
-            AddHorizontalLayout(columns, 0f, 0f, 0f, 14f);
-            columns.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
-
-            BuildMapPanel(columns);
-            BuildInfoPanel(columns);
-
-            RectTransform actions = CreateGroup("Actions", panel);
-            AddHorizontalLayout(actions, 0f, 0f, 0f, 10f);
-            actions.gameObject.AddComponent<LayoutElement>().preferredHeight = 56f;
-
-            Button backButton = CreateButton("ReturnToResearchButton", actions, "연구 단계로 돌아가기", 0f, 56f);
+            launchButtonText = launchButton.GetComponentInChildren<TMP_Text>(true);
+            BuildPresetButtons(presetRow);
             backButton.onClick.AddListener(ReturnToResearch);
-
-            launchButton = CreateButton("LaunchButton", actions, string.Empty, 0f, 56f);
             launchButton.onClick.AddListener(Launch);
-            launchButtonText = launchButton.GetComponentInChildren<TMP_Text>();
+            removeButton.onClick.AddListener(() => ChangeInstalledEngineCount(-1));
+            addButton.onClick.AddListener(() => ChangeInstalledEngineCount(1));
+            fitDownButton.onClick.AddListener(() => ChangeDesignFit(-10));
+            fitUpButton.onClick.AddListener(() => ChangeDesignFit(10));
+            publicButton.onClick.AddListener(() => SetVisibility(TestVisibility.Public));
+            privateButton.onClick.AddListener(() => SetVisibility(TestVisibility.Private));
+            return true;
         }
 
-        private void BuildMapPanel(RectTransform parent)
+        private void EnsureDefaultPrefabs()
         {
-            RectTransform mapPanel = CreatePanel("MapPanel", parent, new Color(0.08f, 0.11f, 0.15f, 1f));
-            AddVerticalLayout(mapPanel, 12f, 12f, 10f, 8f);
-            mapPanel.gameObject.AddComponent<LayoutElement>().flexibleWidth = 0.9f;
-            CreateText("MapTitle", mapPanel, 19, FontStyles.Bold, TextAlignmentOptions.Left, "맵 / 목표 경로");
+            if (designScreenPrefab == null)
+            {
+                designScreenPrefab = Resources.Load<GameObject>(DesignScreenPrefabPath);
+            }
 
-            RectTransform viewport = CreatePanel("MapViewport", mapPanel, new Color(0.04f, 0.06f, 0.08f, 1f));
-            viewport.gameObject.AddComponent<LayoutElement>().preferredHeight = 250f;
-
-            Image gridA = CreatePanel("GridA", viewport, new Color(0.18f, 0.27f, 0.36f, 0.45f)).GetComponent<Image>();
-            gridA.rectTransform.anchorMin = new Vector2(0.1f, 0.2f);
-            gridA.rectTransform.anchorMax = new Vector2(0.9f, 0.22f);
-            gridA.rectTransform.offsetMin = Vector2.zero;
-            gridA.rectTransform.offsetMax = Vector2.zero;
-
-            Image gridB = CreatePanel("GridB", viewport, new Color(0.18f, 0.27f, 0.36f, 0.45f)).GetComponent<Image>();
-            gridB.rectTransform.anchorMin = new Vector2(0.12f, 0.55f);
-            gridB.rectTransform.anchorMax = new Vector2(0.92f, 0.57f);
-            gridB.rectTransform.offsetMin = Vector2.zero;
-            gridB.rectTransform.offsetMax = Vector2.zero;
-
-            Image path = CreatePanel("TargetPath", viewport, new Color(0.32f, 0.8f, 0.72f, 1f)).GetComponent<Image>();
-            path.rectTransform.anchorMin = new Vector2(0.18f, 0.18f);
-            path.rectTransform.anchorMax = new Vector2(0.82f, 0.25f);
-            path.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            path.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 22f);
-            path.rectTransform.offsetMin = Vector2.zero;
-            path.rectTransform.offsetMax = Vector2.zero;
-
-            TMP_Text start = CreateText("StartPoint", viewport, 15, FontStyles.Bold, TextAlignmentOptions.Left, "START");
-            start.rectTransform.anchorMin = new Vector2(0.12f, 0.13f);
-            start.rectTransform.anchorMax = new Vector2(0.32f, 0.23f);
-            start.rectTransform.offsetMin = Vector2.zero;
-            start.rectTransform.offsetMax = Vector2.zero;
-
-            TMP_Text target = CreateText("TargetPoint", viewport, 15, FontStyles.Bold, TextAlignmentOptions.Right, "TARGET");
-            target.rectTransform.anchorMin = new Vector2(0.67f, 0.75f);
-            target.rectTransform.anchorMax = new Vector2(0.9f, 0.85f);
-            target.rectTransform.offsetMin = Vector2.zero;
-            target.rectTransform.offsetMax = Vector2.zero;
+            if (enginePresetButtonPrefab == null)
+            {
+                enginePresetButtonPrefab = Resources.Load<Button>(DesignEnginePresetButtonPrefabPath);
+            }
         }
 
-        private void BuildInfoPanel(RectTransform parent)
+        private void BuildPresetButtons(RectTransform presetRow)
         {
-            RectTransform infoPanel = CreatePanel("InfoPanel", parent, new Color(0.12f, 0.15f, 0.2f, 1f));
-            AddVerticalLayout(infoPanel, 12f, 12f, 10f, 8f);
-            infoPanel.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1.35f;
-
-            CreateText("InfoTitle", infoPanel, 19, FontStyles.Bold, TextAlignmentOptions.Left, "설계 진입 정보");
-            designDataText = CreateText("DesignDataText", infoPanel, 14, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-
-            RectTransform presetRow = CreateGroup("PresetButtons", infoPanel);
-            AddHorizontalLayout(presetRow, 0f, 0f, 0f, 5f);
-            presetRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 34f;
+            presetButtons = new Button[ResearchPrototypeModel.MaxEnginePresetCount];
             for (int i = 0; i < ResearchPrototypeModel.MaxEnginePresetCount; i++)
             {
                 EnginePresetId presetId = (EnginePresetId)i;
-                Button button = CreateButton($"DesignPresetButton_{presetId}", presetRow, (i + 1).ToString("00"), 0f, 34f);
+                Button button = CreateButtonFromPrefab(enginePresetButtonPrefab, $"DesignPresetButton_{presetId}", presetRow, (i + 1).ToString("00"), 0f, 34f);
+                presetButtons[i] = button;
                 button.onClick.AddListener(() =>
                 {
+                    if (!session.Model.IsEnginePresetUnlocked(presetId))
+                    {
+                        return;
+                    }
+
                     selectedEnginePreset = presetId;
                     SaveDraft();
                     Refresh();
                 });
             }
-
-            RectTransform designRow = CreateGroup("DesignControls", infoPanel);
-            AddHorizontalLayout(designRow, 0f, 0f, 0f, 6f);
-            designRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 38f;
-            Button removeButton = CreateButton("RemoveEngineButton", designRow, "- 엔진", 0f, 38f);
-            removeButton.onClick.AddListener(() => ChangeInstalledEngineCount(-1));
-            Button addButton = CreateButton("AddEngineButton", designRow, "+ 엔진", 0f, 38f);
-            addButton.onClick.AddListener(() => ChangeInstalledEngineCount(1));
-            Button fitDownButton = CreateButton("DesignFitDownButton", designRow, "적합도 -10", 0f, 38f);
-            fitDownButton.onClick.AddListener(() => ChangeDesignFit(-10));
-            Button fitUpButton = CreateButton("DesignFitUpButton", designRow, "적합도 +10", 0f, 38f);
-            fitUpButton.onClick.AddListener(() => ChangeDesignFit(10));
-
-            RectTransform visibilityRow = CreateGroup("VisibilityControls", infoPanel);
-            AddHorizontalLayout(visibilityRow, 0f, 0f, 0f, 6f);
-            visibilityRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 38f;
-            publicButton = CreateButton("PublicTestButton", visibilityRow, "공개 테스트", 0f, 38f);
-            publicButton.onClick.AddListener(() => SetVisibility(TestVisibility.Public));
-            privateButton = CreateButton("PrivateTestButton", visibilityRow, "비공개 테스트", 0f, 38f);
-            privateButton.onClick.AddListener(() => SetVisibility(TestVisibility.Private));
-
-            installedEngineText = CreateText("InstalledEngineText", infoPanel, 14, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-            statusText = CreateText("StatusText", infoPanel, 14, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
         }
 
         private void LoadDraft(ResearchDesignEntryData data)
         {
             selectedEnginePreset = data.SelectedEnginePresetId;
             installedEngineCounts = CopyCounts(data.InstalledEngineCounts);
+            ClearLockedEngineCounts(installedEngineCounts);
             designFit = data.DesignFit;
             visibility = data.Visibility;
         }
@@ -220,16 +230,23 @@ namespace Border.Research
                 return;
             }
 
-            ResearchStageId stageId = session.PendingDesignEntry.StageId;
+            LaunchStageId stageId = session.PendingDesignEntry.StageId;
+            ClearLockedEngineCounts(installedEngineCounts);
             ResearchDesignEntryData data = session.Model.CreateDesignEntry(stageId, selectedEnginePreset, installedEngineCounts, designFit, visibility);
             session.UpdatePendingDesignEntry(data);
         }
 
         private void ChangeInstalledEngineCount(int delta)
         {
-            if (session.HasPendingDesignEntry && session.PendingDesignEntry.StageId == ResearchStageId.Engine)
+            if (session.HasPendingDesignEntry && session.PendingDesignEntry.StageId == LaunchStageId.Engine)
             {
-                statusText.text = "엔진 테스트는 정적 시험입니다. 설치 엔진을 쓰지 않습니다.";
+                statusText.text = "초기 목표는 정적 검증입니다. 설치 엔진을 쓰지 않습니다.";
+                return;
+            }
+
+            if (!session.Model.IsEnginePresetUnlocked(selectedEnginePreset))
+            {
+                statusText.text = "아직 개발되지 않은 엔진입니다.";
                 return;
             }
 
@@ -248,7 +265,7 @@ namespace Border.Research
 
         private void SetVisibility(TestVisibility nextVisibility)
         {
-            if (session.HasPendingDesignEntry && session.PendingDesignEntry.StageId == ResearchStageId.Moon)
+            if (session.HasPendingDesignEntry && session.PendingDesignEntry.StageId == LaunchStageId.Moon)
             {
                 visibility = TestVisibility.FinalMission;
             }
@@ -270,11 +287,12 @@ namespace Border.Research
 
             ResearchDesignEntryData data = session.PendingDesignEntry;
             ResearchPrototypeModel model = session.Model;
-            ResearchStageConfig stageConfig = ResearchPrototypeModel.GetStageConfig(data.StageId);
+            LaunchStageConfig stageConfig = ResearchPrototypeModel.GetStageConfig(data.StageId);
             EnginePresetConfig engineConfig = ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId);
             int successChance = model.CalculateSuccessChance(data);
             int partialChance = Math.Min(15, 95 - successChance);
             int failureChance = 100 - successChance - partialChance;
+            RefreshPresetButtons(model);
 
             headerText.text = $"{stageConfig.DisplayName} 설계";
             designDataText.text = $"날짜: {data.Year} Q{data.Quarter} / 맵 시드: {data.MapSeed} / 목표: {data.TargetPathId}\n"
@@ -287,9 +305,30 @@ namespace Border.Research
             launchButtonText.text = $"발사\n총 비용 {data.LaunchCost + data.ReservedInstallCost} / 1분기";
             launchButton.interactable = model.Funds >= data.LaunchCost + data.ReservedInstallCost && !model.DeadlineReached;
 
-            bool finalMission = data.StageId == ResearchStageId.Moon;
+            bool finalMission = data.StageId == LaunchStageId.Moon;
             publicButton.interactable = !finalMission;
             privateButton.interactable = !finalMission;
+        }
+
+        private void RefreshPresetButtons(ResearchPrototypeModel model)
+        {
+            if (presetButtons == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < presetButtons.Length; i++)
+            {
+                Button button = presetButtons[i];
+                if (button == null)
+                {
+                    continue;
+                }
+
+                bool unlocked = model.IsEnginePresetUnlocked((EnginePresetId)i);
+                button.gameObject.SetActive(unlocked);
+                button.interactable = unlocked;
+            }
         }
 
         private void Launch()
@@ -315,7 +354,7 @@ namespace Border.Research
 
         private static string FormatInstalledEngines(ResearchDesignEntryData data)
         {
-            if (data.StageId == ResearchStageId.Engine)
+            if (data.StageId == LaunchStageId.Engine)
             {
                 return "정적 시험대";
             }
@@ -356,8 +395,8 @@ namespace Border.Research
                     return "발사비와 설치비가 부족합니다.";
                 case ResearchActionResult.DeadlineReached:
                     return "마감에 도달해 발사할 수 없습니다.";
-                case ResearchActionResult.ProgressTooLow:
-                    return "엔진 테스트 조건이 부족합니다.";
+                case ResearchActionResult.RequirementNotMet:
+                    return "초기 목표 조건이 부족합니다.";
                 default:
                     return "현재 상태에서는 발사할 수 없습니다.";
             }
@@ -380,10 +419,33 @@ namespace Border.Research
             return copy;
         }
 
-        private static Button CreateButton(string name, Transform parent, string text, float preferredWidth, float preferredHeight)
+        private void ClearLockedEngineCounts(int[] counts)
         {
-            RectTransform rectTransform = CreatePanel(name, parent, new Color(0.24f, 0.29f, 0.36f, 1f));
-            LayoutElement layout = rectTransform.gameObject.AddComponent<LayoutElement>();
+            if (counts == null || session?.Model == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < counts.Length; i++)
+            {
+                if (!session.Model.IsEnginePresetUnlocked((EnginePresetId)i))
+                {
+                    counts[i] = 0;
+                }
+            }
+        }
+
+        private static Button CreateButtonFromPrefab(Button prefab, string name, Transform parent, string text, float preferredWidth, float preferredHeight)
+        {
+            if (prefab == null)
+            {
+                Debug.LogError($"Missing button prefab for {name}.");
+                return null;
+            }
+
+            Button button = Instantiate(prefab, parent);
+            button.name = name;
+            LayoutElement layout = button.GetComponent<LayoutElement>() ?? button.gameObject.AddComponent<LayoutElement>();
             if (preferredWidth > 0f)
             {
                 layout.preferredWidth = preferredWidth;
@@ -394,86 +456,52 @@ namespace Border.Research
             }
 
             layout.preferredHeight = preferredHeight;
+            TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+            if (label != null)
+            {
+                label.text = text;
+            }
 
-            Button button = rectTransform.gameObject.AddComponent<Button>();
-            button.targetGraphic = rectTransform.GetComponent<Image>();
-            button.colors = CreateButtonColors();
-
-            TMP_Text label = CreateText("Label", rectTransform, 13, FontStyles.Bold, TextAlignmentOptions.Center, text);
-            Stretch(label.rectTransform, 6f);
             return button;
         }
 
-        private static ColorBlock CreateButtonColors()
+        private static TMP_Text FindRequiredText(Transform root, string name)
         {
-            ColorBlock colors = ColorBlock.defaultColorBlock;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.92f, 0.96f, 1f, 1f);
-            colors.pressedColor = new Color(0.78f, 0.86f, 0.94f, 1f);
-            colors.selectedColor = new Color(0.9f, 0.95f, 1f, 1f);
-            colors.disabledColor = new Color(0.42f, 0.45f, 0.48f, 0.72f);
-            return colors;
+            foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (text.name == name)
+                {
+                    return text;
+                }
+            }
+
+            return null;
         }
 
-        private static TMP_Text CreateText(string name, Transform parent, int fontSize, FontStyles fontStyle, TextAlignmentOptions alignment, string text)
+        private static Button FindRequiredButton(Transform root, string name)
         {
-            var textObject = new GameObject(name, typeof(RectTransform));
-            textObject.transform.SetParent(parent, false);
-            TMP_Text label = textObject.AddComponent<TextMeshProUGUI>();
-            label.text = text;
-            label.fontSize = fontSize;
-            label.fontStyle = fontStyle;
-            label.alignment = alignment;
-            label.color = Color.white;
-            label.textWrappingMode = TextWrappingModes.Normal;
-            label.raycastTarget = false;
-            return label;
+            foreach (Button button in root.GetComponentsInChildren<Button>(true))
+            {
+                if (button.name == name)
+                {
+                    return button;
+                }
+            }
+
+            return null;
         }
 
-        private static RectTransform CreatePanel(string name, Transform parent, Color color)
+        private static RectTransform FindChildRectTransform(Transform root, string name)
         {
-            var panel = new GameObject(name, typeof(RectTransform));
-            panel.transform.SetParent(parent, false);
-            Image image = panel.AddComponent<Image>();
-            image.color = color;
-            return (RectTransform)panel.transform;
-        }
+            foreach (RectTransform rectTransform in root.GetComponentsInChildren<RectTransform>(true))
+            {
+                if (rectTransform.name == name)
+                {
+                    return rectTransform;
+                }
+            }
 
-        private static RectTransform CreateGroup(string name, Transform parent)
-        {
-            var group = new GameObject(name, typeof(RectTransform));
-            group.transform.SetParent(parent, false);
-            return (RectTransform)group.transform;
-        }
-
-        private static void AddVerticalLayout(RectTransform target, float left, float right, float top, float spacing)
-        {
-            VerticalLayoutGroup layout = target.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset((int)left, (int)right, (int)top, (int)top);
-            layout.spacing = spacing;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-        }
-
-        private static void AddHorizontalLayout(RectTransform target, float left, float right, float top, float spacing)
-        {
-            HorizontalLayoutGroup layout = target.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset((int)left, (int)right, (int)top, (int)top);
-            layout.spacing = spacing;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = true;
-        }
-
-        private static void Stretch(RectTransform target, float padding)
-        {
-            target.anchorMin = Vector2.zero;
-            target.anchorMax = Vector2.one;
-            target.offsetMin = new Vector2(padding, padding);
-            target.offsetMax = new Vector2(-padding, -padding);
+            return null;
         }
 
         private static void EnsureEventSystem()
