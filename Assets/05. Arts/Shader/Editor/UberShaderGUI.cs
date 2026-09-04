@@ -817,6 +817,7 @@ public sealed class UberShaderGUI : LWGUI.LWGUI
         new KeywordBinding("_NormalMapEnabled", "_NORMALMAP", 1),
         new KeywordBinding("_TextureBlendEnabled", "_TEXTURE_BLEND_ON", 1),
         new KeywordBinding("_MetallicMapEnabled", "_METALLICMAP", 1),
+        new KeywordBinding("_RoughnessMapEnabled", "_ROUGHNESSMAP", 1),
         new KeywordBinding("_SmoothnessMapEnabled", "_SMOOTHNESSMAP", 1),
         new KeywordBinding("_ReceiveShadows", "_RECEIVE_SHADOWS_OFF", 0),
         new KeywordBinding("_UberQuality", "_UBER_QUALITY_LOW", 1),
