@@ -23,6 +23,7 @@ namespace Simulation
 
         private RocketBuilder builder;
         private Canvas canvas;
+        private RectTransform presetPanel;
         private RectTransform statBox;
         private TMP_Text statText;
         private RectTransform partTools;
@@ -51,12 +52,16 @@ namespace Simulation
 
             BuildInterface();
             builder.Changed += RefreshTools;
+            builder.PresetLibraryChanged += RebuildPresetPanel;
             RefreshTools();
         }
 
         private void OnDestroy()
         {
-            if (builder != null) builder.Changed -= RefreshTools;
+            if (builder == null) return;
+
+            builder.Changed -= RefreshTools;
+            builder.PresetLibraryChanged -= RebuildPresetPanel;
         }
 
         private void LateUpdate()
@@ -93,21 +98,27 @@ namespace Simulation
 
         private void BuildPresetPanel(RectTransform canvasTransform)
         {
-            RectTransform panel = CreatePanel("PresetPanel", canvasTransform, PanelColor);
-            panel.anchorMin = new Vector2(0f, 0f);
-            panel.anchorMax = new Vector2(0f, 1f);
-            panel.pivot = new Vector2(0f, 0.5f);
-            panel.offsetMin = new Vector2(16f, 16f);
-            panel.offsetMax = new Vector2(216f, -16f);
+            if (presetPanel != null)
+            {
+                Destroy(presetPanel.gameObject);
+            }
 
-            var layout = panel.gameObject.AddComponent<VerticalLayoutGroup>();
+            presetPanel = CreatePanel("PresetPanel", canvasTransform, PanelColor);
+            presetPanel.SetAsFirstSibling();
+            presetPanel.anchorMin = new Vector2(0f, 0f);
+            presetPanel.anchorMax = new Vector2(0f, 1f);
+            presetPanel.pivot = new Vector2(0f, 0.5f);
+            presetPanel.offsetMin = new Vector2(16f, 16f);
+            presetPanel.offsetMax = new Vector2(216f, -16f);
+
+            var layout = presetPanel.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(12, 12, 12, 12);
             layout.spacing = 8f;
             layout.childForceExpandHeight = false;
             layout.childControlHeight = true;
             layout.childControlWidth = true;
 
-            CreateText("Title", panel, 18, FontStyles.Bold, "엔진 프리셋");
+            CreateText("Title", presetPanel, 18, FontStyles.Bold, "엔진 프리셋");
 
             IReadOnlyList<EngineStatsSO> presets = builder.PresetLibrary != null
                 ? builder.PresetLibrary.Slots
@@ -115,7 +126,7 @@ namespace Simulation
 
             if (presets == null || presets.Count == 0)
             {
-                CreateText("Empty", panel, 13, FontStyles.Normal,
+                CreateText("Empty", presetPanel, 13, FontStyles.Normal,
                     "프리셋이 없다.\nRocketBuilder 의 Preset Library 에\nEnginePresetLibrarySO 를 연결하라.");
                 return;
             }
@@ -125,7 +136,7 @@ namespace Simulation
                 EngineStatsSO preset = presets[i];
                 if (preset == null) continue;
 
-                RectTransform row = CreatePanel($"Preset_{i}", panel, EntryColor);
+                RectTransform row = CreatePanel($"Preset_{i}", presetPanel, EntryColor);
                 row.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
 
                 TMP_Text label = CreateText("Label", row, 14, FontStyles.Bold, DisplayName(preset));
@@ -186,6 +197,12 @@ namespace Simulation
             // 진행 중인 모드를 라벨로 알린다 — 회전 모드에서는 좌클릭 드래그가 카메라가 아니라 부품을 돌린다.
             moveLabel.text = builder.Mode == RocketBuilder.EditMode.Move ? "이동 중" : "이동";
             rotateLabel.text = builder.Mode == RocketBuilder.EditMode.Rotate ? "회전 중" : "회전";
+        }
+
+        private void RebuildPresetPanel()
+        {
+            HideStats();
+            BuildPresetPanel((RectTransform)canvas.transform);
         }
 
         /// <summary>에셋 이름에서 `EngineStats_` 접두사를 떼어 목록 폭에 들어가게 한다.</summary>

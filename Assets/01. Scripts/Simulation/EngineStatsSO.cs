@@ -19,12 +19,14 @@ namespace Simulation
         public const float FuelPerNewton = 20f / 1200f;
 
         [SerializeField] private int price = 350;                                   // 표시·밸런스 전용, 자원을 차감하지 않는다
+        [SerializeField] private int presetIndex = -1;                              // 라이브러리 슬롯 인덱스. 에셋 이름은 식별자로 쓰지 않는다.
         [SerializeField] private float fuelCapacity = 100f;                         // kg
         [SerializeField] private float cooling = 60f;                               // °C/s, 열 방출량
         [SerializeField] private float maxOutput = 1200f;                           // N
         [SerializeField, Range(0f, 100f)] private float ignitionReliability = 100f; // %
 
         public int Price => price;
+        public int PresetIndex => presetIndex;
         public float FuelCapacity => fuelCapacity;
         public float Cooling => cooling;
         public float MaxOutput => maxOutput;
@@ -41,9 +43,32 @@ namespace Simulation
         /// </summary>
         public float HeatRateAt(float output) => output * HeatPerNewton;
 
+        public static EngineStatsSO CreateRuntimeCopy(
+            int presetIndex,
+            EngineStatsSO basePreset,
+            int price,
+            float fuelCapacity,
+            float cooling,
+            float maxOutput,
+            float ignitionReliability)
+        {
+            EngineStatsSO copy = CreateInstance<EngineStatsSO>();
+            copy.hideFlags = HideFlags.DontSave;
+            copy.name = basePreset != null ? $"{basePreset.name}_Runtime" : $"EngineStats_Runtime_{presetIndex + 1:00}";
+            copy.presetIndex = presetIndex;
+            copy.price = price;
+            copy.fuelCapacity = fuelCapacity;
+            copy.cooling = cooling;
+            copy.maxOutput = maxOutput;
+            copy.ignitionReliability = ignitionReliability;
+            copy.OnValidate();
+            return copy;
+        }
+
         private void OnValidate()
         {
             price = Mathf.Max(0, price);
+            presetIndex = Mathf.Max(-1, presetIndex);
             fuelCapacity = Mathf.Max(0f, fuelCapacity);
             cooling = Mathf.Max(0f, cooling);
             maxOutput = Mathf.Max(0f, maxOutput);

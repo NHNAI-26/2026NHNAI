@@ -83,8 +83,20 @@ namespace Simulation
         public RocketPart Selected => _selected;
         public EditMode Mode => _mode;
 
+        public void SetPresetLibrary(EnginePresetLibrarySO library)
+        {
+            if (presetLibrary == library)
+            {
+                return;
+            }
+
+            presetLibrary = library;
+            PresetLibraryChanged?.Invoke();
+        }
+
         /// <summary>선택이 바뀌거나 모드가 바뀔 때. UI 가 버튼 표시를 갱신하는 용도.</summary>
         public event Action Changed;
+        public event Action PresetLibraryChanged;
 
         private void Start()
         {
