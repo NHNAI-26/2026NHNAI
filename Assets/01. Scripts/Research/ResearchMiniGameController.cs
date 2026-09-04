@@ -497,7 +497,7 @@ namespace Border.Research
             primaryButton.interactable = true;
             primaryButton.onClick.RemoveAllListeners();
             RemovePointerHandlers(primaryButton.gameObject);
-            AddPointer(primaryButton.gameObject, EventTriggerType.PointerDown, () => fuelFilling = true);
+            AddPointer(primaryButton.gameObject, EventTriggerType.PointerDown, BeginFuelFill);
             AddPointer(primaryButton.gameObject, EventTriggerType.PointerUp, RecordFuelAttempt);
             primaryButton.GetComponentInChildren<TMP_Text>().text = "누르고 있다가 목표선에서 놓기";
         }
@@ -670,10 +670,27 @@ namespace Border.Research
             UpdateFuelStatusText();
         }
 
+        private void BeginFuelFill()
+        {
+            if (gameCompleted
+                || fuelJudgementShowing
+                || statId != EngineStatId.FuelCapacity
+                || fuelAttemptIndex >= FuelAttemptCount)
+            {
+                return;
+            }
+
+            fuelFilling = true;
+        }
+
         private void RecordFuelAttempt()
         {
-            if (gameCompleted || statId != EngineStatId.FuelCapacity)
+            if (gameCompleted
+                || fuelJudgementShowing
+                || statId != EngineStatId.FuelCapacity
+                || fuelAttemptIndex >= FuelAttemptCount)
             {
+                fuelFilling = false;
                 return;
             }
 
@@ -701,13 +718,14 @@ namespace Border.Research
         private void AdvanceFuelAfterJudgement()
         {
             fuelJudgementShowing = false;
-            primaryButton.interactable = true;
             if (fuelAttemptIndex >= FuelAttemptCount)
             {
+                primaryButton.interactable = false;
                 Complete(CalculateFuelCapacityScore(fuelErrors));
                 return;
             }
 
+            primaryButton.interactable = true;
             SetupFuelAttempt();
         }
 

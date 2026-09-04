@@ -442,6 +442,37 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void MiniGameController_FuelIgnoresExtraPointerUpDuringFinalJudgement()
+        {
+            var host = new GameObject("Mini Game Test Host");
+            bool completed = false;
+
+            try
+            {
+                ResearchMiniGameController controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, _ => completed = true);
+
+                controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
+                controller.ForceAdvanceFuelJudgementForTests();
+                controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
+                controller.ForceAdvanceFuelJudgementForTests();
+                controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
+
+                Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
+                Assert.DoesNotThrow(() => controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests()));
+
+                controller.ForceAdvanceFuelJudgementForTests();
+
+                Assert.That(completed, Is.False);
+                Assert.That(controller.IsShowingResult, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
         public void MiniGameController_DismissesZeroScoreAsValidCompletion()
         {
             var host = new GameObject("Mini Game Test Host");
