@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Border.Core;
 using UnityEngine;
@@ -146,7 +146,14 @@ namespace Simulation
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null)
             {
-                if (keyboard.spaceKey.wasPressedThisFrame) rocket.Launch();
+                if (keyboard.spaceKey.wasPressedThisFrame && !rocket.Launched)
+                {
+                    rocket.Launch();
+                    // 발사한 뒤에는 편집 상태가 남으면 안 된다 — 기즈모가 날아가는 부품을 계속 따라다니고
+                    // 이동·회전 버튼도 켜진 채로 남는다. 선택이 없을 때도 UI 가 갱신되도록 직접 알린다.
+                    Select(null);
+                    Changed?.Invoke();
+                }
                 if (keyboard.escapeKey.wasPressedThisFrame) SetMode(EditMode.None);
                 if (keyboard.deleteKey.wasPressedThisFrame || keyboard.backspaceKey.wasPressedThisFrame)
                     DeleteSelected();

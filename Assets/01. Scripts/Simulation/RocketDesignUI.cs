@@ -83,7 +83,7 @@ namespace Simulation
                 return;
             }
 
-            if (missionControl) rocket = FindFirstObjectByType<Rocket>();
+            rocket = FindFirstObjectByType<Rocket>();
 
             BuildInterface();
             builder.Changed += RefreshTools;
@@ -107,7 +107,7 @@ namespace Simulation
                 UpdateTopBar();
             }
 
-            if (builder.Selected == null) return;
+            if (builder.Selected == null || (rocket != null && rocket.Launched)) return;
 
             // 버튼은 선택한 부품을 화면에서 따라다닌다. 카메라를 돌려도 같은 부품 옆에 붙어 있다.
             // WorldToScreenPoint 는 픽셀이고 anchoredPosition 은 캔버스 단위라, 스케일러 배율로 나눈다.
@@ -272,7 +272,11 @@ namespace Simulation
 
         private void RefreshTools()
         {
-            bool hasSelection = builder.Selected != null;
+            // 발사 뒤에는 설계 조작이 전부 막힌다(RocketBuilder) — 눌러도 아무 일 없는 UI 를 남기지 않는다.
+            bool launched = rocket != null && rocket.Launched;
+            presetPanel.gameObject.SetActive(!launched);
+
+            bool hasSelection = !launched && builder.Selected != null;
             partTools.gameObject.SetActive(hasSelection);
             if (!hasSelection) return;
 
