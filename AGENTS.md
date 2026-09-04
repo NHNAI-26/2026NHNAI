@@ -22,6 +22,13 @@ When using Unity MCP, first confirm `http://127.0.0.1:8080/mcp`, instance, proje
 
 Use Context7 only for current API/package behavior: Unity APIs, package setup, version-sensitive settings, or unfamiliar SDKs.
 
+## Documentation
+
+Plans, specs, and feature descriptions belong in `docs/` as Markdown, one subject per file
+(`docs/<subject>.md`, lowercase kebab-case). Search `docs/` and update the document that already covers the area
+before creating a new one; rewrite stale content instead of appending to it. Update the document in the same
+commit as the change it describes. Keep `CLAUDE.md` and `AGENTS.md` limited to agent work rules.
+
 ## Build, Test, and Development Commands
 
 ```powershell

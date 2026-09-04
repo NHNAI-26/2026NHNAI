@@ -214,6 +214,24 @@ objects already in that scene. When one is unavoidable:
   dirty it, so never save one that has no intended change.
 - `.gitattributes` sets `merge=unityyamlmerge` — never hand-merge a scene or prefab.
 
+## Design and feature docs live in `docs/`
+
+Anything that is a plan, spec, or a record of what a feature does — not code — belongs in `docs/`, as Markdown.
+This is a working document set, not a changelog: it should describe the system as it is now.
+
+- **Update before you add.** Search `docs/` first (`grep -ril "<keyword>" docs/`) and edit the existing document
+  that already covers the area. A new file is only for a genuinely new subject.
+- **One subject per file**, named `docs/<subject>.md` in lowercase kebab-case (`docs/sound-system.md`,
+  `docs/save-load.md`). Match the module or system name where one exists.
+- **Write it in the same commit as the change.** A feature added, a design decision made, or a behavior changed
+  without its document updated is unfinished work. Tag the commit `docs` when it is documentation only, otherwise
+  keep it in the `feat`/`fix` commit that made the change.
+- **Do not restate the code.** Record intent, decisions and their reasons, constraints, and how the pieces connect —
+  the things a reader cannot recover by reading the source.
+- **Superseded content is deleted, not appended.** Rewrite the stale paragraph rather than adding "(old)" sections.
+- CLAUDE.md and AGENTS.md stay short: they hold work rules for agents. Detail goes in `docs/`, and CLAUDE.md links
+  to it only when a task cannot be done without it.
+
 ## Conventions
 
 - Commit messages, branches, and PR titles follow `README.md` (Korean): `TAG(#issue) : 제목`, tags
