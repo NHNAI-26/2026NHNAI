@@ -39,7 +39,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 4f31798cdb39e4858bf7facd28c9eb6d, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
@@ -171,7 +171,7 @@ Material:
     - _RimIntensity: 1
     - _RimPower: 4
     - _Saturation: 1
-    - _Smoothness: 0.5
+    - _Smoothness: 0.281
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
