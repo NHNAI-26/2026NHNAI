@@ -8,18 +8,12 @@
 권장 씬:
 
 ```text
-00_Boot
 01_Main
-02_Design
-03_Sim_Engine
-04_Sim_Rocket
-05_Sim_Orbit
-06_Sim_Moon
 ```
 
 `00_Boot`는 선택 사항이다. 시간이 부족하면 `01_Main`에서 바로 초기화한다.
 
-설계 단계는 공통 씬 하나를 사용한다. 자동 발사는 단계별 별도 씬으로 두되, 공통 HUD와 실행 구조는 프리팹 또는 공통 컴포넌트로 공유한다.
+연구, 설계, 발사 결과는 모두 `01_Main` 단일 씬 안에서 화면 전환으로 처리한다. 자동 발사는 단계별 별도 씬을 만들지 않고, 공통 HUD와 실행 구조를 화면 컨트롤러 또는 프리팹으로 공유한다.
 
 ## 2. 핵심 런타임 데이터
 
@@ -127,7 +121,7 @@ public sealed class DesignData
 }
 ```
 
-`DesignData`는 설계 씬에서 수정된다. 발사 전 연구 화면으로 돌아가면 버릴 수 있다. 같은 분기·단계·시드로 다시 설계 씬에 들어오면 같은 맵과 목표 경로를 생성해야 한다.
+`DesignData`는 설계 화면에서 수정된다. 발사 전 연구 화면으로 돌아가면 버릴 수 있다. 같은 분기·단계·시드로 다시 설계 화면에 들어오면 같은 맵과 목표 경로를 생성해야 한다.
 
 ### InstalledEngineData
 
@@ -182,7 +176,7 @@ public sealed class SimRunData
 }
 ```
 
-`SimRunData`는 설계 씬에서 최종 `발사` 버튼을 누른 직후 생성하고 자동 발사 씬 전환 전에 보존한다.
+`SimRunData`는 설계 화면에서 최종 `발사` 버튼을 누른 직후 생성하고 발사 결과 화면 표시 전에 보존한다.
 
 ## 3. 권장 관리자
 
@@ -190,8 +184,8 @@ public sealed class SimRunData
 
 - 새 게임
 - 분기 행동 처리
-- 설계 씬 진입과 복귀
-- 씬 전환
+- 설계 화면 진입과 복귀
+- 화면 전환
 - 승리·패배 검사
 - 결과 보고서 호출
 
@@ -268,7 +262,7 @@ ScriptableObject 권장:
 - 분기 연구비
 - 하한·상한
 - 엔진 프리셋 최대 개수 10
-- 엔진 프리셋별 연구 비용과 설치 비용
+- 엔진 프리셋 공통 연구 비용과 공통 설치 비용
 - 등급 보상
 - 확률 하한·상한
 
@@ -374,7 +368,8 @@ function EnterDesign(stage):
         return NotEnoughFunds
 
     designData = CreateOrLoadDesignData(stage, currentYear, currentQuarter)
-    LoadScene("02_Design")
+    HideResearchScreen()
+    ShowDesignScreen(designData)
 ```
 
 설계 진입은 비용과 분기를 소비하지 않는다.
@@ -384,7 +379,8 @@ function EnterDesign(stage):
 ```pseudo
 function ReturnFromDesign():
     DiscardUnsavedDesignData()
-    LoadScene("01_Main")
+    HideDesignScreen()
+    ShowResearchScreen()
 ```
 
 ### 발사 시작
@@ -406,7 +402,8 @@ function ConfirmLaunch(stage, designData, visibility):
     simRunData = ProbabilityResolver.Resolve(stage, designData)
 
     Persist(simRunData)
-    LoadScene(stage.simulationSceneName)
+    HideDesignScreen()
+    ShowLaunchResultScreen(simRunData)
 ```
 
 ### 발사 종료
@@ -425,7 +422,7 @@ function FinishSimulation():
     )
 ```
 
-결과 보고서를 메인 씬에서 보여주거나 시뮬레이션 씬 위에서 보여주는 것은 선택 가능하다. 단, 결과 적용은 한 곳에서만 수행한다.
+연구, 설계, 발사 결과는 모두 `01_Main` 단일 씬 안에서 화면 전환으로 처리한다. 단, 결과 적용은 한 곳에서만 수행한다.
 
 ## 6. 확률 처리 의사코드
 
@@ -460,7 +457,7 @@ function GetSuccessChance(stage, designData):
 4. 출발 지점과 목표 지점 배치
 5. 설계 입력과 엔진 ON/OFF 타이밍으로 예상 경로와 `designFit` 계산
 
-같은 분기와 같은 단계에서는 설계 씬을 다시 열어도 같은 맵과 목표 경로가 나와야 한다. 발사하지 않고 연구 단계로 돌아오면 비용과 시간은 그대로다.
+같은 분기와 같은 단계에서는 설계 화면을 다시 열어도 같은 맵과 목표 경로가 나와야 한다. 발사하지 않고 연구 단계로 돌아오면 비용과 시간은 그대로다.
 
 ## 8. 3D 시퀀스 구현 방식
 
@@ -520,14 +517,14 @@ ApplyRewardsAndStageRecord();
 아래 상황에서도 한 번만 적용되어야 한다.
 
 - 건너뛰기
-- 씬 재로드
+- 결과 화면 재표시
 - 버튼 연타
 - 결과 화면 중복 호출
 - 애니메이션 이벤트 중복
 
 ## 11. 저장 정책
 
-게임잼 버전은 중간 저장을 제공하지 않는다. 그러나 씬 사이 상태 보존은 필요하다.
+게임잼 버전은 중간 저장을 제공하지 않는다. 그러나 화면 전환 사이 상태 보존은 필요하다.
 
 허용 방식:
 
@@ -535,7 +532,7 @@ ApplyRewardsAndStageRecord();
 - 정적 세션 컨테이너
 - 임시 JSON 직렬화
 
-권장 방식은 `DontDestroyOnLoad GameSession` 하나다. 영구 저장 시스템은 만들지 않는다.
+권장 방식은 `GameSession` 하나를 `01_Main` 안에서 유지하는 것이다. 영구 저장 시스템은 만들지 않는다.
 
 ## 12. 입력
 
@@ -561,8 +558,8 @@ ApplyRewardsAndStageRecord();
 
 ## 13. 오류 처리
 
-- `SimRunData` 없이 시뮬레이션 씬에 진입하면 메인으로 복귀
-- `DesignData` 없이 설계 씬에 진입하면 메인으로 복귀
+- `SimRunData` 없이 발사 결과 화면에 진입하면 연구 화면으로 복귀
+- `DesignData` 없이 설계 화면에 진입하면 연구 화면으로 복귀
 - 존재하지 않는 사고 ID면 등급 기본 시퀀스 사용
 - 설계 실패 연출 VFX가 없어도 성공률과 결과는 정상 처리
 - 카메라가 누락되어도 기본 카메라 사용
@@ -575,4 +572,4 @@ ApplyRewardsAndStageRecord();
 - 설계 오류 스파크와 연기는 풀링 또는 소수 파티클로 구현
 - 실시간 그림자 수를 최소화
 - 한 장면에 하나의 주요 광원
-- 시뮬레이션 씬 전환 중 짧은 로딩 화면 허용
+- 무거운 발사 연출 준비 중 짧은 로딩 화면 허용
