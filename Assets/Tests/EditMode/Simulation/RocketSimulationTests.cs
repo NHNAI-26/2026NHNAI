@@ -219,6 +219,35 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void SnapAngle_PullsToMultiplesOfStep_AndPassesThroughOutsideTolerance()
+        {
+            const float Step = 45f;
+            const float Tolerance = 7f;
+
+            // 허용치 안: 가장 가까운 45° 배수로 끌려간다. 부호와 0/180 경계도 같이 잠근다.
+            Assert.AreEqual(45f, RocketBuilder.SnapAngle(43f, Step, Tolerance), 1e-4f);
+            Assert.AreEqual(45f, RocketBuilder.SnapAngle(47f, Step, Tolerance), 1e-4f);
+            Assert.AreEqual(0f, RocketBuilder.SnapAngle(2f, Step, Tolerance), 1e-4f);
+            Assert.AreEqual(180f, RocketBuilder.SnapAngle(176f, Step, Tolerance), 1e-4f);
+            Assert.AreEqual(-45f, RocketBuilder.SnapAngle(-44f, Step, Tolerance), 1e-4f);
+
+            // 허용치 밖에서는 아무것도 보정하지 않는다 — 정렬 가이드와 같은 규약이다.
+            Assert.AreEqual(36f, RocketBuilder.SnapAngle(36f, Step, Tolerance), 1e-4f);
+            Assert.AreEqual(22.5f, RocketBuilder.SnapAngle(22.5f, Step, Tolerance), 1e-4f);
+
+            // 경계는 포함이다(<=). 여러 바퀴 돌려도 배수는 유지된다.
+            Assert.AreEqual(90f, RocketBuilder.SnapAngle(83f, Step, Tolerance), 1e-4f);
+            Assert.AreEqual(405f, RocketBuilder.SnapAngle(404f, Step, Tolerance), 1e-4f);
+
+            // 실제 쓰임: 보정된 각도를 잡을 때 자세에 얹으면 정확히 45° 배수 자세가 나온다.
+            Quaternion grabbed = Quaternion.Euler(10f, 20f, 30f);
+            Quaternion snapped = Quaternion.AngleAxis(
+                RocketBuilder.SnapAngle(88f, Step, Tolerance), Vector3.up) * grabbed;
+            Assert.That(Quaternion.Angle(Quaternion.AngleAxis(90f, Vector3.up) * grabbed, snapped),
+                Is.LessThan(1e-3f), "스냅된 각도는 잡을 때 자세 기준 절대각이어야 한다.");
+        }
+
+        [Test]
         public void ProjectOntoCapsule_LandsOnTheSurface_FromInsideOutsideAndTheCaps()
         {
             // SimulationTest 씬의 본체 값: 반지름 0.5, 축 선분 절반 1.5 (전체 높이 4).

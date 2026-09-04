@@ -52,7 +52,7 @@ Today the whole design interaction is "left-drag an engine object already placed
 surface". This becomes **pull an engine out of a left-hand preset panel**. Hovering an entry previews its stats.
 Dropping on the rocket surface attaches at that point; dropping on the ground places it there; dropping anywhere
 else cancels (UD-007, UD-010). An attached engine can be selected to reveal move and rotate buttons, and
-**the rotated orientation is the thrust direction** (UD-008), with no axis or angle limit (UD-011). Right-drag
+**the rotated orientation is the thrust direction** (UD-008), with no axis or angle limit; angles near a multiple of 45° are snapped as an aiming aid (UD-011 rev 4). Right-drag
 camera orbit is unchanged.
 
 ### Problem and Background
@@ -101,7 +101,7 @@ The engine stat data structure (SO fields, preset count, price) belongs to
 | Engine stat SO fields, preset count, price | UD-009, UD-012, SF-012 | active | Other session owns it; this work only consumes it |
 | Thrust magnitude slider, engine ON/OFF timeline | SF-005 | active | GDD 07 §4 items, not part of this request |
 | Map, target path, design fit, probability display | SF-016 | active | GDD 11 §7 items, not part of this request |
-| Grid/mirror snapping, rotation angle snapping, overlap checks | SF-004, UD-011 | active | GDD 07 §5 deliberate omissions; UD-011 chose no limits |
+| Grid/mirror snapping, overlap checks | SF-004 | active | GDD 07 §5 deliberate omissions. Rotation angle snapping left this list in rev 4 (UD-011) |
 | Staging, gimbal, drag | SF-004 | active | GDD 07 §5 deliberate omissions |
 
 ## Core Experience / Operating Flow
@@ -206,7 +206,7 @@ The engine stat data structure (SO fields, preset count, price) belongs to
 | UD-008 | user decision | The rotate button rotates the part **and thrust follows that orientation** | Q-002 answer (rev 2) | active | R-007, R-010, R-011, R-009, RK-002, RK-007 |
 | UD-009 | user decision | Hover stats use the **engine stat SO being built in another session** | Q-003 answer (rev 2) | active | R-012, RK-004, OI-010 |
 | UD-010 | user decision | Rocket-surface drop **attaches immediately**; ground drop places; anything else cancels and discards | Q-006 answer (rev 3) | active | R-013, resolves OI-009 / OI-011 |
-| UD-011 | user decision | Rotation is **free — no axis, angle or snap limits** | Q-007 answer (rev 3) | active | R-007, resolves OI-012, strengthens RK-007 |
+| UD-011 | user decision | Rotation is **free — no axis or angle limit**; revised (rev 4) to add a 45° aiming snap (7° tolerance, guide line only while it holds) | Q-007 answer (rev 3), revised by the user (rev 4) | active | R-007, resolves OI-012, strengthens RK-007 |
 | UD-012 | user decision | Connect **after** that session's SO is final; phase 1 completes without it | Q-008 answer (rev 3) | active | R-012 deferred, mitigates RK-004 / RK-008 |
 | UD-013 | user decision | End the planning interview and begin implementation | "로 하고 구현 시작해줘" (rev 4) | active | Finalization, implementation authorization |
 | SF-001 | sourced fact | Right-drag orbit and wheel zoom already exist | `Assets/01. Scripts/Simulation/RocketBuilder.cs:66-80` | active | R-001 |

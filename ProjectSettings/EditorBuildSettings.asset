@@ -18,8 +18,8 @@ EditorBuildSettings:
     path: Assets/00. Scenes/ResearchTestScene.unity
     guid: 24854ddd655357b4680aa2f7a39ad302
   - enabled: 1
-    path: Assets/00. Scenes/DesignTestScene.unity
-    guid: 59e77efe5816a404c84aca33df5240cd
+    path: Assets/00. Scenes/SimulationTest.unity
+    guid: c53c752b6af34b14ea354612c0cc5fbb
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

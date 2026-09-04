@@ -97,7 +97,7 @@
 | 엔진 스탯 SO 필드·프리셋 개수·가격 정의 | UD-009, UD-012, SF-012 | active | 다른 세션 소관, 여기서는 소비만 |
 | 힘 크기 슬라이더, 엔진 ON/OFF 타임라인 | SF-005 | active | GDD 07 §4 항목이나 이번 요청 밖 |
 | 맵·목표 경로·설계 적합도·확률 표시 | SF-016 | active | GDD 11 §7 항목이나 이번 요청 밖 |
-| 그리드·대칭 스냅, 회전 각도 스냅, 겹침 검사 | SF-004, UD-011 | active | GDD 07 §5 의도적 미구현 + UD-011이 제한 없음 선택 |
+| 그리드·대칭 스냅, 겹침 검사 | SF-004 | active | GDD 07 §5 의도적 미구현. 회전 각도 스냅은 rev 4 에서 이 목록을 떠났다(UD-011) |
 | 단 분리, 짐벌, 항력 | SF-004 | active | GDD 07 §5 의도적 미구현 |
 
 ## Core Experience / Operating Flow
@@ -199,7 +199,7 @@
 | UD-008 | user decision | 회전 버튼은 부품 자세를 회전시키고 **추력도 따라간다** | Q-002 응답 (rev 2) | active | R-007, R-010, R-011, RK-007 |
 | UD-009 | user decision | 호버 스탯은 **다른 세션 제작 중 SO** 사용 | Q-003 응답 (rev 2) | active | R-012, RK-004, OI-010 |
 | UD-010 | user decision | 로켓 표면 드롭 = **즉시 부착**, 바닥 = 배치, 그 외 = 취소·폐기 | Q-006 응답 (rev 3) | active | R-013, OI-009·OI-011 해소 |
-| UD-011 | user decision | 회전은 **축·각도·스냅 제한 없이 자유** | Q-007 응답 (rev 3) | active | R-007, OI-012 해소, RK-007 강화 |
+| UD-011 | user decision | 회전은 **축·각도 제한 없이 자유**. rev 4 에서 45° 배수 조준 스냅(허용치 7°, 걸린 동안만 가이드선)을 추가 | Q-007 응답 (rev 3), 사용자 개정 (rev 4) | active | R-007, OI-012 해소, RK-007 강화 |
 | UD-012 | user decision | SO **확정 후 연결**. 1단계는 SO 없이 완결 | Q-008 응답 (rev 3) | active | R-012 deferred, RK-004·008 완화 |
 | UD-013 | user decision | 인터뷰 종료 및 구현 착수 | "로 하고 구현 시작해줘" (rev 4) | active | 최종화, 구현 권한 |
 | SF-001 | sourced fact | 우클릭 궤도 회전 + 휠 줌이 이미 구현됨 | `RocketBuilder.cs:66-80` | active | R-001 |

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Border.Research;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -27,6 +28,15 @@ namespace Simulation
         private static readonly Color EntryColor = new(0.22f, 0.26f, 0.31f, 1f);
         private static readonly Color EntryHoverColor = new(0.30f, 0.38f, 0.46f, 1f);
 
+        // 미션 컨트롤 모드에서만 만드는 것들. 01_Main 위에 얹었을 때(SimulationStageHost)만 켜지고,
+        // SimulationTest 씬을 직접 재생하면 예전 그대로 좌측 패널만 뜬다.
+        private bool missionControl;
+        private Rocket rocket;
+        private RectTransform viewport;
+        private TMP_Text topBarText;
+        private readonly List<RocketPart> placedParts = new();
+        private readonly Vector3[] viewportCorners = new Vector3[4];
+
         private RocketBuilder builder;
         private Canvas canvas;
         private RectTransform canvasRect;
@@ -45,7 +55,23 @@ namespace Simulation
             if (SceneManager.GetActiveScene().name != TargetSceneName) return;
             if (FindFirstObjectByType<RocketDesignUI>() != null) return;
 
-            new GameObject("Rocket Design UI").AddComponent<RocketDesignUI>();
+            Spawn(false);
+        }
+
+        /// <summary>
+        /// Awake 는 AddComponent 시점에 돌아서 컴포넌트를 붙인 뒤에는 모드를 넣을 수 없다.
+        /// 비활성 상태로 만들어 필드를 채운 뒤 켠다.
+        /// </summary>
+        internal static RocketDesignUI Spawn(bool missionControl)
+        {
+            var host = new GameObject("Rocket Design UI");
+            host.SetActive(false);
+
+            RocketDesignUI ui = host.AddComponent<RocketDesignUI>();
+            ui.missionControl = missionControl;
+
+            host.SetActive(true);
+            return ui;
         }
 
         private void Awake()
@@ -56,6 +82,8 @@ namespace Simulation
                 enabled = false;
                 return;
             }
+
+            if (missionControl) rocket = FindFirstObjectByType<Rocket>();
 
             BuildInterface();
             builder.Changed += RefreshTools;
@@ -73,6 +101,12 @@ namespace Simulation
 
         private void LateUpdate()
         {
+            if (missionControl)
+            {
+                UpdateViewportRect();
+                UpdateTopBar();
+            }
+
             if (builder.Selected == null) return;
 
             // 버튼은 선택한 부품을 화면에서 따라다닌다. 카메라를 돌려도 같은 부품 옆에 붙어 있다.
@@ -111,6 +145,37 @@ namespace Simulation
             BuildPresetPanel(canvasTransform);
             BuildStatBox(canvasTransform);
             BuildPartTools(canvasTransform);
+
+            if (missionControl) BuildMissionControl(canvasTransform);
+        }
+
+        /// <summary>
+        /// 상단 정보 바와 3D 뷰포트 자리. 뷰포트는 <b>Image 가 없는 빈 RectTransform</b> 이어야 한다 —
+        /// 그래픽을 붙이면 <see cref="EventSystem.IsPointerOverGameObject"/> 가 뷰포트 전체를 UI 로
+        /// 판정해서 <see cref="RocketBuilder"/> 의 3D 입력이 통째로 막힌다. 같은 이유로 전체 화면
+        /// 배경 패널도 만들지 않는다.
+        /// </summary>
+        private void BuildMissionControl(RectTransform canvasTransform)
+        {
+            RectTransform topBar = CreatePanel("TopBar", canvasTransform, PanelColor);
+            topBar.anchorMin = new Vector2(0f, 1f);
+            topBar.anchorMax = Vector2.one;
+            topBar.pivot = new Vector2(0.5f, 1f);
+            topBar.offsetMin = new Vector2(232f, -88f); // 좌측 프리셋 패널(오른쪽 끝 216)에서 16 띄운다
+            topBar.offsetMax = new Vector2(-16f, -16f);
+
+            topBarText = CreateText("Info", topBar, 18, FontStyles.Bold, string.Empty);
+            topBarText.alignment = TextAlignmentOptions.Left;
+            topBarText.raycastTarget = false;
+            Fill((RectTransform)topBarText.transform, 12f);
+
+            // 카메라 뷰포트의 유일한 원천. 정규화 상수를 따로 두면 CanvasScaler 가 늘어나는 비율에서
+            // 좌측 패널과 어긋난다 — 매 프레임 이 사각형을 읽어 카메라에 먹인다.
+            viewport = CreateGroup("Viewport", canvasTransform);
+            viewport.anchorMin = Vector2.zero;
+            viewport.anchorMax = Vector2.one;
+            viewport.offsetMin = new Vector2(232f, 16f);
+            viewport.offsetMax = new Vector2(-16f, -88f);
         }
 
         private void BuildPresetPanel(RectTransform canvasTransform)
@@ -214,6 +279,44 @@ namespace Simulation
             // 진행 중인 모드를 라벨로 알린다 — 회전 모드에서는 좌클릭 드래그가 카메라가 아니라 부품을 돌린다.
             moveLabel.text = builder.Mode == RocketBuilder.EditMode.Move ? "이동 중" : "이동";
             rotateLabel.text = builder.Mode == RocketBuilder.EditMode.Rotate ? "회전 중" : "회전";
+        }
+
+        /// <summary>
+        /// 뷰포트 RectTransform 을 카메라의 정규화 사각형으로 옮긴다. 오버레이 캔버스의
+        /// <see cref="RectTransform.GetWorldCorners"/> 는 화면 픽셀이라(StatBox 도 같은 가정) 화면 크기로
+        /// 나누기만 하면 된다. 창 크기나 화면 비율이 바뀌어도 한 프레임 뒤에 따라온다.
+        /// </summary>
+        private void UpdateViewportRect()
+        {
+            viewport.GetWorldCorners(viewportCorners);
+
+            var rect = new Rect(
+                viewportCorners[0].x / Screen.width,
+                viewportCorners[0].y / Screen.height,
+                (viewportCorners[2].x - viewportCorners[0].x) / Screen.width,
+                (viewportCorners[2].y - viewportCorners[0].y) / Screen.height);
+
+            // rect 대입은 URP 렌더 타깃 재할당을 부른다 — 값이 그대로면 건드리지 않는다.
+            if (builder.Cam.rect != rect) builder.Cam.rect = rect;
+        }
+
+        private void UpdateTopBar()
+        {
+            // builder.Changed 는 부착 때 발생하지 않으므로(EndDrag 가 Attach 만 부른다) 캐시하면
+            // 낡은 값이 남는다. 부품 몇 개짜리 합이라 매 프레임 다시 세는 편이 싸다.
+            int installed = 0;
+            if (rocket != null)
+            {
+                rocket.GetComponentsInChildren(placedParts);
+                for (int i = 0; i < placedParts.Count; i++)
+                {
+                    if (placedParts[i].Stats != null) installed += placedParts[i].Stats.Price;
+                }
+            }
+
+            ResearchPrototypeModel model = ResearchFlowSession.GetOrCreate().Model;
+            topBarText.text =
+                $"{model.Year}년 {model.Quarter}분기      연구비 {model.Funds:N0}      설치 비용 {installed:N0}";
         }
 
         private void RebuildPresetPanel()

@@ -48,6 +48,8 @@ namespace Simulation
         [Header("Alignment guides")]
         [SerializeField] private float heightTolerance = 0.25f; // m
         [SerializeField] private float azimuthTolerance = 20f;  // 도
+        [SerializeField] private float rotationSnapStep = 45f;      // 도
+        [SerializeField] private float rotationSnapTolerance = 7f;  // 도
         [SerializeField] private float guideHalfLength = 2.2f;  // 세로선 절반 길이(m)
         [SerializeField] private float guideWidth = 0.02f;
         [SerializeField] private Color guideColor = new(0.2f, 0.9f, 1f);
@@ -56,6 +58,7 @@ namespace Simulation
         private const int RingSegments = 32;
         private const float MinRadius = 1e-3f; // 축 위에서는 방위각이 정의되지 않는다
         private const float HandleGrabPixels = 14f;
+        private const float DragSlopPixels = 4f;
 
         // 유니티 씬 뷰와 같은 배색. 초록(로컬 up)이 추력 방향이라 플레이어가 제일 자주 잡는 축이다.
         private static readonly Color[] AxisColors = { Color.red, Color.green, Color.blue };
@@ -76,15 +79,17 @@ namespace Simulation
         private Vector3 _grabPosition;
         private float _grabT;
         private float _grabAngle;
+        private Quaternion _grabRotation;
+        private float _rotationTotal;
 
         private RocketPart _dragged;
         private Collider _draggedCollider;
         private Transform _dragParent;
         private Vector3 _dragOrigin;
-        private Quaternion _dragOriginRotation;
+        private Vector2 _dragStart;
+        private bool _dragMoved;
         private Plane _dragPlane;
         private bool _overRocket;
-        private bool _overGround;
         private bool _spawnedFromPreset;
         private Vector3 _attachPoint;
 
@@ -168,8 +173,15 @@ namespace Simulation
 
             if (_dragged != null)
             {
-                if (mouse.leftButton.isPressed) Drag(position);
-                else EndDrag();
+                if (!mouse.leftButton.isPressed) EndDrag();
+                // 누른 자리에서 몇 픽셀은 움직여야 드래그로 친다. 아니면 고르려고 누른 순간
+                // 부품이 커서 아래 표면으로 옮겨진다 — 자기 콜라이더가 꺼져 뒤쪽 본체가 맞는다.
+                else if (_dragMoved || (position - _dragStart).sqrMagnitude > DragSlopPixels * DragSlopPixels)
+                {
+                    _dragMoved = true;
+                    Drag(position);
+                }
+
                 return;
             }
 
@@ -261,9 +273,8 @@ namespace Simulation
         private void BeginDrag(Vector2 screenPosition)
         {
             if (rocket.Launched) return;
-            if (!Physics.Raycast(cam.ScreenPointToRay(screenPosition), out RaycastHit hit)) return;
 
-            RocketPart part = hit.collider.GetComponentInParent<RocketPart>();
+            RocketPart part = PickPart(cam.ScreenPointToRay(screenPosition));
             if (part == null) return;
 
             // 프리셋 없는 엔진은 조용히 0추력으로 붙는 대신 아예 집히지 않게 막는다.
@@ -282,10 +293,10 @@ namespace Simulation
             _dragged = part;
             _dragParent = part.transform.parent;
             _dragOrigin = part.transform.position;
-            _dragOriginRotation = part.transform.rotation;
             _dragPlane = new Plane(-cam.transform.forward, _dragOrigin);
+            _dragStart = screenPosition;
+            _dragMoved = _spawnedFromPreset; // 프리셋에서 꺼낸 엔진은 처음부터 커서를 따라야 한다
             _overRocket = false;
-            _overGround = false;
 
             // 자기 콜라이더가 표면 레이캐스트를 가로막지 않게 잠시 끈다.
             _draggedCollider = part.GetComponent<Collider>();
@@ -293,14 +304,37 @@ namespace Simulation
 
             part.transform.SetParent(null, true); // 이미 붙어 있었다면 떼어낸다
             Select(part);
-            Drag(screenPosition);
+            if (_dragMoved) Drag(screenPosition);
+        }
+
+        /// <summary>
+        /// 광선에 맞은 부품 중 가장 가까운 것. 맨 <c>Physics.Raycast</c> 로는 집을 수 없다 —
+        /// 엔진은 중심이 표면에 놓여 절반이 본체에 파묻히므로, 실루엣 근처를 정확히 찍어도
+        /// 본체 캡슐이 먼저 맞아 집기가 실패했다. 클릭 한 번뿐인 경로라 RaycastAll 로 충분하다.
+        /// </summary>
+        private RocketPart PickPart(Ray ray)
+        {
+            RocketPart best = null;
+            float bestDistance = float.PositiveInfinity;
+
+            foreach (RaycastHit hit in Physics.RaycastAll(ray))
+            {
+                if (hit.distance >= bestDistance) continue;
+
+                RocketPart part = hit.collider.GetComponentInParent<RocketPart>();
+                if (part == null) continue;
+
+                best = part;
+                bestDistance = hit.distance;
+            }
+
+            return best;
         }
 
         private void Drag(Vector2 screenPosition)
         {
             Ray ray = cam.ScreenPointToRay(screenPosition);
             _overRocket = false;
-            _overGround = false;
 
             // 커서가 가리키는 표면이 깊이를 결정하므로 카메라를 어느 각도로 돌려도 보이는 자리에 놓인다.
             // 자세는 건드리지 않는다 — 회전시킨 자세가 곧 추력 방향이라 임의로 세우면 힘이 바뀐다.
@@ -314,7 +348,7 @@ namespace Simulation
                 }
                 else
                 {
-                    _overGround = true; // 지면이든 다른 물체든, 놓을 자리는 있다
+                    // 지면이든 다른 물체든 붙을 곳은 아니다 — 커서만 따라가다 놓으면 사라진다.
                     _dragged.transform.position = hit.point;
                     HideGuides();
                 }
@@ -335,30 +369,23 @@ namespace Simulation
             _draggedCollider = null;
             HideGuides();
 
-            if (_overRocket)
+            _spawnedFromPreset = false;
+
+            // 엔진은 로켓에 붙어 있을 때만 존재한다. 로켓 밖에 놓으면 떼어낸 것으로 보고 지우고,
+            // 프리셋에서 갓 꺼낸 것도 같은 규칙이라 "붙는 자리에 놓아야 생긴다"가 된다.
+            if (!_dragMoved)
+            {
+                part.transform.SetParent(_dragParent, true); // 움직이지 않은 클릭은 선택일 뿐이다
+            }
+            else if (_overRocket)
             {
                 rocket.Attach(part, _attachPoint);
             }
-            else if (_overGround)
-            {
-                // 바닥에 그대로 둔다. 로켓의 자식이 아니므로 발사해도 따라가지 않는다.
-            }
-            else if (_spawnedFromPreset)
-            {
-                // 허공에 놓은 새 엔진은 회수할 방법이 없다 — 꺼낸 적 없던 것으로 되돌린다.
-                Destroy(part.gameObject);
-                _spawnedFromPreset = false;
-                Select(null);
-                return;
-            }
             else
             {
-                part.transform.SetParent(_dragParent, true);
-                part.transform.position = _dragOrigin;
-                part.transform.rotation = _dragOriginRotation;
+                Destroy(part.gameObject);
+                Select(null);
             }
-
-            _spawnedFromPreset = false;
         }
 
         // ---- 선택 부품 편집 (축 구속 기즈모) --------------------------------------------------
@@ -383,12 +410,6 @@ namespace Simulation
 
                 _grabAxis = -1;
                 HideGuides();
-
-                // 지면에 두었던 부품을 표면까지 끌어왔으면 이제 진짜 자식으로 붙인다.
-                // 안 그러면 발사할 때 혼자 남는다.
-                if (_selected.transform.parent != rocket.transform)
-                    rocket.Attach(_selected, _selected.transform.position);
-
                 return;
             }
 
@@ -409,6 +430,8 @@ namespace Simulation
             // 기준도 같이 돌아 각도 변화가 정확히 상쇄되고, 링이 죽은 것처럼 보인다.
             _grabAxisWorld = part.rotation * Axis(_grabAxis);
             _grabReference = part.rotation * Axis((_grabAxis + 1) % 3);
+            _grabRotation = part.rotation;
+            _rotationTotal = 0f;
 
             if (_mode == EditMode.Move) ClosestPointOnAxis(_grabPosition, _grabAxisWorld, ray, out _grabT);
             else AngleOnPlane(_grabPosition, _grabAxisWorld, _grabReference, ray, out _grabAngle);
@@ -432,10 +455,14 @@ namespace Simulation
 
             if (!AngleOnPlane(_grabPosition, _grabAxisWorld, _grabReference, ray, out float angle)) return;
 
-            // ponytail: 프레임 델타를 누적한다. ESC 로 원래 자세 복원이 필요해지면
-            // 잡을 때의 회전을 저장해 절대각(AngleAxis)으로 바꾼다.
-            part.Rotate(_grabAxisWorld, Mathf.DeltaAngle(_grabAngle, angle), Space.World);
+            // 누적은 보정 전 각도로만 하고, 스냅 결과는 잡을 때 자세에 절대각으로 얹는다.
+            // 스냅된 자세를 다시 입력으로 먹이면(델타 누적) 첫 스냅점에 눌어붙어 빠져나오지 못한다.
+            _rotationTotal += Mathf.DeltaAngle(_grabAngle, angle);
             _grabAngle = angle;
+
+            float snapped = SnapAngle(_rotationTotal, rotationSnapStep, rotationSnapTolerance);
+            part.rotation = Quaternion.AngleAxis(snapped, _grabAxisWorld) * _grabRotation;
+            ShowRotationGuide(snapped, snapped != _rotationTotal);
         }
 
         /// <summary>
@@ -739,6 +766,36 @@ namespace Simulation
             float rad = azimuth * Mathf.Deg2Rad;
             return new Alignment(new Vector3(Mathf.Sin(rad) * radius, height, Mathf.Cos(rad) * radius),
                 snappedHeight, snappedAzimuth);
+        }
+
+        /// <summary>
+        /// <paramref name="degrees"/> 를 <paramref name="step"/> 의 배수로 끌어당긴다. 허용치 밖이면
+        /// 원본을 그대로 돌려준다 — 정렬 가이드와 같은 규약이라 "맞추려 했을 때만" 보정한다.
+        /// </summary>
+        public static float SnapAngle(float degrees, float step, float tolerance)
+        {
+            if (step <= 0f) return degrees;
+
+            float nearest = Mathf.Round(degrees / step) * step;
+            return Mathf.Abs(degrees - nearest) <= tolerance ? nearest : degrees;
+        }
+
+        /// <summary>
+        /// 회전이 스냅에 걸린 프레임에만 기준선을 띄운다 — 이동 가이드와 같은 규약이라, 선이 보이면
+        /// 곧 "지금 각도가 보정됐다"는 뜻이다. 회전 모드에서는 링이 꺼져 있어 세로선을 재사용한다.
+        /// </summary>
+        private void ShowRotationGuide(float snapped, bool active)
+        {
+            _axis.enabled = active;
+            if (!active) return;
+
+            Vector3 origin = _selected.transform.position;
+            Vector3 direction = Quaternion.AngleAxis(snapped, _grabAxisWorld) * _grabReference;
+
+            // _axis 는 로켓의 자식이고 useWorldSpace = false 다(로켓 스케일 1).
+            _axis.SetPosition(0, rocket.transform.InverseTransformPoint(origin));
+            _axis.SetPosition(1, rocket.transform.InverseTransformPoint(
+                origin + direction * (GizmoScale(origin) * 1.3f)));
         }
 
         private void ShowGuides(Alignment alignment)
