@@ -16,7 +16,7 @@
 | Next action | Answer Q-011, then plan main-game integration (R-018 remainder, R-019). Nothing else is authorized. |
 
 Related documents: `docs/rocket-simulation.md` (as-is system description, updated by this work),
-`docs/artemis-2026-gdd/08_로켓_테스트.md`, `docs/artemis-2026-gdd/18_확정사항_및_변경금지선.md`.
+`docs/artemis-2026-gdd/08_로켓_발사.md`, `docs/artemis-2026-gdd/18_확정사항_및_변경금지선.md`.
 
 > **Open conflict at finish.** UD-013 ("all of these features go into the main game") contradicts SF-010
 > (GDD 18 change-freeze line: "the player does not directly control", results decided by probability
@@ -50,7 +50,7 @@ Per UD-013 these features are intended for the main game, but the integration fo
 | SF-007 | The drag plane passed through the part's starting position facing the camera, so free camera rotation would rotate that reference plane too. | `RocketBuilder.cs:50-58` (pre-change) |
 | SF-008 | `RocketSlotTests.FindFreeSlot_SkipsOccupied_AndRespectsRadius` locked the slot model; changing the attachment model required replacing it. | `Assets/Tests/EditMode/Simulation/RocketSlotTests.cs:8-25` (deleted) |
 | SF-009 | `Border.Simulation.asmdef` references `Border` and `Unity.InputSystem`; legacy `UnityEngine.Input` is unusable because `activeInputHandler: 1`. | `Border.Simulation.asmdef`, `docs/rocket-simulation.md` |
-| SF-010 | GDD 18 fixes as **change-freeze lines**: "the player does not directly control", results are probabilistic and decided once before the scene, the 3D scene only presents the decided result. GDD 08 §1: "multi-stage separation and manual control are not implemented"; §10 lists no drag, no real trajectory computation. | `docs/artemis-2026-gdd/18_확정사항_및_변경금지선.md`, `docs/artemis-2026-gdd/08_로켓_테스트.md` |
+| SF-010 | GDD 18 fixes as **change-freeze lines**: "the player does not directly control", results are probabilistic and decided once before the scene, the 3D scene only presents the decided result. GDD 08 §1: "multi-stage separation and manual control are not implemented"; §10 lists no drag, no real trajectory computation. | `docs/artemis-2026-gdd/18_확정사항_및_변경금지선.md`, `docs/artemis-2026-gdd/08_로켓_발사.md` |
 | SF-011 | `docs/rocket-simulation.md` described the scope as "two engines attached, vertical launch" and excluded fuel explicitly; it had to be updated with this change. | `docs/rocket-simulation.md:6-7` (pre-change) |
 | SF-012 | The rocket's collider is the **CapsuleCollider on the child `Body`** (`!u!136`), `Body` scale `(1, 2, 1)`. The root `Rocket` has no collider. Engines use BoxColliders (`!u!65`), the ground a MeshCollider (`!u!64`). Surface raycasting therefore targets that capsule and identification needs `GetComponentInParent<Rocket>()`. | scene `:236,566,678,805,182` |
 | SF-013 | Existing code already exposes tuning values as `[SerializeField] private` (`thrust = 1200`, `snapRadius = 1`), so exposing fuel the same way matches project conventions. | `RocketPart.cs:10`, `Rocket.cs:11-12` (pre-change) |

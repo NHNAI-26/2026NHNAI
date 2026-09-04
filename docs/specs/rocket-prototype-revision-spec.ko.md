@@ -16,7 +16,7 @@
 | 다음 행동 | Q-011 답변 후 본편 편입(R-018 잔여분, R-019) 계획. 그 외에는 승인된 것이 없음. |
 
 관련 문서: `docs/rocket-simulation.md` (현재 시스템 설명, 이번 작업으로 갱신됨),
-`docs/artemis-2026-gdd/08_로켓_테스트.md`, `docs/artemis-2026-gdd/18_확정사항_및_변경금지선.md`.
+`docs/artemis-2026-gdd/08_로켓_발사.md`, `docs/artemis-2026-gdd/18_확정사항_및_변경금지선.md`.
 
 > **종료 시점 미해결 충돌.** UD-013("이 기능들이 전부 본편에 들어간다")은 SF-010(GDD 18 변경 금지선:
 > "플레이어는 직접 조종하지 않는다", 결과 확률 선결정; GDD 08 §1: "수동 조종은 구현하지 않는다")과
@@ -47,7 +47,7 @@ UD-013에 따라 이 기능들은 본편 편입 대상이지만, 편입 형태�
 | SF-007 | 드래그 평면은 부품 시작 위치를 지나고 카메라를 향한다. 카메라를 돌리면 기준 평면도 함께 돈다. | `RocketBuilder.cs:50-58` (변경 전) |
 | SF-008 | `RocketSlotTests`가 슬롯 모델을 잠그고 있어 부착 모델 변경 시 교체 필요. | `RocketSlotTests.cs:8-25` (삭제됨) |
 | SF-009 | `Border.Simulation.asmdef`는 `Border`, `Unity.InputSystem` 참조. `activeInputHandler: 1`이라 레거시 `UnityEngine.Input` 사용 불가. | `Border.Simulation.asmdef` |
-| SF-010 | GDD 18 **변경 금지선**: "플레이어는 직접 조종하지 않는다", 결과는 확률로 한 번만 결정, 3D 장면은 결정된 결과를 표현. GDD 08 §1: "다단 분리나 수동 조종은 구현하지 않는다", §10: 실제 비행 경로 계산 없음. | `18_확정사항_및_변경금지선.md`, `08_로켓_테스트.md` |
+| SF-010 | GDD 18 **변경 금지선**: "플레이어는 직접 조종하지 않는다", 결과는 확률로 한 번만 결정, 3D 장면은 결정된 결과를 표현. GDD 08 §1: "다단 분리나 수동 조종은 구현하지 않는다", §10: 실제 비행 경로 계산 없음. | `18_확정사항_및_변경금지선.md`, `08_로켓_발사.md` |
 | SF-011 | `docs/rocket-simulation.md`가 범위를 "엔진 2개 부착 후 수직 발사"로 적고 연료를 명시적 제외로 기술 → 갱신 필요. | `docs/rocket-simulation.md:6-7` (변경 전) |
 | SF-012 | 로켓 콜라이더는 **자식 `Body`의 CapsuleCollider**(`!u!136`), `Body` 스케일 `(1, 2, 1)`. 루트에는 콜라이더 없음. 엔진 BoxCollider(`!u!65`), 지면 MeshCollider(`!u!64`). 표면 판정은 `GetComponentInParent<Rocket>()` 필요. | 씬 `:236,566,678,805,182` |
 | SF-013 | 기존 코드가 이미 `[SerializeField] private`로 튜닝 값 노출(`thrust = 1200`, `snapRadius = 1`) → 연료 노출도 규약과 일치. | `RocketPart.cs:10`, `Rocket.cs:11-12` (변경 전) |
