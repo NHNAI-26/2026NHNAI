@@ -51,7 +51,7 @@ Prefer Prefab, ScriptableObject, or code changes before scene edits. Edit scenes
 
 Test in stages: new/changed test, nearby class, affected assembly, then full EditMode/PlayMode for broad changes, release, or merge gates. Rendering, audio, input, shared contracts, and state changes need more checks.
 
-For UI, shader, VFX, camera, scene, or prefab changes, verify in Game View or screenshots. Report only tests run; list skipped checks as not tested.
+For UI, shader, VFX, camera, scene, or prefab changes, verify in Game View or screenshots. Delete screenshot files once the check is done; never commit them or leave them in the working tree. Report only tests run; list skipped checks as not tested.
 
 ## Commit & Pull Request Guidelines
 

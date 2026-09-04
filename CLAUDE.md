@@ -23,7 +23,8 @@ settings, or unfamiliar SDKs. Routine C# edits should not pay that lookup cost.
 Apply validation in increasing cost order: compile/Console, new or changed tests, nearby test class, affected
 assembly, then full EditMode/PlayMode only for broad changes, release, or merge gates. UI, shader, VFX, camera,
 scene, and prefab layout changes require Game View or screenshot verification. Report only verification actually
-run; list skipped checks as not tested.
+run; list skipped checks as not tested. Screenshots are throwaway evidence: delete the files as soon as the check
+is done, and never leave them in the working tree or a commit.
 
 ## Commands
 
