@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Border.Research;
+using Border.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -382,6 +383,7 @@ namespace Simulation
             public void OnPointerEnter(PointerEventData eventData)
             {
                 background.color = EntryHoverColor;
+                ArtemisCursor.Request(ArtemisCursor.Visual.Hover);
                 owner.ShowStats(preset, (RectTransform)transform);
             }
 
@@ -394,6 +396,7 @@ namespace Simulation
             public void OnBeginDrag(PointerEventData eventData)
             {
                 background.color = EntryColor;
+                ArtemisCursor.Request(ArtemisCursor.Visual.Drag, 30);
                 owner.BeginPresetDrag(preset, eventData.position);
             }
 

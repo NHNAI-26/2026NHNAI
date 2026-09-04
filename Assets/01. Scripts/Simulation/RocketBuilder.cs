@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Border.Core;
+using Border.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -166,6 +167,7 @@ namespace Simulation
             Vector2 delta = position - _lastMouse;
             // 패널 위에서 시작한 입력은 3D 로 새면 안 된다 — 패널을 드래그하면 카메라가 돌아버린다.
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+            RequestCursor(overUI);
 
             // 핸들을 잡은 동안에는 카메라를 묶는다. 잡을 때의 t·각도는 고정이지만 광선은 아니라,
             // 궤도 회전이나 휠 줌이 끼어들면 부품이 한 프레임에 튄다.
@@ -868,6 +870,38 @@ namespace Simulation
             _mode = EditMode.None;
             _grabAxis = -1;
             Changed?.Invoke();
+        }
+
+        private void RequestCursor(bool overUI)
+        {
+            if (rocket.Launched)
+            {
+                ArtemisCursor.Request(overUI ? ArtemisCursor.Visual.Hover : ArtemisCursor.Visual.Default);
+                return;
+            }
+
+            if (_dragged != null)
+            {
+                ArtemisCursor.Request(_overRocket ? ArtemisCursor.Visual.AttachValid : ArtemisCursor.Visual.AttachInvalid, 20);
+                return;
+            }
+
+            if (_mode == EditMode.Rotate)
+            {
+                ArtemisCursor.Request(ArtemisCursor.Visual.Rotate, 10);
+                return;
+            }
+
+            if (_mode == EditMode.Move)
+            {
+                ArtemisCursor.Request(ArtemisCursor.Visual.Drag, 10);
+                return;
+            }
+
+            if (overUI)
+            {
+                ArtemisCursor.Request(ArtemisCursor.Visual.Hover);
+            }
         }
     }
 }
