@@ -18,12 +18,14 @@
 ## 2. 핵심 런타임 데이터
 
 ```csharp
-public enum StageId
+public enum MissionId
 {
-    Engine,
-    Rocket,
-    Orbit,
-    Moon
+    StaticFire,
+    LowAltitude,
+    HighAltitude,
+    TargetZone,
+    ZoneHold,
+    LowPowerZoneHold
 }
 
 public enum TestGrade
@@ -43,7 +45,7 @@ public enum LaunchVisibility
 }
 ```
 
-`StageId`는 연구 단계가 아니라 발사 목표 ID다. 연구 단계 자체는 엔진 프리셋 연구와 새 엔진 개발만 가진다.
+`MissionId`는 연구 단계가 아니라 발사 미션 ID다. 연구 단계 자체는 엔진 프리셋 연구와 새 엔진 개발만 가진다. 기존 `Engine/Rocket/Orbit/Moon` 단계 ID는 사용하지 않는다.
 
 ### GameState
 
@@ -60,10 +62,7 @@ public sealed class GameState
 
     public int developedEnginePresetCount = 1;
     public EnginePresetState[] enginePresets;
-    public StageLaunchState engineTest;
-    public StageLaunchState rocket;
-    public StageLaunchState orbit;
-    public StageLaunchState moon;
+    public MissionLaunchState[] missions;
 
     public int totalFundsSpent;
     public int totalLaunches;
@@ -89,13 +88,13 @@ public sealed class EnginePresetState
 }
 ```
 
-### StageLaunchState
+### MissionLaunchState
 
 ```csharp
 [Serializable]
-public sealed class StageLaunchState
+public sealed class MissionLaunchState
 {
-    public StageId id;
+    public MissionId id;
     public int attemptCount;
     public TestGrade? bestGrade;
     public bool unlocked;
@@ -108,7 +107,7 @@ public sealed class StageLaunchState
 [Serializable]
 public sealed class DesignData
 {
-    public StageId stageId;
+    public MissionId missionId;
     public int year;
     public int quarter;
     public int mapSeed;
@@ -149,7 +148,7 @@ public sealed class InstalledEngineData
 [Serializable]
 public sealed class SimRunData
 {
-    public StageId stageId;
+    public MissionId missionId;
     public int year;
     public int quarter;
     public int mapSeed;
@@ -213,7 +212,7 @@ public sealed class SimRunData
 - 새 엔진 프리셋 개발
 - 개발된 프리셋 수 관리
 - 엔진 프리셋 레벨 상한 처리
-- 단계 해금 검사
+- 미션 해금 검사
 - 엔진 프리셋 스탯 갱신
 
 ### ProbabilityResolver
@@ -256,7 +255,7 @@ public sealed class SimRunData
 - 즉시 지원금
 - 분기 연구비 변화
 - 총계 기록
-- 단계 해금
+- 미션 해금
 
 ## 4. 데이터 에셋
 
@@ -291,13 +290,13 @@ baseIgnitionReliability
 statGainByLevel
 ```
 
-### StageConfig
+### MissionConfig
 
 ```text
-stageId
+missionId
 displayName
 launchCost
-unlockRequiredPreviousStage
+unlockRequiredPreviousMission
 unlockRequiredGrade
 designScreenPrefabId
 simulationScreenPrefabId
@@ -318,7 +317,7 @@ availableForFinalMission
 
 ```text
 incidentId
-stageId
+missionId
 relatedDesignFactors
 allowedGrades
 recoveredForGrades
@@ -329,7 +328,7 @@ resultReasonText
 ### DesignConfig
 
 ```text
-stageId
+missionId
 availablePartIds
 attachmentPoints
 forceMin
@@ -365,7 +364,7 @@ function ExecuteResearch(enginePreset, statId, mode):
     enginePreset.level = min(enginePreset.level + levelGain, 5)
     IncreaseEngineStat(enginePreset, statId, statGain)
 
-    CheckStageUnlocks()
+    CheckMissionUnlocks()
     EndQuarter()
 ```
 
@@ -401,14 +400,14 @@ function DevelopNewEnginePreset():
 ### 설계 진입
 
 ```pseudo
-function EnterDesign(stage):
-    if not stage.unlocked:
+function EnterDesign(mission):
+    if not mission.unlocked:
         return Locked
 
-    if funds < stage.launchCost:
+    if funds < mission.launchCost:
         return NotEnoughFunds
 
-    designData = CreateOrLoadDesignData(stage, currentYear, currentQuarter)
+    designData = CreateOrLoadDesignData(mission, currentYear, currentQuarter)
     HideResearchScreen()
     ShowDesignScreen(designData)
 ```
@@ -427,20 +426,20 @@ function ReturnFromDesign():
 ### 발사 시작
 
 ```pseudo
-function ConfirmLaunch(stage, designData, visibility):
-    totalCost = stage.launchCost + designData.reservedEngineInstallCost
+function ConfirmLaunch(mission, designData, visibility):
+    totalCost = mission.launchCost + designData.reservedEngineInstallCost
 
     if funds < totalCost:
         return NotEnoughFunds
 
-    if stage.id == Moon:
+    if mission.id == LowPowerZoneHold:
         visibility = FinalMission
 
     funds -= totalCost
     totalFundsSpent += totalCost
 
     designData.launchVisibility = visibility
-    simRunData = ProbabilityResolver.Resolve(stage, designData)
+    simRunData = ProbabilityResolver.Resolve(mission, designData)
 
     Persist(simRunData)
     HideDesignScreen()
@@ -453,7 +452,7 @@ function ConfirmLaunch(stage, designData, visibility):
 function FinishSimulation():
     ResultApplier.ApplyOnce(simRunData)
 
-    if IsMoonVictory(simRunData):
+    if IsFinalMissionVictory(simRunData):
         ShowVictoryEnding(simRunData)
         return
 
@@ -468,18 +467,18 @@ function FinishSimulation():
 ## 6. 확률 처리 의사코드
 
 ```pseudo
-function GetSuccessChance(stage, designData):
-    experience = min(stage.attemptCount * 3, 9)
+function GetSuccessChance(mission, designData):
+    experience = min(mission.attemptCount * 3, 9)
     design = round((designData.designFit - 50) * 0.4)
     visibility = GetLaunchVisibilityModifier(designData.launchVisibility)
     installedEngineScore = CalculateInstalledEngineScore(designData.installedEngines)
-    certification = GetPreviousCertificationBonus(stage.id)
+    certification = GetPreviousMissionBonus(mission.id)
 
-    if stage.id == Engine:
+    if mission.id == StaticFire:
         selectedEngineScore = CalculateSelectedEngineScore(designData.installedEngines[0])
         raw = 20 + selectedEngineScore * 0.8 + experience + design + visibility
     else:
-        raw = 20 + installedEngineScore * GetStageEngineWeight(stage.id)
+        raw = 20 + installedEngineScore * GetMissionEngineWeight(mission.id)
                  + certification
                  + experience
                  + design
@@ -492,13 +491,13 @@ function GetSuccessChance(stage, designData):
 
 단순 구현 방법:
 
-1. 세션 시드, 현재 분기, 단계 ID로 `mapSeed` 생성
-2. 단계별 목표 경로 패턴 중 하나 선택
-3. 단계별 목표 난이도에 맞는 위험 구간 또는 보정 방향 표시
+1. 세션 시드, 현재 분기, 미션 ID로 `mapSeed` 생성
+2. 미션별 목표 경로 패턴 중 하나 선택
+3. 미션별 목표 난이도에 맞는 위험 구간 또는 보정 방향 표시
 4. 출발 지점과 목표 지점 배치
 5. 설계 입력과 엔진 ON/OFF 타이밍으로 예상 경로와 `designFit` 계산
 
-같은 분기와 같은 단계에서는 설계 화면을 다시 열어도 같은 맵과 목표 경로가 나와야 한다. 발사하지 않고 연구 단계로 돌아오면 비용과 시간은 그대로다.
+같은 분기와 같은 미션에서는 설계 화면을 다시 열어도 같은 맵과 목표 경로가 나와야 한다. 발사하지 않고 연구 단계로 돌아오면 비용과 시간은 그대로다.
 
 ## 8. 3D 시퀀스 구현 방식
 
@@ -530,10 +529,10 @@ public enum SimulationPhase
 }
 ```
 
-각 단계 컨트롤러는 공통 인터페이스를 구현한다.
+각 미션 컨트롤러는 공통 인터페이스를 구현한다.
 
 ```csharp
-public interface IStageSimulation
+public interface IMissionSimulation
 {
     void Initialize(SimRunData data);
     void Play();
@@ -552,7 +551,7 @@ if (simRunData.resultApplied)
 }
 
 simRunData.resultApplied = true;
-ApplyRewardsAndStageRecord();
+ApplyRewardsAndMissionRecord();
 ```
 
 아래 상황에서도 한 번만 적용되어야 한다.
