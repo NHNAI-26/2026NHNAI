@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using Border.Core;
+using Border.Research;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -209,6 +210,62 @@ namespace Simulation.Tests
             Assert.AreEqual(EnginePresetLibrarySO.MaxSlots, library.Slots.Count, "슬롯은 10개를 넘을 수 없다.");
         }
 
+        [Test]
+        public void RuntimeBridge_BuildRuntimeLibrary_MapsResearchBySlotIndex()
+        {
+            var model = new ResearchPrototypeModel();
+            EngineStatsSO base0 = Stats(fuel: 100f, cooling: 60f, output: 1200f, ignition: 100f);
+            EngineStatsSO base1 = Stats(fuel: 200f, cooling: 80f, output: 1400f, ignition: 50f);
+            var library = Track(ScriptableObject.CreateInstance<EnginePresetLibrarySO>());
+            SetField(library, "slots", new List<EngineStatsSO> { base0, base1 });
+
+            model.ExecuteEngineResearch(EnginePresetId.Engine02, EngineStatId.MaxOutput, focused: true, score: 85);
+
+            EnginePresetLibrarySO runtimeLibrary = TrackRuntimeLibrary(
+                ResearchEnginePresetRuntimeBridge.BuildRuntimeLibrary(model, library));
+
+            Assert.AreEqual(EnginePresetLibrarySO.MaxSlots, runtimeLibrary.Slots.Count);
+            Assert.AreEqual(0, runtimeLibrary.Slots[0].PresetIndex);
+            Assert.AreEqual(1, runtimeLibrary.Slots[1].PresetIndex);
+            Assert.AreEqual(base0.MaxOutput, runtimeLibrary.Slots[0].MaxOutput, 0.001f);
+
+            EnginePresetState researched = model.GetEnginePreset(EnginePresetId.Engine02);
+            float expectedOutput = base1.MaxOutput * researched.MaxOutput / ResearchPrototypeModel.InitialEngineStat;
+            Assert.AreEqual(expectedOutput, runtimeLibrary.Slots[1].MaxOutput, 0.001f);
+            Assert.AreEqual(ResearchPrototypeModel.EngineInstallCost, runtimeLibrary.Slots[1].Price);
+            Assert.AreEqual(1400f, base1.MaxOutput, 0.001f, "원본 SO 값은 연구 반영으로 바뀌면 안 된다.");
+        }
+
+        [Test]
+        public void RuntimeBridge_BuildRuntimeLibrary_FillsMissingSlotsWithDefaults()
+        {
+            var model = new ResearchPrototypeModel();
+
+            EnginePresetLibrarySO runtimeLibrary = TrackRuntimeLibrary(
+                ResearchEnginePresetRuntimeBridge.BuildRuntimeLibrary(model, null));
+
+            Assert.AreEqual(EnginePresetLibrarySO.MaxSlots, runtimeLibrary.Slots.Count);
+            Assert.AreEqual(5, runtimeLibrary.Slots[5].PresetIndex);
+            Assert.AreEqual(ResearchPrototypeModel.EngineInstallCost, runtimeLibrary.Slots[5].Price);
+            Assert.AreEqual(100f, runtimeLibrary.Slots[5].FuelCapacity, 0.001f);
+            Assert.AreEqual(60f, runtimeLibrary.Slots[5].Cooling, 0.001f);
+            Assert.AreEqual(BaselineOutput, runtimeLibrary.Slots[5].MaxOutput, 0.001f);
+            Assert.AreEqual(100f, runtimeLibrary.Slots[5].IgnitionReliability, 0.001f);
+        }
+
+        [Test]
+        public void RocketBuilder_SetPresetLibrary_AcceptsRuntimeLibrary()
+        {
+            var model = new ResearchPrototypeModel();
+            EnginePresetLibrarySO runtimeLibrary = TrackRuntimeLibrary(
+                ResearchEnginePresetRuntimeBridge.BuildRuntimeLibrary(model, null));
+            RocketBuilder builder = Track(new GameObject("builder")).AddComponent<RocketBuilder>();
+
+            builder.SetPresetLibrary(runtimeLibrary);
+
+            Assert.AreSame(runtimeLibrary, builder.PresetLibrary);
+        }
+
         private EngineStatsSO Stats(float fuel, float cooling, float output, float ignition)
         {
             var stats = Track(ScriptableObject.CreateInstance<EngineStatsSO>());
@@ -228,6 +285,16 @@ namespace Simulation.Tests
             var part = go.AddComponent<RocketPart>();
             SetField(part, "stats", stats);
             return part;
+        }
+
+        private EnginePresetLibrarySO TrackRuntimeLibrary(EnginePresetLibrarySO library)
+        {
+            Track(library);
+            for (int i = 0; i < library.Slots.Count; i++)
+                if (library.Slots[i] != null)
+                    Track(library.Slots[i]);
+
+            return library;
         }
 
         private T Track<T>(T target) where T : Object
