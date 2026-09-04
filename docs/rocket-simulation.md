@@ -4,8 +4,9 @@
 드래그해서 붙이고, 화면을 돌려가며 배치를 확인한 뒤 발사한다. 연료가 떨어지면 추락한다.
 씬은 `Assets/00. Scenes/SimulationTest.unity`.
 
-현재 범위는 **표면 자유 부착 → 발사 → 연료 소진 → 낙하 → 착지**까지. 엔진은 프리팹이고 연소 중
-불꽃이 나온다. 단 분리, 부품 카탈로그, 항력, 고도별 대기밀도, 짐벌 제어는 아직 없다.
+현재 범위는 **좌측 프리셋 패널에서 엔진 꺼내기 → 표면 자유 부착 → 자세 회전 → 발사 → 연료 소진 →
+낙하 → 착지**까지. 엔진은 프리팹이고 연소 중 불꽃이 나온다. 단 분리, 항력, 고도별 대기밀도,
+짐벌 제어는 아직 없다.
 
 계획·결정 이력은 `docs/specs/rocket-prototype-revision-spec.md`에 있다. 이 기능들을 본편에 어떤 형태로
 편입할지(GDD 18의 "플레이어는 직접 조종하지 않는다"와의 충돌)는 그 문서에서 **미해결**이다.
@@ -17,17 +18,20 @@ API는 런타임에 예외를 던진다. 마우스·키보드를 읽으려면 `U
 `Assets/01. Scripts/Border.asmdef`는 upstream `com.borderjung.unity-modules`를 vendoring한 복사본이라
 참조를 추가하면 로컬 포크가 된다.
 
-그래서 `Assets/01. Scripts/Simulation/Border.Simulation.asmdef`를 따로 둔다. 같은 프로젝트의
+그래서 `Assets/01. Scripts/Simulation/Simulation.asmdef`를 따로 둔다. 같은 프로젝트의
 `Border.Input.asmdef`가 이미 똑같은 방식(중첩 asmdef + `Unity.InputSystem` 참조)을 쓰고 있어
 새로운 패턴이 아니다.
 
 `Border` 참조는 `Border.Core.Log` 때문이다.
 
-대안으로 uGUI `EventSystem` + `PhysicsRaycaster` + `IDragHandler` 경로도 검토했다. `UnityEngine.UI`
-어셈블리 안에 `UnityEngine.EventSystems`가 있어 asmdef를 안 건드려도 되지만, 발사 버튼 하나를 위해
-Canvas / GraphicRaycaster / Image / TMP / 인스펙터 전용 `onClick` UnityEvent 바인딩이 딸려온다.
-씬 오브젝트 4개 + 수작업 배선보다 12줄 JSON 하나가 싸서 택하지 않았다. 실제 빌드 UI가 필요해지면
-그때 얹으면 되고, 드래그 코드는 그대로 재사용된다.
+uGUI 는 처음에 미뤘다 — 발사 버튼 하나에 Canvas / GraphicRaycaster / Image / TMP 가 딸려오는 게
+12줄 JSON 하나보다 비쌌다. 좌측 프리셋 패널이 들어오면서 이제는 쓴다(`RocketDesignUI`). `autoReferenced`
+덕에 asmdef 는 그대로 두고 `UnityEngine.UI` / TMP 를 참조하며, 예전 판단대로 **드래그 코드는 그대로
+재사용**한다 — 프리셋 항목의 `IBeginDragHandler` 가 엔진을 만들어 기존 드래그 상태에 얹을 뿐이다.
+
+UGUI 를 얹는 순간 3D 입력과 갈라야 한다. `RocketBuilder` 는 `Physics.Raycast` 를 직접 부르므로
+`EventSystem.current.IsPointerOverGameObject()` 로 패널 위 입력을 걸러낸다. 안 걸면 패널을 드래그할 때
+카메라가 같이 돌아간다.
 
 ## 부착 모델: 슬롯이 아니라 표면
 
@@ -38,17 +42,53 @@ Canvas / GraphicRaycaster / Image / TMP / 인스펙터 전용 `onClick` UnityEve
 로켓 뒤편에 부품을 놓을 때 깊이를 가늠할 수 없었다. 지금은 커서가 가리키는 표면 좌표가 곧 부착 좌표라
 카메라가 어느 각도에 있든 보이는 자리에 그대로 붙는다.
 
-부품 자세는 **로켓 기준을 유지한다.** 표면 법선에 눕히지 않는다. 추력이
-`transform.up * thrust`로 로켓의 up 고정(`Rocket.FixedUpdate`)이라, 측면 부품을 눕혀 놓으면
-보이는 방향과 실제 힘 방향이 어긋나기 때문이다. 부품을 눕히면서 추력도 부품 방향을 따르게 고치면
-측면 엔진이 로켓을 돌려버려 게임이 다른 것이 된다.
+부품 자세는 **플레이어가 정한다.** `Rocket.Attach`는 자세를 건드리지 않고, 추력은
+`engine.transform.up * engine.Output`으로 **엔진 자신의 up**을 따른다(`Rocket.FixedUpdate`). 눕힌
+엔진은 눕힌 방향으로 힘을 내므로 보이는 방향과 실제 힘 방향이 항상 일치한다.
+
+이건 이전 결정을 뒤집은 것이다. 예전에는 `Rocket.Attach`가 부품 회전을 로켓 회전으로 덮어썼고, 추력도
+로켓의 up 고정이었다 — "측면 엔진이 로켓을 돌려버려 게임이 다른 것이 된다"는 이유였다. 설계 화면에
+회전 조작을 넣으면서 그 결과를 받아들이기로 했다(`docs/specs/rocket-design-ui-spec.md` UD-008).
+축·각도 제한과 스냅도 두지 않았으므로(UD-011) 엔진을 뒤집어 로켓을 땅으로 밀어내는 배치까지 가능하다.
+GDD 07 §5의 "부품 자세는 로켓 기준" 조항은 이 변경에 맞춰 개정했다.
 
 `RocketBuilder.BeginDrag`가 하는 두 가지: `SetParent(null, true)`로 부품을 떼어내 재배치를 허용하고,
 부품 자신의 콜라이더를 잠시 꺼서 표면 레이캐스트를 가로막지 않게 한다.
 
-의도한 한계 두 가지 — 그리드/대칭 스냅이 없어 좌우 대칭은 눈대중이고, 겹침 검사가 없어 같은 자리에
-엔진을 여러 개 포갤 수 있다. 대칭 배치가 토크를 상쇄한다는 게임성 자체가 "잘 맞췄는지"를 묻는 것이라
-보조 도구를 넣지 않았다. 실사용에서 문제가 되면 최소 이격 검사부터 얹으면 된다.
+### 정렬 가이드
+
+부품을 끄는 동안 `RocketBuilder.Align`이 부착점을 로켓 로컬 `(높이 y, 방위각 atan2(x, z), 반경)`으로
+보고, 이미 붙어 있는 엔진에서 나온 후보와 임계값 안이면 그 축을 정확히 맞춘다. 후보는 **기존 엔진의 높이**,
+**기존 엔진의 방위각**, **그 반대편(180°)** 뿐이다. 반경은 표면이 정하므로 건드리지 않는다.
+
+**두 축은 독립이다.** Figma가 x축·y축 가이드를 따로 잡아 주는 것과 같아서 "높이만 맞고 각도는 자유"와
+"각도만 맞고 높이는 자유"가 모두 나온다. 맞은 축만 선이 뜬다 — 높이는 그 높이의 수평 링(`loop` LineRenderer,
+32세그먼트), 방위각은 그 각도의 세로선. 선은 `useWorldSpace = false`로 로켓 로컬에 그리고, 씬 YAML을
+늘리지 않으려고 `Start`에서 코드로 만든다.
+
+임계값은 방위각 `±20°`, 높이 `±0.25 m`가 기본값이고 둘 다 인스펙터 노출이다. 본체 반지름이 0.5 m라
+20°는 호 길이 약 0.17 m — "맞추려 했다"와 "다른 자리에 붙였다"를 가르는 선이다. **임계값 밖에서는 아무것도
+보정하지 않는다.** 의도적 비대칭이 게임성이라 보정이 그걸 덮으면 안 되기 때문이다. 같은 이유로 **기존에 붙어
+있는 부품은 절대 움직이지 않는다** — 새로 놓는 부품만 맞춰진다.
+
+가이드 머티리얼은 URP 기본 `Unlit`을 `Shader.Find`로 잡는다. 불꽃이 Uber 셰이더를 피한 것과 같은 이유다
+(변이 매니페스트 비용). 빌드에 넣으려면 `guideMaterial`에 실제 에셋을 물려야 한다 — `Shader.Find`는
+빌드에서 스트리핑될 수 있다.
+
+`Align`은 순수 static 함수라 씬 없이 테스트한다. 부착 경로(`Drag`)와 선택 후 이동 경로(`EditSelected`의
+`Move` 모드)가 같은 함수를 쓴다. 이동 중인 부품은 아직 로켓의 자식이라 후보에서 명시적으로 빼야 한다
+(`ignore` 인자) — 빼지 않으면 자기 자리에 자기가 스냅된다.
+
+남긴 한계:
+
+- **겹침 검사가 없다.** 높이와 방위각이 동시에 스냅되면 기존 엔진과 정확히 같은 자리로 갈 수 있다.
+- **엔진 3개 이상은 정렬돼도 균형이 아니다.** 같은 높이·반경·추력에서 토크가 상쇄되려면 방위각이 등분
+  (3개 = 120°)이어야 하는데, 기존 부품을 옮기지 않기로 했으므로 0°/180°에 둘을 붙인 뒤에는 세 번째를
+  어디에 놓아도 맞지 않는다. 균형 표시도 넣지 않았다 — 발사해 보고 기울면 아는 방식을 유지했다.
+- **회전 자세는 정렬 대상이 아니다.** 추력이 `engine.transform.up`을 따르므로 위치가 대칭이어도 자세가
+  다르면 토크는 상쇄되지 않는다.
+
+결정 근거는 `docs/specs/rocket-symmetry-assist-spec.md`에 있다.
 
 ## 카메라: 로켓 중심 궤도
 
@@ -65,7 +105,7 @@ Canvas / GraphicRaycaster / Image / TMP / 인스펙터 전용 `onClick` UnityEve
 ## 물리: 아케이드, 그러나 토크는 진짜
 
 `FixedUpdate`에서 연료가 남은 엔진마다
-`AddForceAtPosition(transform.up * thrust, engine.transform.position)`을 건다.
+`AddForceAtPosition(engine.transform.up * engine.Output, engine.transform.position)`을 건다.
 무게중심이 아니라 **엔진이 실제로 붙은 자리**에 힘을 걸기 때문에, 비대칭 배치가 코드 한 줄 없이
 토크를 만든다. 엔진 1개면 기울고, 2개를 좌우 대칭으로 붙이면 토크가 상쇄되어 똑바로 올라간다.
 "제대로 조립해야 똑바로 난다"는 게임성 전체가 이 인자 하나에서 나온다.
@@ -146,7 +186,8 @@ Canvas / GraphicRaycaster / Image / TMP / 인스펙터 전용 `onClick` UnityEve
 붙어 통째로 따라다녀 정지한 것처럼 보이고, World면 뒤로 흘러 배기처럼 보인다.
 
 `Flame`의 로컬 회전은 `(90, 0, 0)`이다. 콘은 로컬 +Z로 뿜으므로 90° 눕히면 부품의 −Y를 향한다.
-부품 자세가 로켓 기준이므로(위 "부착 모델") 이게 곧 **로켓의 −up**, 즉 추력 `transform.up`의 정반대다.
+부품 자세는 플레이어가 정하지만(위 "부착 모델") 불꽃은 부품의 자식이라 함께 돌아간다 — 그래서 언제나
+추력 `engine.transform.up`의 정반대를 향한다.
 로컬 스케일 `(2, 1.25, 2)`는 부모 엔진의 비균등 스케일 `(0.5, 0.8, 0.5)`을 상쇄해 월드 스케일을 1로
 되돌리기 위한 것이다 — 안 하면 파티클이 눌려 보인다.
 

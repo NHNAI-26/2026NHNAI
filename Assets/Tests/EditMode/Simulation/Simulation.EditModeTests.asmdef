@@ -1,8 +1,9 @@
 {
-    "name": "Border.Simulation.EditModeTests",
-    "rootNamespace": "Border.Simulation.Tests",
+    "name": "Simulation.EditModeTests",
+    "rootNamespace": "Simulation.Tests",
     "references": [
-        "Border.Simulation"
+        "Border",
+        "Simulation"
     ],
     "includePlatforms": [
         "Editor"

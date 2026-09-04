@@ -158,6 +158,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 2911710057334661046, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
+      propertyPath: stats
+      value: 
+      objectReference: {fileID: 11400000, guid: b323638d8d9bc7d4f9d0dc2458cd6100, type: 2}
     - target: {fileID: 6252574736270996124, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: m_Name
       value: Engine_B
@@ -351,6 +355,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ff667029156dcb549bcab983cae60b23, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Border.Simulation::Border.Simulation.Rocket
+  launchSeed: 20260904
 --- !u!54 &661579651
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -427,12 +432,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: Border.Simulation::Border.Simulation.RocketBuilder
   cam: {fileID: 810700273}
   rocket: {fileID: 661579650}
+  enginePrefab: {fileID: 2911710057334661046, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
+  presetLibrary: {fileID: 11400000, guid: 511c3f49a9fcc4f4d8916e8e6fed5b12, type: 2}
   orbitSensitivity: 0.3
   minPitch: -20
   maxPitch: 80
   zoomSpeed: 0.01
   minDistance: 4
   maxDistance: 60
+  rotateSensitivity: 0.5
+  heightTolerance: 0.25
+  azimuthTolerance: 20
+  guideHalfLength: 2.2
+  guideWidth: 0.02
+  guideColor: {r: 0.2, g: 0.9, b: 1, a: 1}
+  guideMaterial: {fileID: 0}
 --- !u!4 &678426948
 Transform:
   m_ObjectHideFlags: 0
@@ -819,6 +833,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 2911710057334661046, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
+      propertyPath: stats
+      value: 
+      objectReference: {fileID: 11400000, guid: b323638d8d9bc7d4f9d0dc2458cd6100, type: 2}
     - target: {fileID: 6252574736270996124, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: m_Name
       value: Engine_A

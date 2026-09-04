@@ -3,6 +3,7 @@
     "rootNamespace": "Border.Editor",
     "references": [
         "Border",
+        "Simulation",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [

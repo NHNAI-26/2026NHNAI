@@ -1,9 +1,11 @@
 {
-    "name": "Border.Simulation",
-    "rootNamespace": "Border.Simulation",
+    "name": "Simulation",
+    "rootNamespace": "Simulation",
     "references": [
         "Border",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
