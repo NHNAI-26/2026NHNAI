@@ -253,8 +253,8 @@ stageId
 displayName
 normalResearchCost
 focusedResearchCost
-testCost
-minimumTestProgress
+launchCost
+minimumLaunchProgress
 unlockProgressRequirement
 designSceneName
 simulationSceneName
@@ -328,10 +328,10 @@ function EnterDesign(stage):
     if not stage.unlocked:
         return Locked
 
-    if stage.progress < stage.minimumTestProgress:
+    if stage.progress < stage.minimumLaunchProgress:
         return ProgressTooLow
 
-    if funds < stage.testCost:
+    if funds < stage.launchCost:
         return NotEnoughFunds
 
     designData = CreateOrLoadDesignData(stage, currentYear, currentQuarter)
@@ -352,11 +352,11 @@ function ReturnFromDesign():
 
 ```pseudo
 function ConfirmLaunch(stage, designData):
-    if funds < stage.testCost:
+    if funds < stage.launchCost:
         return NotEnoughFunds
 
-    funds -= stage.testCost
-    totalFundsSpent += stage.testCost
+    funds -= stage.launchCost
+    totalFundsSpent += stage.launchCost
 
     currentEnvironment = forecast[currentTurn]
     simRunData = ProbabilityResolver.Resolve(stage, currentEnvironment, designData)
