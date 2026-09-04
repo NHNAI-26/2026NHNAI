@@ -406,10 +406,21 @@ namespace Border.Research.Tests
         [Test]
         public void MiniGameScoring_FuelJudgement_UsesAccuracyBands()
         {
-            Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.03f), Is.EqualTo("Perfect!"));
+            Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.02f), Is.EqualTo("Perfect!"));
+            Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.03f), Is.EqualTo("Great"));
             Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.08f), Is.EqualTo("Great"));
             Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.16f), Is.EqualTo("Good"));
             Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.17f), Is.EqualTo("Miss"));
+        }
+
+        [Test]
+        public void MiniGameScoring_OutputJudgement_UsesAccuracyBands()
+        {
+            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.02f), Is.EqualTo("Perfect!"));
+            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.03f), Is.EqualTo("Great"));
+            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.08f), Is.EqualTo("Great"));
+            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.16f), Is.EqualTo("Good"));
+            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.17f), Is.EqualTo("Miss"));
         }
 
         [Test]
@@ -465,6 +476,35 @@ namespace Border.Research.Tests
 
                 Assert.That(completed, Is.False);
                 Assert.That(controller.IsShowingResult, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_OutputStageShowsJudgementBeforeNextStep()
+        {
+            var host = new GameObject("Mini Game Test Host");
+            bool completed = false;
+
+            try
+            {
+                ResearchMiniGameController controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, _ => completed = true);
+
+                controller.RecordOutputStageForTests(0.35f);
+
+                Assert.That(completed, Is.False);
+                Assert.That(controller.IsShowingOutputJudgementForTests, Is.True);
+                Assert.That(controller.GetStateTextForTests(), Does.Contain("판정 1/3"));
+
+                controller.ForceAdvanceOutputJudgementForTests();
+
+                Assert.That(completed, Is.False);
+                Assert.That(controller.IsShowingOutputJudgementForTests, Is.False);
+                Assert.That(controller.IsShowingResult, Is.False);
             }
             finally
             {
@@ -662,6 +702,8 @@ namespace Border.Research.Tests
                 Assert.That(controller.Model.GetEnginePreset(EnginePresetId.Engine01).Completion, Is.EqualTo(ResearchPrototypeModel.ResearchCompletionGain));
                 Assert.That(GetText(FindText(host.transform, "SelectedEngineText")), Does.Contain("완성도"));
                 Assert.That(GetText(FindText(host.transform, "SelectedEngineText")), Does.Not.Contain("Lv."));
+                Assert.That(GetText(FindText(host.transform, "SelectedEngineText")), Does.Not.Contain("시험 최고"));
+                Assert.That(GetText(FindText(FindButton(host.transform, "EngineCard_Engine01").transform, "Detail")), Does.Not.Contain("최고"));
                 Transform requirementText = FindTransform(host.transform, "SelectedRequirementText");
                 Assert.That(requirementText == null || !requirementText.gameObject.activeInHierarchy, Is.True);
             }

@@ -320,7 +320,7 @@ namespace Simulation
 
             ResearchPrototypeModel model = ResearchFlowSession.GetOrCreate().Model;
             topBarText.text =
-                $"{model.Year}년 {model.Quarter}분기      연구비 {model.Funds:N0}      설치 비용 {installed:N0}";
+                $"{model.Year}년 {model.Quarter}분기      예산 {model.Funds:N0}      설치 비용 {installed:N0}";
         }
 
         private void RebuildPresetPanel()

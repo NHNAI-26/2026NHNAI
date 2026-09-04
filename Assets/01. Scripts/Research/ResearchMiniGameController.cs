@@ -27,8 +27,12 @@ namespace Border.Research
         private const string MiniGameScreenPrefabPath = "ResearchUI/ResearchMiniGameScreen";
         private const float ResultDismissSeconds = 2f;
         private const float FuelJudgementSeconds = 2f;
+        private const float OutputJudgementSeconds = 2f;
         private const float CoolingDurationSeconds = 9f;
         private const float NoInputReactionSeconds = 9f;
+        private const float PerfectJudgementThreshold = 0.02f;
+        private const float GreatJudgementThreshold = 0.08f;
+        private const float GoodJudgementThreshold = 0.16f;
         private const int FuelAttemptCount = 3;
         private const int CoolingRoundCount = 4;
         private const int OutputStageCount = 3;
@@ -53,10 +57,12 @@ namespace Border.Research
         private bool resultShowing;
         private bool resultDismissed;
         private bool fuelJudgementShowing;
+        private bool outputJudgementShowing;
         private float elapsedSeconds;
         private float roundElapsedSeconds;
         private float resultElapsedSeconds;
         private float fuelJudgementElapsedSeconds;
+        private float outputJudgementElapsedSeconds;
         private int roundIndex;
         private int activeValveIndex;
         private int fuelAttemptIndex;
@@ -89,8 +95,11 @@ namespace Border.Research
         private Image fuelFillImage;
         private Image fuelTargetImage;
         private Image fuelCurrentMarkerImage;
+        private Image fuelOuterBandImage;
+        private Image fuelPerfectBandImage;
         private Image outputFillImage;
         private TMP_Text outputLabelText;
+        private TMP_Text outputJudgementText;
         private RectTransform outputSafeZone;
         private Image coolingHotspotImage;
         private RectTransform playArea;
@@ -161,6 +170,17 @@ namespace Border.Research
             AdvanceFuelAfterJudgement();
         }
 
+        public void RecordOutputStageForTests(float normalizedFillValue)
+        {
+            outputGaugeValue = Mathf.Clamp01(normalizedFillValue);
+            RecordOutputStage();
+        }
+
+        public void ForceAdvanceOutputJudgementForTests()
+        {
+            AdvanceOutputAfterJudgement();
+        }
+
         public string GetStateTextForTests()
         {
             return stateText == null ? string.Empty : stateText.text;
@@ -172,6 +192,7 @@ namespace Border.Research
         }
 
         public bool IsShowingFuelJudgementForTests => fuelJudgementShowing;
+        public bool IsShowingOutputJudgementForTests => outputJudgementShowing;
 
         public float GetFuelTargetForTests()
         {
@@ -215,18 +236,28 @@ namespace Border.Research
 
         public static string GetFuelJudgementText(float normalizedError)
         {
+            return GetAccuracyJudgementText(normalizedError);
+        }
+
+        public static string GetOutputJudgementText(float normalizedError)
+        {
+            return GetAccuracyJudgementText(normalizedError);
+        }
+
+        private static string GetAccuracyJudgementText(float normalizedError)
+        {
             float error = Mathf.Abs(normalizedError);
-            if (error <= 0.03f)
+            if (error <= PerfectJudgementThreshold)
             {
                 return "Perfect!";
             }
 
-            if (error <= 0.08f)
+            if (error <= GreatJudgementThreshold)
             {
                 return "Great";
             }
 
-            return error <= 0.16f ? "Good" : "Miss";
+            return error <= GoodJudgementThreshold ? "Good" : "Miss";
         }
 
         public static int CalculateCoolingScore(int correctCount, int wrongCount, float averageReactionSeconds)
@@ -322,6 +353,17 @@ namespace Border.Research
                 return;
             }
 
+            if (outputJudgementShowing)
+            {
+                outputJudgementElapsedSeconds += Time.deltaTime;
+                if (outputJudgementElapsedSeconds >= OutputJudgementSeconds)
+                {
+                    AdvanceOutputAfterJudgement();
+                }
+
+                return;
+            }
+
             UpdateActiveGame();
 
             if (!gameCompleted && statId == EngineStatId.Cooling && elapsedSeconds >= CoolingDurationSeconds)
@@ -335,9 +377,13 @@ namespace Border.Research
             EnsureEventSystem();
 
 #if UNITY_EDITOR
-            if (miniGameScreenPrefab == null && Resources.Load<GameObject>(MiniGameScreenPrefabPath) == null)
+            if (miniGameScreenPrefab == null)
             {
-                RebuildDefaultPrefabsForEditor();
+                GameObject existingPrefab = Resources.Load<GameObject>(MiniGameScreenPrefabPath);
+                if (existingPrefab == null || !MiniGamePrefabHasRequiredChildren(existingPrefab))
+                {
+                    RebuildDefaultPrefabsForEditor();
+                }
             }
 #endif
 
@@ -390,8 +436,11 @@ namespace Border.Research
             fuelFillImage = FindRequiredImage(canvasTransform, "FuelFill");
             fuelTargetImage = FindRequiredImage(canvasTransform, "FuelTarget");
             fuelCurrentMarkerImage = FindRequiredImage(canvasTransform, "FuelCurrentMarker");
+            fuelOuterBandImage = FindRequiredImage(canvasTransform, "FuelOuterBand");
+            fuelPerfectBandImage = FindRequiredImage(canvasTransform, "FuelPerfectBand");
             coolingHotspotImage = FindRequiredImage(canvasTransform, "CoolingHotspot");
             outputLabelText = FindRequiredText(canvasTransform, "OutputLabel");
+            outputJudgementText = FindRequiredText(canvasTransform, "OutputJudgementText");
             outputFillImage = FindRequiredImage(canvasTransform, "OutputFill");
             outputSafeZone = FindRequiredRectTransform(canvasTransform, "SafeZone");
             resultScoreText = FindRequiredText(canvasTransform, "ResultScoreText");
@@ -414,8 +463,11 @@ namespace Border.Research
                 || fuelFillImage == null
                 || fuelTargetImage == null
                 || fuelCurrentMarkerImage == null
+                || fuelOuterBandImage == null
+                || fuelPerfectBandImage == null
                 || coolingHotspotImage == null
                 || outputLabelText == null
+                || outputJudgementText == null
                 || outputFillImage == null
                 || outputSafeZone == null
                 || resultScoreText == null
@@ -532,6 +584,7 @@ namespace Border.Research
             SetActiveGameGroup(outputGameGroup);
             UpdateOutputSafeZone();
             SetHorizontalFill(outputFillImage.rectTransform, 0f);
+            outputJudgementText.gameObject.SetActive(false);
 
             outputStageIndex = 0;
             primaryButton.gameObject.SetActive(true);
@@ -656,6 +709,7 @@ namespace Border.Research
             }
 
             SetFuelTargetLabel();
+            SetFuelJudgementBands();
 
             if (fuelFillImage != null)
             {
@@ -773,35 +827,65 @@ namespace Border.Research
 
         private void RecordOutputStage()
         {
-            if (gameCompleted || statId != EngineStatId.MaxOutput || outputStageIndex >= OutputStageCount)
+            if (gameCompleted
+                || outputJudgementShowing
+                || statId != EngineStatId.MaxOutput
+                || outputStageIndex >= OutputStageCount)
             {
                 return;
             }
 
-            outputErrors[outputStageIndex] = Mathf.Abs(outputGaugeValue - GetOutputTargetCenter(outputStageIndex));
-            AdvanceOutputStage();
+            float error = Mathf.Abs(outputGaugeValue - GetOutputTargetCenter(outputStageIndex));
+            outputErrors[outputStageIndex] = error;
+            outputStageIndex++;
+            ShowOutputJudgement(error);
         }
 
         private void RecordMissedOutputStage()
         {
-            if (gameCompleted || statId != EngineStatId.MaxOutput || outputStageIndex >= OutputStageCount)
+            if (gameCompleted
+                || outputJudgementShowing
+                || statId != EngineStatId.MaxOutput
+                || outputStageIndex >= OutputStageCount)
             {
                 return;
             }
 
             outputErrors[outputStageIndex] = 1f;
-            AdvanceOutputStage();
+            outputStageIndex++;
+            ShowOutputJudgement(1f);
         }
 
-        private void AdvanceOutputStage()
+        private void ShowOutputJudgement(float normalizedError)
         {
-            outputStageIndex++;
+            outputJudgementShowing = true;
+            outputJudgementElapsedSeconds = 0f;
+            primaryButton.interactable = false;
+            if (outputJudgementText != null)
+            {
+                outputJudgementText.text = GetOutputJudgementText(normalizedError);
+                outputJudgementText.gameObject.SetActive(true);
+            }
+
+            SetStateText($"판정 {outputStageIndex}/{OutputStageCount}", false);
+        }
+
+        private void AdvanceOutputAfterJudgement()
+        {
+            outputJudgementShowing = false;
             if (outputStageIndex >= OutputStageCount)
             {
+                primaryButton.interactable = false;
                 Complete(CalculateMaxOutputScore(outputErrors));
                 return;
             }
 
+            if (outputJudgementText != null)
+            {
+                outputJudgementText.gameObject.SetActive(false);
+            }
+
+            primaryButton.interactable = true;
             roundElapsedSeconds = 0f;
             outputGaugeValue = 0f;
             SetHorizontalFill(outputFillImage.rectTransform, 0f);
@@ -1124,6 +1208,31 @@ namespace Border.Research
             fuelTargetText.rectTransform.offsetMax = Vector2.zero;
         }
 
+        private void SetFuelJudgementBands()
+        {
+            if (fuelOuterBandImage != null)
+            {
+                SetHorizontalBand(fuelOuterBandImage.rectTransform, fuelTargetValue, GoodJudgementThreshold);
+                fuelOuterBandImage.rectTransform.SetAsLastSibling();
+            }
+
+            if (fuelPerfectBandImage != null)
+            {
+                SetHorizontalBand(fuelPerfectBandImage.rectTransform, fuelTargetValue, PerfectJudgementThreshold);
+                fuelPerfectBandImage.rectTransform.SetAsLastSibling();
+            }
+
+            if (fuelTargetImage != null)
+            {
+                fuelTargetImage.rectTransform.SetAsLastSibling();
+            }
+
+            if (fuelCurrentMarkerImage != null)
+            {
+                fuelCurrentMarkerImage.rectTransform.SetAsLastSibling();
+            }
+        }
+
         private int NextIndex(int length, int excludedIndex = -1)
         {
             if (length <= 1)
@@ -1149,6 +1258,14 @@ namespace Border.Research
         {
             target.anchorMin = new Vector2(0f, 0f);
             target.anchorMax = new Vector2(Mathf.Clamp01(fill), 1f);
+            target.offsetMin = Vector2.zero;
+            target.offsetMax = Vector2.zero;
+        }
+
+        private static void SetHorizontalBand(RectTransform target, float center, float halfWidth)
+        {
+            target.anchorMin = new Vector2(Mathf.Clamp01(center - halfWidth), 0f);
+            target.anchorMax = new Vector2(Mathf.Clamp01(center + halfWidth), 1f);
             target.offsetMin = Vector2.zero;
             target.offsetMax = Vector2.zero;
         }
@@ -1249,6 +1366,26 @@ namespace Border.Research
         }
 
 #if UNITY_EDITOR
+        private static bool MiniGamePrefabHasRequiredChildren(GameObject prefab)
+        {
+            return PrefabHasChild(prefab, "FuelOuterBand")
+                && PrefabHasChild(prefab, "FuelPerfectBand")
+                && PrefabHasChild(prefab, "OutputJudgementText");
+        }
+
+        private static bool PrefabHasChild(GameObject prefab, string childName)
+        {
+            foreach (Transform child in prefab.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name == childName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static void RebuildDefaultPrefabsForEditor()
         {
             Type builderType = Type.GetType("Border.Research.Editor.ResearchUiPrefabBuilder, Border.Editor");

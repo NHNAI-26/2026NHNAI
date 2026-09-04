@@ -40,15 +40,30 @@ namespace Border.Research.Editor
             AssetDatabase.Refresh();
         }
 
+        [MenuItem("Border/Research/Rebuild Operation UI Prefab")]
+        public static void RebuildOperationUiPrefab()
+        {
+            EnsureFolder(ResourceFolder);
+            SavePrefab(CreateOperationScreen(), "ResearchOperationScreen");
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+        }
+
         private static bool DefaultPrefabsAreCurrent()
         {
             GameObject operationScreen = AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchOperationScreen.prefab");
+            GameObject miniGameScreen = AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchMiniGameScreen.prefab");
             return operationScreen != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchDesignScreen.prefab") != null
-                && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchMiniGameScreen.prefab") != null
+                && miniGameScreen != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/EnginePresetCard.prefab") != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/DesignEnginePresetButton.prefab") != null
-                && FindChild(operationScreen.transform, "LaunchTargetColumn") == null;
+                && FindChild(operationScreen.transform, "LaunchTargetColumn") == null
+                && FindChild(operationScreen.transform, "Background") == null
+                && FindChild(operationScreen.transform, "EnginePreviewReservedArea") != null
+                && FindChild(miniGameScreen.transform, "FuelOuterBand") != null
+                && FindChild(miniGameScreen.transform, "FuelPerfectBand") != null
+                && FindChild(miniGameScreen.transform, "OutputJudgementText") != null;
         }
 
         private static GameObject CreateEnginePresetCard()
@@ -75,16 +90,14 @@ namespace Border.Research.Editor
         private static GameObject CreateOperationScreen()
         {
             RectTransform root = CreateCanvasRoot("ResearchOperationScreen", new Vector2(1280f, 720f));
-            RectTransform background = CreatePanel("Background", root, new Color(0.08f, 0.1f, 0.13f, 0.88f));
-            Stretch(background, 0f);
 
-            RectTransform panel = CreatePanel("ResearchOperationPanel", root, new Color(0.15f, 0.18f, 0.22f, 0.97f));
-            Center(panel, new Vector2(1180f, 660f));
-            AddVerticalLayout(panel, 16f, 16f, 14f, 12f);
-
-            RectTransform topBar = CreatePanel("TopInfoBar", panel, new Color(0.2f, 0.25f, 0.31f, 1f));
+            RectTransform topBar = CreatePanel("TopInfoBar", root, new Color(0.2f, 0.25f, 0.31f, 0.94f));
+            topBar.anchorMin = new Vector2(0f, 1f);
+            topBar.anchorMax = Vector2.one;
+            topBar.pivot = new Vector2(0.5f, 1f);
+            topBar.offsetMin = new Vector2(16f, -82f);
+            topBar.offsetMax = new Vector2(-16f, -16f);
             AddHorizontalLayout(topBar, 12f, 12f, 8f, 8f);
-            topBar.gameObject.AddComponent<LayoutElement>().preferredHeight = 88f;
 
             RectTransform titleGroup = CreateGroup("ProjectTitleGroup", topBar);
             AddVerticalLayout(titleGroup, 0f, 0f, 0f, 2f);
@@ -97,22 +110,32 @@ namespace Border.Research.Editor
             CreateInfoChip("QuarterlyFunding", topBar);
             CreateButton("ResetButton", topBar, "초기화", 86f, 50f);
 
-            RectTransform columns = CreateGroup("MainColumns", panel);
-            AddHorizontalLayout(columns, 0f, 0f, 0f, 12f);
-            columns.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            RectTransform previewReservedArea = CreateGroup("EnginePreviewReservedArea", root);
+            previewReservedArea.anchorMin = Vector2.zero;
+            previewReservedArea.anchorMax = Vector2.one;
+            previewReservedArea.offsetMin = new Vector2(332f, 16f);
+            previewReservedArea.offsetMax = new Vector2(-432f, -98f);
 
-            RectTransform engineColumn = CreatePanel("EnginePresetColumn", columns, new Color(0.11f, 0.14f, 0.18f, 1f));
+            RectTransform engineColumn = CreatePanel("EnginePresetColumn", root, new Color(0.11f, 0.14f, 0.18f, 0.94f));
+            engineColumn.anchorMin = Vector2.zero;
+            engineColumn.anchorMax = new Vector2(0f, 1f);
+            engineColumn.pivot = new Vector2(0f, 0.5f);
+            engineColumn.offsetMin = new Vector2(16f, 16f);
+            engineColumn.offsetMax = new Vector2(316f, -98f);
             AddVerticalLayout(engineColumn, 10f, 10f, 10f, 6f);
-            engineColumn.gameObject.AddComponent<LayoutElement>().preferredWidth = 300f;
             CreateText("EngineColumnTitle", engineColumn, 18, FontStyles.Bold, TextAlignmentOptions.Left, "엔진 프리셋");
             RectTransform engineCards = CreateGroup("EnginePresetCards", engineColumn);
             AddVerticalLayout(engineCards, 0f, 0f, 0f, 6f);
             engineCards.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
             CreateButton("CreateEnginePresetButton", engineColumn, string.Empty, 0f, 42f);
 
-            RectTransform detailColumn = CreatePanel("DetailColumn", columns, new Color(0.12f, 0.15f, 0.19f, 1f));
+            RectTransform detailColumn = CreatePanel("DetailColumn", root, new Color(0.12f, 0.15f, 0.19f, 0.94f));
+            detailColumn.anchorMin = new Vector2(1f, 0f);
+            detailColumn.anchorMax = Vector2.one;
+            detailColumn.pivot = new Vector2(1f, 0.5f);
+            detailColumn.offsetMin = new Vector2(-416f, 16f);
+            detailColumn.offsetMax = new Vector2(-16f, -98f);
             AddVerticalLayout(detailColumn, 14f, 14f, 12f, 10f);
-            detailColumn.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
             CreateOperationDetails(detailColumn);
             return root.gameObject;
         }
@@ -188,6 +211,10 @@ namespace Border.Research.Editor
 
             RectTransform gaugeFrame = CreatePanel("FuelGaugeFrame", group, new Color(0.14f, 0.18f, 0.23f, 1f));
             Anchor(gaugeFrame, new Vector2(0.08f, 0.28f), new Vector2(0.92f, 0.62f));
+            Image outerBand = CreatePanel("FuelOuterBand", gaugeFrame, new Color(0.28f, 0.78f, 0.42f, 0.38f)).GetComponent<Image>();
+            Anchor(outerBand.rectTransform, new Vector2(0.34f, 0f), new Vector2(0.66f, 1f));
+            Image perfectBand = CreatePanel("FuelPerfectBand", gaugeFrame, new Color(1f, 0.9f, 0.26f, 0.86f)).GetComponent<Image>();
+            Anchor(perfectBand.rectTransform, new Vector2(0.48f, 0f), new Vector2(0.52f, 1f));
             Image fill = CreatePanel("FuelFill", gaugeFrame, new Color(0.26f, 0.74f, 0.88f, 1f)).GetComponent<Image>();
             Anchor(fill.rectTransform, Vector2.zero, new Vector2(0f, 1f));
             Image currentMarker = CreatePanel("FuelCurrentMarker", gaugeFrame, new Color(0.92f, 0.98f, 1f, 1f)).GetComponent<Image>();
@@ -234,6 +261,8 @@ namespace Border.Research.Editor
             Anchor(safeZone, new Vector2(0.27f, 0f), new Vector2(0.43f, 1f));
             RectTransform fill = CreatePanel("OutputFill", gaugeFrame, new Color(0.88f, 0.5f, 0.2f, 0.92f));
             Anchor(fill, Vector2.zero, new Vector2(0f, 1f));
+            TMP_Text judgement = CreateText("OutputJudgementText", group, 38, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(judgement.rectTransform, new Vector2(0.25f, 0.10f), new Vector2(0.75f, 0.28f));
             group.gameObject.SetActive(false);
         }
 

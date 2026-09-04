@@ -567,7 +567,7 @@ namespace Border.Research
             int cost = focused ? config.FocusedResearchCost : config.NormalResearchCost;
             if (Funds < cost)
             {
-                LastMessage = $"연구비 부족. 필요 {cost}, 보유 {Funds}.";
+                LastMessage = $"예산 부족. 필요 {cost}, 보유 {Funds}.";
                 return ResearchActionResult.NotEnoughFunds;
             }
 
@@ -588,7 +588,7 @@ namespace Border.Research
         public ResearchActionResult WaitQuarter()
         {
             AdvanceQuarter();
-            LastMessage = "한 분기 대기. 정기 연구비를 받았습니다.";
+            LastMessage = "한 분기 대기. 정기 예산을 받았습니다.";
             return DeadlineReached ? ResearchActionResult.DeadlineReached : ResearchActionResult.Success;
         }
 
@@ -755,7 +755,7 @@ namespace Border.Research
                 moonMissionWon,
                 deadlineMissed);
 
-            LastMessage = $"{config.DisplayName} 발사 결과 {grade}. 총 비용 {designEntry.LaunchCost + designEntry.ReservedInstallCost}, 지원금 +{immediateFunding}, 분기 연구비 {quarterlyFundingDelta:+#;-#;0}.";
+            LastMessage = $"{config.DisplayName} 발사 결과 {grade}. 총 비용 {designEntry.LaunchCost + designEntry.ReservedInstallCost}, 지원금 +{immediateFunding}, 분기 예산 {quarterlyFundingDelta:+#;-#;0}.";
             if (moonMissionWon)
             {
                 LastMessage += " 달 착륙 성공.";

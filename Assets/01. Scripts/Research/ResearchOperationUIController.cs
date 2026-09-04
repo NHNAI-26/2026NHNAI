@@ -16,6 +16,7 @@ namespace Border.Research
 
         [SerializeField] private GameObject operationScreenPrefab;
         [SerializeField] private Button enginePresetCardPrefab;
+        [SerializeField] private ResearchEnginePreviewController enginePreview;
 
         private readonly EngineCardView[] engineCards = new EngineCardView[EngineCount];
 
@@ -75,6 +76,22 @@ namespace Border.Research
             }
 
             Initialize();
+        }
+
+        private void OnEnable()
+        {
+            if (initialized)
+            {
+                Refresh();
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (initialized)
+            {
+                HideEnginePreview();
+            }
         }
 
         public void InitializeForTests()
@@ -312,6 +329,7 @@ namespace Border.Research
             }
 
             canvasTransform.gameObject.SetActive(false);
+            HideEnginePreview();
             var host = new GameObject("Research Mini Game Controller");
             host.transform.SetParent(transform, false);
             activeMiniGameController = host.AddComponent<ResearchMiniGameController>();
@@ -355,10 +373,11 @@ namespace Border.Research
         {
             EnsureSelectedEnginePresetUnlocked();
             selectedStage = model.GetCurrentLaunchTarget();
+            ShowEnginePreview();
             dateText.text = $"날짜\n{model.Year} Q{model.Quarter}";
             remainingTurnsText.text = $"남은 분기\n{model.RemainingTurns}";
-            fundsText.text = $"연구비\n{model.Funds}";
-            quarterlyFundingText.text = $"분기 연구비\n+{model.QuarterlyFunding}";
+            fundsText.text = $"예산\n{model.Funds}";
+            quarterlyFundingText.text = $"분기 예산\n+{model.QuarterlyFunding}";
 
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
@@ -373,7 +392,7 @@ namespace Border.Research
             selectedEngineText.text = $"{selectedEngineConfig.DisplayName}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
                 + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {selectedEngineConfig.InstallCost}\n"
                 + $"연료량 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 최대 출력 {selectedEngine.MaxOutput} / 점화 신뢰도 {selectedEngine.IgnitionReliability}\n"
-                + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)} / 시험 최고 {GetBestGradeText(selectedEngine)}";
+                + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
 
             normalResearchButtonText.text = $"일반 연구\n{selectedEngineConfig.NormalResearchCost} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
             focusedResearchButtonText.text = $"집중 연구\n{selectedEngineConfig.FocusedResearchCost} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
@@ -381,7 +400,7 @@ namespace Border.Research
                 ? "새로운 엔진 개발\n최대 10개"
                 : $"새로운 엔진 개발\n현재 {model.ActiveEnginePresetCount}/{ResearchPrototypeModel.MaxEnginePresetCount}";
             enterDesignButtonText.text = $"설계 진입\n예산 {selectedStageConfig.LaunchCost}";
-            waitButtonText.text = $"1분기 대기   비용 0 / 분기 연구비 +{model.QuarterlyFunding}";
+            waitButtonText.text = $"1분기 대기   예산 0 / 분기 예산 +{model.QuarterlyFunding}";
 
             normalResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.NormalResearchCost);
             focusedResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.FocusedResearchCost);
@@ -415,7 +434,7 @@ namespace Border.Research
             bool selected = selectedEnginePreset == config.Id;
             card.Button.GetComponent<Image>().color = selected ? new Color(0.28f, 0.35f, 0.42f, 1f) : new Color(0.19f, 0.23f, 0.28f, 1f);
             card.Title.text = config.DisplayName;
-            card.Detail.text = $"완성도 {engine.Completion} 성능 {model.CalculateEnginePerformanceScore(config.Id)} 최고 {GetBestGradeText(engine)}";
+            card.Detail.text = $"완성도 {engine.Completion} 성능 {model.CalculateEnginePerformanceScore(config.Id)}";
         }
 
         private bool CanResearch(EnginePresetState engine, int cost)
@@ -453,12 +472,13 @@ namespace Border.Research
         private static string FormatLaunchResult(ResearchLaunchResultData result)
         {
             return $"{result.StageId} 결과 {result.Grade} / 성공 {result.SuccessChance}% / 굴림 {result.Roll}\n"
-                + $"총 비용 {result.TotalCost}, 지원금 +{result.ImmediateFunding}, 분기 연구비 {result.QuarterlyFundingDelta:+#;-#;0}";
+                + $"총 비용 {result.TotalCost}, 지원금 +{result.ImmediateFunding}, 분기 예산 {result.QuarterlyFundingDelta:+#;-#;0}";
         }
 
         private void ShowDesignScreen()
         {
             RequestedScreenName = ResearchFlowSession.DesignScreenName;
+            HideEnginePreview();
 
             if (activeDesignController != null)
             {
@@ -544,14 +564,42 @@ namespace Border.Research
             return result is bool opened && opened;
         }
 
-        private static string GetBestGradeText(LaunchStageState stage)
+        private void ShowEnginePreview()
         {
-            return stage.HasBestGrade ? stage.BestGrade.ToString() : "-";
+            ResolveEnginePreview();
+            if (enginePreview != null)
+            {
+                enginePreview.Show(selectedEnginePreset);
+            }
         }
 
-        private static string GetBestGradeText(EnginePresetState engine)
+        private void HideEnginePreview()
         {
-            return engine.HasBestGrade ? engine.BestGrade.ToString() : "-";
+            ResolveEnginePreview();
+            if (enginePreview != null)
+            {
+                enginePreview.Hide();
+            }
+        }
+
+        private void ResolveEnginePreview()
+        {
+            if (enginePreview != null)
+            {
+                return;
+            }
+
+            enginePreview = GetComponentInChildren<ResearchEnginePreviewController>(true);
+            if (enginePreview != null)
+            {
+                return;
+            }
+
+            foreach (ResearchEnginePreviewController preview in FindObjectsByType<ResearchEnginePreviewController>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                enginePreview = preview;
+                return;
+            }
         }
 
         private static Button CreateCardButton(Button prefab, string name, Transform parent, float preferredHeight, out TMP_Text title, out TMP_Text detail)
