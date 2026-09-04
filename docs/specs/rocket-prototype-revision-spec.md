@@ -156,7 +156,7 @@ Per UD-013 these features are intended for the main game, but the integration fo
 | RK-004 | Free camera rotation plus screen-plane dragging makes far-side depth unreadable. | The surface raycast lets the surface decide depth (R-005). | `resolved` |
 | RK-005 | Reducing mass with fuel would spike late acceleration and invalidate the tuning table. | Mass held constant (UD-007). | `resolved` |
 | RK-006 | The scene file is untracked, so there is no rollback baseline. | Committing the prototype before further work is still recommended (AR-007). | `active` |
-| RK-007 | Removing slots would force a scene edit. | **Deviation from plan**: the two empty `Slot_L` / `Slot_R` Transforms were left in the scene instead of hand-editing scene YAML. Nothing references them; deleting them in the Editor is harmless. | `accepted` |
+| RK-007 | Removing slots would force a scene edit. | At the time the two empty `Slot_L` / `Slot_R` Transforms were left in the scene to avoid hand-editing YAML. They have since been deleted through the Editor (via Unity MCP, not by hand-editing YAML), keeping the scene diff minimal. | `superseded` |
 | RK-008 | Free placement allows overlapping parts, stacking thrust at one point. | Deliberately accepted (UD-009); revisit if it bites (OI-009). | `accepted` |
 | RK-009 | Differing per-engine burnout times create strong late asymmetric torque. | Identical parts run dry together (AR-010); tune `angularDamping` when values differ. | `active` |
 | RK-010 | No reset means Play Mode restart per trial. | Accepted (UD-008). | `accepted` |
@@ -260,8 +260,8 @@ Per UD-013 these features are intended for the main game, but the integration fo
 ground-impact behaviour after touchdown, and the full EditMode suite for other assemblies.
 
 **Not done, and why**: R-018 and R-019 (main-game integration structure and GDD amendments) are blocked on
-Q-011. Nothing was committed. The two obsolete `Slot_L` / `Slot_R` GameObjects were left in the scene
-rather than hand-editing scene YAML (RK-007).
+Q-011. Nothing was committed. The two obsolete `Slot_L` / `Slot_R` GameObjects were later deleted from
+the scene (RK-007 `superseded`).
 
 **Next authorized action**: answer Q-011. Everything downstream of it — code structure changes for the main
 game, GDD amendments, commits — needs its own authorization.
@@ -332,7 +332,9 @@ stay blocked on Q-011.
   no change for the flame. Guarded by `isEmitting` so `Play()` is not re-issued every frame, and
   null-safe so parts without a flame still work.
 - **Scene** — `Ground` localScale `(2,1,2)` → `(40,1,40)` = 400 m × 400 m. `Engine_A`/`Engine_B`
-  replaced by prefab instances. The obsolete `Slot_L`/`Slot_R` are still left in place (RK-007).
+  replaced by prefab instances. **Later revision**: once preset-panel drag became the only placement path,
+  `Engine_A`/`Engine_B` and `Slot_L`/`Slot_R` were all deleted from the scene (RK-007 `superseded`).
+  See `docs/rocket-simulation.md` for the current state.
 - **`Assets/03. Prefabs/Simulation/RocketEngine.prefab`** — Cube mesh + BoxCollider + `RocketPart` +
   child `Flame` ParticleSystem: local position `(0,-0.5,0)`, rotation `(90,0,0)` so the cone's +Z maps
   to the part's −Y, local scale `(2,1.25,2)` to cancel the parent's non-uniform `(0.5,0.8,0.5)`.
