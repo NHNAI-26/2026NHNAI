@@ -9,14 +9,16 @@ namespace Border.Research
 {
     public sealed class ResearchOperationUIController : MonoBehaviour
     {
-        private const string TargetSceneName = "ResearchTestScene";
         private const int StageCount = 4;
 
         private readonly StageCardView[] stageCards = new StageCardView[StageCount];
 
+        private ResearchFlowSession session;
         private ResearchPrototypeModel model;
         private ResearchStageId selectedStage;
-        private ResearchDesignEntryData? pendingDesignEntry;
+        private bool initialized;
+        private RectTransform canvasTransform;
+        private ResearchDesignScreenController activeDesignController;
 
         private TMP_Text titleText;
         private TMP_Text dateText;
@@ -41,12 +43,13 @@ namespace Border.Research
 
         public ResearchPrototypeModel Model => model;
         public ResearchStageId SelectedStage => selectedStage;
+        public string RequestedScreenName { get; private set; } = ResearchFlowSession.ResearchScreenName;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void SpawnInResearchTestScene()
+        private static void SpawnInMainScene()
         {
             Scene activeScene = SceneManager.GetActiveScene();
-            if (activeScene.name != TargetSceneName || FindFirstObjectByType<ResearchOperationUIController>() != null)
+            if (activeScene.name != ResearchFlowSession.MainSceneName || FindFirstObjectByType<ResearchOperationUIController>() != null)
             {
                 return;
             }
@@ -57,14 +60,37 @@ namespace Border.Research
 
         private void Awake()
         {
-            model ??= new ResearchPrototypeModel();
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
+            Initialize();
+        }
+
+        public void InitializeForTests()
+        {
+            Initialize();
+        }
+
+        private void Initialize()
+        {
+            if (initialized)
+            {
+                return;
+            }
+
+            session = ResearchFlowSession.GetOrCreate();
+            model = session.Model;
             RemoveLegacyPrototypeControllers();
             BuildInterface();
+            initialized = true;
             Refresh();
         }
 
         public void RefreshForTests()
         {
+            Initialize();
             Refresh();
         }
 
@@ -72,7 +98,7 @@ namespace Border.Research
         {
             EnsureEventSystem();
 
-            RectTransform canvasTransform = CreateGroup("ResearchOperationCanvas", transform);
+            canvasTransform = CreateGroup("ResearchOperationCanvas", transform);
             Canvas canvas = canvasTransform.gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvasTransform.gameObject.AddComponent<GraphicRaycaster>();
@@ -117,9 +143,8 @@ namespace Border.Research
             Button resetButton = CreateButton("ResetButton", topBar, "초기화", 92f, 52f);
             resetButton.onClick.AddListener(() =>
             {
-                model.Reset();
+                session.ResetResearch();
                 selectedStage = ResearchStageId.Engine;
-                pendingDesignEntry = null;
                 Refresh();
             });
         }
@@ -248,7 +273,7 @@ namespace Border.Research
                 }
 
                 selectedStage = stageId;
-                pendingDesignEntry = null;
+                session.ClearPendingDesignEntry();
                 Refresh();
             });
 
@@ -258,19 +283,16 @@ namespace Border.Research
         private void ExecuteResearch(bool focused)
         {
             model.ExecuteResearch(selectedStage, focused);
-            pendingDesignEntry = null;
+            session.ClearPendingDesignEntry();
             Refresh();
         }
 
         private void EnterDesign()
         {
-            if (model.TryEnterDesign(selectedStage, out ResearchDesignEntryData data) == ResearchActionResult.Success)
+            if (session.TryEnterDesign(selectedStage, out _) == ResearchActionResult.Success)
             {
-                pendingDesignEntry = data;
-            }
-            else
-            {
-                pendingDesignEntry = null;
+                ShowDesignScreen();
+                return;
             }
 
             Refresh();
@@ -279,7 +301,7 @@ namespace Border.Research
         private void WaitQuarter()
         {
             model.WaitQuarter();
-            pendingDesignEntry = null;
+            session.ClearPendingDesignEntry();
             Refresh();
         }
 
@@ -317,8 +339,8 @@ namespace Border.Research
             enterDesignButton.interactable = CanEnterDesign(selectedState, selectedConfig);
             waitButton.interactable = !model.DeadlineReached;
 
-            designEntryText.text = pendingDesignEntry.HasValue
-                ? FormatDesignEntry(pendingDesignEntry.Value)
+            designEntryText.text = session.HasPendingDesignEntry
+                ? FormatDesignEntry(session.PendingDesignEntry)
                 : "아직 생성된 설계 진입 데이터가 없습니다.";
 
             statusText.text = model.DeadlineReached
@@ -404,6 +426,68 @@ namespace Border.Research
                 + $"연구 기준 성공률 {model.CalculateSuccessChance(data.StageId)}%. 비용, 분기, 발사 횟수, 결과는 아직 변하지 않습니다.";
         }
 
+        private void ShowDesignScreen()
+        {
+            RequestedScreenName = ResearchFlowSession.DesignScreenName;
+            canvasTransform.gameObject.SetActive(false);
+
+            if (activeDesignController != null)
+            {
+                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController = null;
+            }
+
+            var host = new GameObject("Research Design Screen Controller");
+            host.transform.SetParent(transform, false);
+            activeDesignController = host.AddComponent<ResearchDesignScreenController>();
+            activeDesignController.Initialize(session, ReturnFromDesignScreen);
+        }
+
+        private void ReturnFromDesignScreen()
+        {
+            if (activeDesignController != null)
+            {
+                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController = null;
+            }
+
+            RequestedScreenName = ResearchFlowSession.ResearchScreenName;
+            if (canvasTransform != null)
+            {
+                canvasTransform.gameObject.SetActive(true);
+            }
+
+            if (initialized)
+            {
+                Refresh();
+            }
+        }
+
+        public ResearchDesignScreenController GetActiveDesignControllerForTests()
+        {
+            return activeDesignController;
+        }
+
+        public void ReturnFromDesignScreenForTests()
+        {
+            ReturnFromDesignScreen();
+        }
+
+#if UNITY_EDITOR
+        public void EnterDesignDebugForEditor()
+        {
+            Initialize();
+            session.ResetResearch();
+            selectedStage = ResearchStageId.Engine;
+            model.PrepareDebugDesignEntryState(selectedStage);
+
+            if (session.TryEnterDesign(selectedStage, out _) == ResearchActionResult.Success)
+            {
+                ShowDesignScreen();
+            }
+        }
+
+#endif
         private static string GetBestGradeText(ResearchStageState stage)
         {
             return stage.HasBestGrade ? stage.BestGrade.ToString() : "-";

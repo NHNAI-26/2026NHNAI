@@ -26,7 +26,8 @@ namespace Border.Research
         StageLocked,
         NotEnoughFunds,
         ProgressTooLow,
-        DeadlineReached
+        DeadlineReached,
+        NoPendingDesignEntry
     }
 
     [Serializable]
@@ -99,6 +100,53 @@ namespace Border.Research
         public int CurrentProgress { get; }
         public double PrerequisiteAverage { get; }
         public int ExperienceBonus { get; }
+    }
+
+    public readonly struct ResearchLaunchResultData
+    {
+        public ResearchLaunchResultData(
+            ResearchStageId stageId,
+            int year,
+            int quarter,
+            int launchCost,
+            int successChance,
+            int partialChance,
+            int failureChance,
+            int roll,
+            ResearchGrade grade,
+            int immediateFunding,
+            int quarterlyFundingDelta,
+            bool moonMissionWon,
+            bool deadlineMissed)
+        {
+            StageId = stageId;
+            Year = year;
+            Quarter = quarter;
+            LaunchCost = launchCost;
+            SuccessChance = successChance;
+            PartialChance = partialChance;
+            FailureChance = failureChance;
+            Roll = roll;
+            Grade = grade;
+            ImmediateFunding = immediateFunding;
+            QuarterlyFundingDelta = quarterlyFundingDelta;
+            MoonMissionWon = moonMissionWon;
+            DeadlineMissed = deadlineMissed;
+        }
+
+        public ResearchStageId StageId { get; }
+        public int Year { get; }
+        public int Quarter { get; }
+        public int LaunchCost { get; }
+        public int SuccessChance { get; }
+        public int PartialChance { get; }
+        public int FailureChance { get; }
+        public int Roll { get; }
+        public ResearchGrade Grade { get; }
+        public int ImmediateFunding { get; }
+        public int QuarterlyFundingDelta { get; }
+        public bool MoonMissionWon { get; }
+        public bool DeadlineMissed { get; }
     }
 
     public sealed class ResearchPrototypeModel
@@ -180,6 +228,17 @@ namespace Border.Research
             return Stages[(int)stageId];
         }
 
+#if UNITY_EDITOR
+        public void PrepareDebugDesignEntryState(ResearchStageId stageId)
+        {
+            ResearchStageConfig config = GetStageConfig(stageId);
+            ResearchStageState stage = GetStage(stageId);
+            stage.Unlocked = true;
+            stage.Progress = Math.Max(stage.Progress, config.MinimumTestProgress);
+            Funds = Math.Max(Funds, config.TestCost);
+        }
+
+#endif
         public ResearchActionResult ExecuteResearch(ResearchStageId stageId, bool focused)
         {
             ResearchStageState stage = GetStage(stageId);
@@ -248,6 +307,80 @@ namespace Border.Research
                 Math.Min(stage.AttemptCount * 3, 9));
 
             LastMessage = $"{config.DisplayName} 설계 진입 준비 완료. 비용과 시간은 아직 소비하지 않습니다.";
+            return ResearchActionResult.Success;
+        }
+
+        public ResearchActionResult CommitLaunch(ResearchDesignEntryData designEntry, out ResearchLaunchResultData result)
+        {
+            result = default;
+            ResearchStageConfig config = GetStageConfig(designEntry.StageId);
+            ResearchStageState stage = GetStage(designEntry.StageId);
+
+            if (DeadlineReached)
+            {
+                LastMessage = "마감 도달. 더 이상 발사할 수 없습니다.";
+                return ResearchActionResult.DeadlineReached;
+            }
+
+            if (!stage.Unlocked)
+            {
+                LastMessage = $"{config.DisplayName} 단계는 아직 잠겨 있습니다.";
+                return ResearchActionResult.StageLocked;
+            }
+
+            if (Funds < config.TestCost)
+            {
+                LastMessage = $"발사비 부족. 필요 {config.TestCost}, 보유 {Funds}.";
+                return ResearchActionResult.NotEnoughFunds;
+            }
+
+            int successChance = CalculateSuccessChance(designEntry.StageId);
+            int partialChance = Math.Min(15, 95 - successChance);
+            int failureChance = 100 - successChance - partialChance;
+            int roll = CreateLaunchRoll(designEntry, stage.AttemptCount);
+            ResearchGrade grade = DetermineGrade(successChance, roll);
+            GetGradeReward(grade, out int immediateFunding, out int quarterlyFundingDelta);
+
+            Funds -= config.TestCost;
+            stage.AttemptCount++;
+            if (!stage.HasBestGrade || grade < stage.BestGrade)
+            {
+                stage.BestGrade = grade;
+                stage.HasBestGrade = true;
+            }
+
+            Funds += immediateFunding;
+            QuarterlyFunding = Math.Max(MinQuarterlyFunding, Math.Min(MaxQuarterlyFunding, QuarterlyFunding + quarterlyFundingDelta));
+            AdvanceQuarter();
+            CheckUnlocks();
+
+            bool moonMissionWon = designEntry.StageId == ResearchStageId.Moon && grade <= ResearchGrade.B;
+            bool deadlineMissed = DeadlineReached && !moonMissionWon;
+            result = new ResearchLaunchResultData(
+                designEntry.StageId,
+                designEntry.Year,
+                designEntry.Quarter,
+                config.TestCost,
+                successChance,
+                partialChance,
+                failureChance,
+                roll,
+                grade,
+                immediateFunding,
+                quarterlyFundingDelta,
+                moonMissionWon,
+                deadlineMissed);
+
+            LastMessage = $"{config.DisplayName} 발사 결과 {grade}. 지원금 +{immediateFunding}, 분기 연구비 {quarterlyFundingDelta:+#;-#;0}.";
+            if (moonMissionWon)
+            {
+                LastMessage += " 달 착륙 성공.";
+            }
+            else if (deadlineMissed)
+            {
+                LastMessage += " 2026 Q4 종료. 목표 달성 실패.";
+            }
+
             return ResearchActionResult.Success;
         }
 
@@ -352,6 +485,71 @@ namespace Border.Research
         {
             int pathIndex = mapSeed % 3 + 1;
             return $"{stageId}_Path_{pathIndex}";
+        }
+
+        private int CreateLaunchRoll(ResearchDesignEntryData designEntry, int attemptCount)
+        {
+            unchecked
+            {
+                int hash = 23;
+                hash = hash * 31 + Seed;
+                hash = hash * 31 + designEntry.MapSeed;
+                hash = hash * 31 + designEntry.Year;
+                hash = hash * 31 + designEntry.Quarter;
+                hash = hash * 31 + (int)designEntry.StageId;
+                hash = hash * 31 + attemptCount;
+                return (hash & int.MaxValue) % 100 + 1;
+            }
+        }
+
+        private static ResearchGrade DetermineGrade(int successChance, int roll)
+        {
+            if (roll <= successChance)
+            {
+                int margin = successChance - roll;
+                if (margin >= 50)
+                {
+                    return ResearchGrade.S;
+                }
+
+                if (margin >= 20)
+                {
+                    return ResearchGrade.A;
+                }
+
+                return ResearchGrade.B;
+            }
+
+            return roll <= Math.Min(successChance + 15, 95)
+                ? ResearchGrade.C
+                : ResearchGrade.F;
+        }
+
+        private static void GetGradeReward(ResearchGrade grade, out int immediateFunding, out int quarterlyFundingDelta)
+        {
+            switch (grade)
+            {
+                case ResearchGrade.S:
+                    immediateFunding = 900;
+                    quarterlyFundingDelta = 150;
+                    break;
+                case ResearchGrade.A:
+                    immediateFunding = 600;
+                    quarterlyFundingDelta = 100;
+                    break;
+                case ResearchGrade.B:
+                    immediateFunding = 400;
+                    quarterlyFundingDelta = 50;
+                    break;
+                case ResearchGrade.C:
+                    immediateFunding = 150;
+                    quarterlyFundingDelta = 0;
+                    break;
+                default:
+                    immediateFunding = 0;
+                    quarterlyFundingDelta = -100;
+                    break;
+            }
         }
 
     }
