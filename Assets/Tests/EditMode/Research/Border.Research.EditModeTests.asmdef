@@ -2,7 +2,9 @@
     "name": "Border.Research.EditModeTests",
     "rootNamespace": "Border.Research.Tests",
     "references": [
-        "Border"
+        "Border",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"

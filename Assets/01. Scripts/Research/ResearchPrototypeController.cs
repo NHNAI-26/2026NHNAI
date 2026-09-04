@@ -1,12 +1,9 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace Border.Research
 {
     public sealed class ResearchPrototypeController : MonoBehaviour
     {
-        private const string TargetSceneName = "ResearchTestScene";
-
         private ResearchPrototypeModel model;
         private ResearchStageId selectedStage;
         private ResearchDesignEntryData? pendingDesignEntry;
@@ -17,19 +14,6 @@ namespace Border.Research
         private GUIStyle smallStyle;
         private GUIStyle boxStyle;
         private GUIStyle buttonStyle;
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void SpawnInResearchTestScene()
-        {
-            Scene activeScene = SceneManager.GetActiveScene();
-            if (activeScene.name != TargetSceneName || FindFirstObjectByType<ResearchPrototypeController>() != null)
-            {
-                return;
-            }
-
-            var host = new GameObject("Research Prototype Controller");
-            host.AddComponent<ResearchPrototypeController>();
-        }
 
         private void Awake()
         {

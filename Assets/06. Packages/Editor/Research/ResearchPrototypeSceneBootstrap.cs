@@ -10,7 +10,7 @@ namespace Border.Editor.Research
     public static class ResearchPrototypeSceneBootstrap
     {
         private const string TargetSceneName = "ResearchTestScene";
-        private const string HostName = "Research Prototype Controller";
+        private const string HostName = "Research Operation UI Controller";
 
         static ResearchPrototypeSceneBootstrap()
         {
@@ -27,14 +27,14 @@ namespace Border.Editor.Research
                 return;
             }
 
-            if (Object.FindFirstObjectByType<ResearchPrototypeController>() != null)
+            if (Object.FindFirstObjectByType<ResearchOperationUIController>() != null)
             {
                 return;
             }
 
             var host = new GameObject(HostName);
             Undo.RegisterCreatedObjectUndo(host, "Install Research Prototype");
-            host.AddComponent<ResearchPrototypeController>();
+            host.AddComponent<ResearchOperationUIController>();
             EditorSceneManager.MarkSceneDirty(scene);
         }
     }
