@@ -16,36 +16,36 @@ MonoBehaviour:
   - line: 
     typeSecondsPerChar: 0
     fadeInSeconds: 0
-    holdSeconds: 4
+    holdSeconds: 2.5
     fadeOutSeconds: 0
     fontSize: 48
     sfxId: Prologue_SecureComms
   - line: 2017.12
     typeSecondsPerChar: 0.1
     fadeInSeconds: 0.8
-    holdSeconds: 2.5
-    fadeOutSeconds: 0.8
+    holdSeconds: 1.2
+    fadeOutSeconds: 0.5
     fontSize: 56
     sfxId: 
   - line: "2026\uB144\uAE4C\uC9C0 \uC720\uC778 \uC6B0\uC8FC\uC120\uC744 \uB2EC\uC5D0
       \uCC29\uB959\uC2DC\uD0A4\uC2ED\uC2DC\uC624."
     typeSecondsPerChar: 0.06
     fadeInSeconds: 1
-    holdSeconds: 4.5
-    fadeOutSeconds: 1
+    holdSeconds: 2.2
+    fadeOutSeconds: 0.7
     fontSize: 40
     sfxId: 
   - line: 'ARTEMIS: 2026'
     typeSecondsPerChar: 0.09
     fadeInSeconds: 1.2
-    holdSeconds: 3.5
-    fadeOutSeconds: 1.2
+    holdSeconds: 2
+    fadeOutSeconds: 0.8
     fontSize: 84
     sfxId: 
   - line: 
     typeSecondsPerChar: 0
     fadeInSeconds: 0
-    holdSeconds: 1
+    holdSeconds: 0.6
     fadeOutSeconds: 0
     fontSize: 48
     sfxId: 

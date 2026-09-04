@@ -16,7 +16,7 @@ GDD 자체는 수정하지 않는다(`docs/specs/title-scene-spec.md` UD-009) �
 | `Assets/02. ScriptableObjects/Prologue/PrologueSequence.asset` | 저작된 5컷 |
 | `Assets/03. Prefabs/UI/PrologueOverlay.prefab` | Canvas(sortingOrder 200) + Backdrop + Line |
 | `Assets/00. Scenes/01_Main.unity` | 위 프리팹 인스턴스 1개 |
-| `Assets/Tests/EditMode/Prologue/PrologueSequenceTests.cs` | 5컷·20~30초 예산 잠금 |
+| `Assets/Tests/EditMode/Prologue/PrologueSequenceTests.cs` | 5컷·12~20초 예산 잠금 |
 
 ## 결정과 이유
 
@@ -62,7 +62,7 @@ sortingOrder 가 정한다. 두 객체 모두 렌더링 전 같은 프레임에 
 사라질 때는 여전히 `fadeOutSeconds` 알파 페이드다 — 글자를 거꾸로 지우는 연출은 쓰지 않는다.
 
 예산 계산에서 타이핑 컷은 `fadeInSeconds` 대신 `글자 수 × typeSecondsPerChar` 를 등장 구간으로
-잡는다(`PrologueBeat.TotalSeconds`). 문구를 길게 고치면 총 길이가 같이 늘어나므로 20~30초 테스트가
+잡는다(`PrologueBeat.TotalSeconds`). 문구를 길게 고치면 총 길이가 같이 늘어나므로 예산 테스트가
 그것도 함께 잡아낸다.
 
 ### 페이드는 DOTween 이 아니라 손으로 짠 `Mathf.Lerp`
@@ -97,21 +97,30 @@ DOTween 은 설치돼 있고 asmdef 수정 없이 쓸 수 있지만, 코루틴 �
 
 ## 컷 데이터
 
-`PrologueSequence.asset`. 총 23.5초 = 컷 22.0초 + reveal 1.5초.
+`PrologueSequence.asset`. 총 15.5초 = 컷 14.0초 + reveal 1.5초.
 
 | # | line | type/char | fadeIn | hold | fadeOut | fontSize | sfxId |
 |---|---|---|---|---|---|---|---|
-| 1 | *(빈 문자열)* | 0 | 0 | 4.0 | 0 | 48 | `Prologue_SecureComms` |
-| 2 | `2017.12` | 0.10 | — | 2.5 | 0.8 | 56 | |
-| 3 | `2026년까지 유인 우주선을 달에 착륙시키십시오.` | 0.06 | — | 4.5 | 1.0 | 40 | |
-| 4 | `ARTEMIS: 2026` | 0.09 | — | 3.5 | 1.2 | 84 | |
-| 5 | *(빈 문자열)* | 0 | 0 | 1.0 | 0 | 48 | |
+| 1 | *(빈 문자열)* | 0 | 0 | 2.5 | 0 | 48 | `Prologue_SecureComms` |
+| 2 | `2017.12` | 0.10 | — | 1.2 | 0.5 | 56 | |
+| 3 | `2026년까지 유인 우주선을 달에 착륙시키십시오.` | 0.06 | — | 2.2 | 0.7 | 40 | |
+| 4 | `ARTEMIS: 2026` | 0.09 | — | 2.0 | 0.8 | 84 | |
+| 5 | *(빈 문자열)* | 0 | 0 | 0.6 | 0 | 48 | |
 
 `type/char` 가 0 보다 큰 컷은 `fadeInSeconds` 를 쓰지 않는다(표의 `—`).
 
 `bgmId = Prologue_LowTension`, `bgmFadeInSeconds = 2`, `revealSeconds = 1.5`.
 
-GDD 02 §2 의 20~30초 예산은 `PrologueSequenceTests` 가 잠근다. 인스펙터에서 길이를 만지다 예산을 깨는
+### GDD 의 20~30초 예산에서 벗어났다
+
+GDD 02 §2 는 20~30초를 적었지만, 실제로 돌려 보니 글자가 다 찍힌 뒤 머무는 시간이 길어 늘어졌다.
+사용자 지시로 `holdSeconds` 와 `fadeOutSeconds` 를 줄여 **총 15.5초**로 맞췄다. 타이핑 속도
+(`typeSecondsPerChar`)는 그대로다 — 문제는 등장 속도가 아니라 등장 후 정지 시간이었다.
+
+`PrologueSequenceTests` 의 예산 상수도 12~20초로 함께 바꿨다. 테스트의 목적은 GDD 숫자를 지키는 것이
+아니라 인스펙터에서 값을 만지다 길이가 폭주하는 것을 잡는 것이다.
+
+이 예산은 `PrologueSequenceTests` 가 잠근다. 인스펙터에서 길이를 만지다 예산을 깨는
 것이 현실적인 실패 모드라서 데이터를 테스트한다. 컷 진행 코루틴은 테스트하지 않는다 —
 `Time.unscaledDeltaTime` 에는 시임이 없고, 가짜 시계를 위해 실제 구현이 하나뿐인 주입점을 프로덕션
 코드에 만들 이유가 없다.

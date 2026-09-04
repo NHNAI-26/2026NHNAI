@@ -11,9 +11,10 @@ namespace Border.Prologue.Tests
     {
         private const string AssetPath = "Assets/02. ScriptableObjects/Prologue/PrologueSequence.asset";
 
-        // GDD 02 §2: "프롤로그는 20~30초 안에 끝난다."
-        private const float MinSeconds = 20f;
-        private const float MaxSeconds = 30f;
+        // GDD 02 §2 는 20~30초를 적었지만 실제로 보니 텍스트가 너무 오래 머물러
+        // 사용자 지시로 12~20초로 줄였다. 근거는 docs/specs/prologue-spec.md 참고.
+        private const float MinSeconds = 12f;
+        private const float MaxSeconds = 20f;
 
         // GDD 02 §2 권장 순서의 컷 수. 1 통신음 / 2 2017.12 / 3 지시 / 4 프로젝트명 / 5 전환.
         private const int ExpectedBeatCount = 5;
