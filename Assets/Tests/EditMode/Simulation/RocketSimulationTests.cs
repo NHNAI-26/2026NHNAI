@@ -132,6 +132,30 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void Launch_AddsTankMassPerEngine_OnTopOfBodyMass()
+        {
+            var rocketGo = Track(new GameObject("rocket"));
+            var rocket = rocketGo.AddComponent<Rocket>(); // RequireComponent 가 Rigidbody 를 같이 붙인다
+            var body = rocketGo.GetComponent<Rigidbody>();
+
+            // EditMode 에서는 Awake 가 돌지 않는다 — Awake 가 하던 캐싱을 손으로 심는다.
+            SetField(rocket, "_body", body);
+            SetField(rocket, "_bodyMass", 100f);
+            SetField(rocket, "tankMassPerFuel", 0.25f);
+
+            for (int i = 0; i < 2; i++)
+            {
+                RocketPart engine = CreateEngine(Stats(fuel: 100f, cooling: 60f, output: BaselineOutput, ignition: 100f));
+                engine.transform.SetParent(rocketGo.transform); // GetComponentsInChildren 가 찾도록
+            }
+
+            rocket.Launch();
+
+            // 본체 100 + 연료 100 × 0.25 × 2기 = 150. 탱크 용량이 그대로 무게가 된다.
+            Assert.AreEqual(150f, body.mass, 1e-3f, "엔진마다 연료 용량 × 계수 만큼 무거워져야 한다.");
+        }
+
+        [Test]
         public void Align_SnapsHeightAndAzimuthIndependently_OnlyWithinTolerance()
         {
             // 방위각 90°, 높이 1 에 엔진 하나가 붙어 있는 상태.
@@ -248,6 +272,42 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void DistanceToSegment_ClampsToTheEndpoints_AndSurvivesDegenerateSegments()
+        {
+            var a = new Vector2(100f, 100f);
+            var b = new Vector2(200f, 100f);
+
+            Assert.AreEqual(30f, RocketBuilder.DistanceToSegment(new Vector2(150f, 130f), a, b), 1e-3f,
+                "선분 안쪽에서는 수선의 발까지의 거리다.");
+
+            // 끝점 바깥이 그 끝점으로 클램프되는 것이 회전 링 집기의 근거다 — 32분할 폴리라인을
+            // 이어 붙일 때 클램프가 없으면 이음매마다 거리가 튀어 링에 구멍이 생긴다.
+            Assert.AreEqual(50f, RocketBuilder.DistanceToSegment(new Vector2(50f, 100f), a, b), 1e-3f,
+                "시작점 바깥은 시작점까지의 거리로 클램프된다.");
+            Assert.AreEqual(50f, RocketBuilder.DistanceToSegment(new Vector2(250f, 100f), a, b), 1e-3f,
+                "끝점 바깥은 끝점까지의 거리로 클램프된다.");
+
+            // 링을 정확히 옆에서 보면 이웃한 두 점이 한 픽셀로 뭉친다.
+            Assert.AreEqual(50f, RocketBuilder.DistanceToSegment(new Vector2(150f, 100f), a, a), 1e-3f,
+                "길이 0 인 선분은 그 점까지의 거리다.");
+        }
+
+        [Test]
+        public void SupportRadius_PushesPartOffTheSurface_AndFollowsItsRotation()
+        {
+            // RocketEngine.prefab 의 BoxCollider size (0.547, 1, 0.541) 의 절반.
+            var half = new Vector3(0.2735f, 0.5f, 0.2705f);
+
+            Assert.AreEqual(0.2735f,
+                RocketBuilder.SupportRadius(half, Quaternion.identity, Vector3.right), 1e-4f,
+                "세워 둔 엔진은 반폭만큼만 밀린다 — 이만큼 밀어야 절반이 파묻히지 않는다.");
+
+            Assert.AreEqual(0.5f,
+                RocketBuilder.SupportRadius(half, Quaternion.Euler(0f, 0f, 90f), Vector3.right), 1e-4f,
+                "눕히면 긴 축이 바깥을 향하므로 절반 길이만큼 밀어야 한다.");
+        }
+
+        [Test]
         public void ProjectOntoCapsule_LandsOnTheSurface_FromInsideOutsideAndTheCaps()
         {
             // SimulationTest 씬의 본체 값: 반지름 0.5, 축 선분 절반 1.5 (전체 높이 4).
@@ -304,6 +364,33 @@ namespace Simulation.Tests
         /// <summary>캡슐 축 선분까지의 거리. 표면 위라면 정확히 반지름이 나온다.</summary>
         private static float AxisGap(Vector3 local, float halfSegment) =>
             Vector3.Distance(local, new Vector3(0f, Mathf.Clamp(local.y, -halfSegment, halfSegment), 0f));
+
+        [Test]
+        public void PullbackDistance_PinsGroundToFrameBottom_ThenClampsAtBothEnds()
+        {
+            const float Fov = 60f;   // 두 vcam 의 Lens 값
+            const float Near = 40f;
+            const float Far = 180f;
+            float halfHeightPerUnit = Mathf.Tan(Fov * 0.5f * Mathf.Deg2Rad); // 거리 1 당 화면 세로 절반
+
+            // 저고도에서는 기하가 요구하는 거리가 0 으로 붕괴한다 — 하한이 이긴다.
+            Assert.AreEqual(Near, RocketBuilder.PullbackDistance(0f, Fov, Near, Far), 1e-4f);
+
+            // 이 변경의 전부: 화면 아래 절반이 정확히 고도와 같아야 발사 고도의 지면 선이
+            // 프레임 아래 변에 붙는다. 로켓은 카메라와 같은 높이라 자동으로 중앙에 남는다.
+            const float Altitude = 60f;
+            float distance = RocketBuilder.PullbackDistance(Altitude, Fov, Near, Far);
+            Assert.Greater(distance, Near, "이 고도면 하한을 넘어 기하가 거리를 정해야 한다.");
+            Assert.AreEqual(Altitude, distance * halfHeightPerUnit, 1e-3f,
+                "화면 아래 절반이 고도와 같아야 지면이 프레임 아래 변에 앉는다.");
+
+            // 화각을 넓히면 같은 그림을 만드는 거리가 짧아진다 — FOV 를 상수로 박으면 안 되는 이유.
+            Assert.Less(RocketBuilder.PullbackDistance(Altitude, 90f, Near, Far), distance);
+
+            // 상한. 근거는 far clip 이 아니라 지면 평면 반경이다.
+            Assert.AreEqual(Far, RocketBuilder.PullbackDistance(1000f, Fov, Near, Far), 1e-4f);
+            Assert.Less(Far, 200f, "카메라가 지면 평면(반경 200) 안에 남아야 아래 변이 지면을 비춘다.");
+        }
 
         [Test]
         public void Flame_TurnsOnWhileBurning_AndOffWhenDry()

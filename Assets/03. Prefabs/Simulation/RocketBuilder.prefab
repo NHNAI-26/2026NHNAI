@@ -211,6 +211,9 @@ MonoBehaviour:
   minDistance: 4
   maxDistance: 60
   gizmoScreenSize: 0.2
+  handleGrabPixels: 22
+  handleHoverWidth: 2.5
+  partSeatSink: 1
   heightTolerance: 0.25
   azimuthTolerance: 20
   rotationSnapStep: 45
