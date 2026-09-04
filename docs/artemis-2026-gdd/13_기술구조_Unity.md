@@ -79,7 +79,7 @@ public sealed class EnginePresetState
 {
     public string presetId;
     public bool developed;
-    public int level;
+    public int completion;
     public int fuelCapacity;
     public int cooling;
     public int maxOutput;
@@ -113,6 +113,7 @@ public sealed class DesignData
     public int mapSeed;
     public string targetPathId;
     public LaunchVisibility launchVisibility;
+    public int committedLaunchBudget;
 
     public RocketPartPlacement[] partPlacements;
     public InstalledEngineData[] installedEngines;
@@ -140,7 +141,7 @@ public sealed class InstalledEngineData
 }
 ```
 
-같은 `presetId`를 가진 엔진을 여러 개 설치할 수 있다. 연구 레벨과 스탯은 프리셋이 공유하고, 설치 비용과 위치·회전은 엔진 개체별로 따로 저장한다.
+같은 `presetId`를 가진 엔진을 여러 개 설치할 수 있다. 완성도와 스탯은 프리셋이 공유하고, 설치 비용과 위치·회전은 엔진 개체별로 따로 저장한다.
 
 ### SimRunData
 
@@ -157,6 +158,7 @@ public sealed class SimRunData
     public int designFit;
     public EngineToggleEvent[] engineToggleSchedule;
     public InstalledEngineData[] installedEngines;
+    public int committedLaunchBudget;
     public int committedEngineInstallCost;
     public float installedEngineScore;
     public int previousCertificationBonus;
@@ -211,7 +213,7 @@ public sealed class SimRunData
 - 엔진 프리셋별 일반·집중 연구
 - 새 엔진 프리셋 개발
 - 개발된 프리셋 수 관리
-- 엔진 프리셋 레벨 상한 처리
+- 엔진 프리셋 완성도 100 상한 처리
 - 미션 해금 검사
 - 엔진 프리셋 스탯 갱신
 
@@ -242,7 +244,7 @@ public sealed class SimRunData
 - 부품 위치, 엔진 프리셋 배치, 힘, 방향, 엔진 ON/OFF 타이밍 입력 처리
 - 엔진 설치 예약 비용 계산
 - 설계 적합도 계산
-- 예상 성공률 표시
+- 설계 위험 안내 표시
 - 공개 테스트와 비공개 테스트 선택
 - 연구 단계로 복귀
 - 발사 확인과 `SimRunData` 생성 요청
@@ -270,6 +272,7 @@ ScriptableObject 권장:
 - 엔진 프리셋 최대 개수 10
 - 새 엔진 개발 비용과 소요 시간, 미정이면 별도 값으로 분리
 - 엔진 프리셋 공통 연구 비용과 공통 설치 비용
+- 미션별 예산
 - 등급 보상
 - 확률 하한·상한
 
@@ -283,11 +286,13 @@ displayName
 normalResearchCost
 focusedResearchCost
 installCost
+completionGainPerResearch
 baseFuelCapacity
 baseCooling
 baseMaxOutput
 baseIgnitionReliability
-statGainByLevel
+normalStatGainByScore
+focusedStatGainByScore
 ```
 
 ### MissionConfig
@@ -295,7 +300,7 @@ statGainByLevel
 ```text
 missionId
 displayName
-launchCost
+launchBudget
 unlockRequiredPreviousMission
 unlockRequiredGrade
 designScreenPrefabId
@@ -350,6 +355,9 @@ function ExecuteResearch(enginePreset, statId, mode):
     if not enginePreset.developed:
         return Locked
 
+    if enginePreset.completion >= 100:
+        return Completed
+
     cost = GetEngineResearchCost(enginePreset.id, mode)
 
     if funds < cost:
@@ -358,10 +366,9 @@ function ExecuteResearch(enginePreset, statId, mode):
     funds -= cost
     totalFundsSpent += cost
 
-    levelGain = mode == Normal ? 1 : 2
     statGain = ResolveMiniGameStatGain(mode)
 
-    enginePreset.level = min(enginePreset.level + levelGain, 5)
+    enginePreset.completion = min(enginePreset.completion + GetCompletionGainPerResearch(), 100)
     IncreaseEngineStat(enginePreset, statId, statGain)
 
     CheckMissionUnlocks()
@@ -386,7 +393,7 @@ function DevelopNewEnginePreset():
 
     next = enginePresets[developedEnginePresetCount]
     next.developed = true
-    next.level = 0
+    next.completion = 0
     ResetStatsToBase(next)
 
     developedEnginePresetCount += 1
@@ -404,15 +411,19 @@ function EnterDesign(mission):
     if not mission.unlocked:
         return Locked
 
-    if funds < mission.launchCost:
+    if funds < mission.launchBudget:
         return NotEnoughFunds
 
+    funds -= mission.launchBudget
+    totalFundsSpent += mission.launchBudget
+
     designData = CreateOrLoadDesignData(mission, currentYear, currentQuarter)
+    designData.committedLaunchBudget = mission.launchBudget
     HideResearchScreen()
     ShowDesignScreen(designData)
 ```
 
-설계 진입은 비용과 분기를 소비하지 않는다.
+설계 진입은 예산을 즉시 소비하지만 분기와 발사 횟수는 소비하지 않는다.
 
 ### 연구 단계로 복귀
 
@@ -423,11 +434,13 @@ function ReturnFromDesign():
     ShowResearchScreen()
 ```
 
+연구 단계로 복귀해도 설계 진입 때 차감한 예산은 환불하지 않는다. 예약 설치 비용만 버린다.
+
 ### 발사 시작
 
 ```pseudo
 function ConfirmLaunch(mission, designData, visibility):
-    totalCost = mission.launchCost + designData.reservedEngineInstallCost
+    totalCost = designData.reservedEngineInstallCost
 
     if funds < totalCost:
         return NotEnoughFunds
