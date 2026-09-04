@@ -66,11 +66,19 @@ Material:
         m_Texture: {fileID: 2800000, guid: 27c47ed08593740a3b3f5656666bb09c, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _MetallicMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _OcclusionMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RoughnessMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -157,6 +165,7 @@ Material:
     - _HueShift: 0
     - _LightingMode: 0
     - _Metallic: 0
+    - _MetallicMapEnabled: 0
     - _NormalMapEnabled: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.005
@@ -166,6 +175,7 @@ Material:
     - _RimEnabled: 0
     - _RimIntensity: 1
     - _RimPower: 4
+    - _RoughnessMapEnabled: 0
     - _Saturation: 1
     - _Smoothness: 0
     - _SmoothnessTextureChannel: 0

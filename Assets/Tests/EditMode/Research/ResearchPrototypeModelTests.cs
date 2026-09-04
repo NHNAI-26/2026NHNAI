@@ -714,7 +714,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void OperationUI_UsesFlowSessionAndDoesNotOpenTemporaryDesignScreenOnEnterDesign()
+        public void OperationUI_EnterDesignStartsTransitionBeforeOpeningDesignScreen()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
             int funds = session.Model.Funds;
@@ -729,11 +729,18 @@ namespace Border.Research.Tests
                 FindButton(host.transform, "EnterDesignButton").onClick.Invoke();
 
                 Assert.That(controller.Model, Is.SameAs(session.Model));
-                Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.DesignScreenName));
+                Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.ResearchScreenName));
+                Assert.That(controller.IsTransitioningToDesignForTests(), Is.True);
+                Assert.That(FindButton(host.transform, "EnterDesignButton").interactable, Is.False);
                 Assert.That(controller.GetActiveDesignControllerForTests(), Is.Null);
                 Assert.That(session.HasPendingDesignEntry, Is.True);
                 Assert.That(session.Model.Funds, Is.EqualTo(funds - session.PendingDesignEntry.LaunchCost));
                 Assert.That(session.Model.RemainingTurns, Is.EqualTo(remainingTurns));
+
+                controller.CompleteDesignTransitionForTests();
+
+                Assert.That(controller.IsTransitioningToDesignForTests(), Is.False);
+                Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.ResearchScreenName));
             }
             finally
             {
@@ -743,7 +750,7 @@ namespace Border.Research.Tests
 
 #if UNITY_EDITOR
         [Test]
-        public void OperationUI_DebugEnterDesignBypassesResearchGateWithoutTemporaryDesignScreen()
+        public void OperationUI_DebugEnterDesignBypassesResearchGateAndStartsTransition()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
             var host = new GameObject("Research UI Test Host");
@@ -755,10 +762,15 @@ namespace Border.Research.Tests
 
                 controller.EnterDesignDebugForEditor();
 
-                Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.DesignScreenName));
+                Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.ResearchScreenName));
+                Assert.That(controller.IsTransitioningToDesignForTests(), Is.True);
                 Assert.That(controller.GetActiveDesignControllerForTests(), Is.Null);
                 Assert.That(session.HasPendingDesignEntry, Is.True);
                 Assert.That(session.Model.GetEnginePreset(EnginePresetId.Engine01).Completion, Is.GreaterThanOrEqualTo(30));
+
+                controller.CompleteDesignTransitionForTests();
+
+                Assert.That(controller.IsTransitioningToDesignForTests(), Is.False);
             }
             finally
             {

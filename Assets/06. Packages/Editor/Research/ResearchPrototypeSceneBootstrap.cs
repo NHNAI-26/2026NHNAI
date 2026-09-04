@@ -1,3 +1,4 @@
+using System;
 using Border.Research;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -13,21 +14,43 @@ namespace Border.Editor.Research
         private const string ResearchLabName = "Engine Research Lab";
         private const string PreviewHostName = "Research Engine Preview Controller";
         private const string PreviewRootName = "EnginePreviewRoot";
+        private const string PreviewPlacementCubeName = "Cube";
+        private const string ResearchCinemachineCameraName = "Research Cinemachine Camera";
         private const string MainScenePath = "Assets/00. Scenes/01_Main.unity";
         private const string ResearchLabPrefabPath = "Assets/03. Prefabs/3D/room.prefab";
         private const string DefaultEnginePreviewPrefabPath = "Assets/05. Arts/FBX/Engine/BaseEngine/Meshy_AI__0904142514_texture.prefab";
+        private const string BalancedEnginePreviewPrefabPath = "Assets/05. Arts/FBX/Engine/Full/Full.prefab";
+        private const string FuelCapacityEnginePreviewPrefabPath = "Assets/03. Prefabs/3D/Engine_01.prefab";
+        private const string CoolingEnginePreviewPrefabPath = "Assets/05. Arts/FBX/Engine/Cold/Cold.prefab";
+        private const string MaxOutputEnginePreviewPrefabPath = "Assets/05. Arts/FBX/Engine/Power/Power.prefab";
+        private const string IgnitionReliabilityEnginePreviewPrefabPath = "Assets/05. Arts/FBX/Engine/Reliability/Reliability.prefab";
         private const string VisualLibraryFolderPath = "Assets/02. ScriptableObjects/Research";
         private const string VisualLibraryAssetPath = VisualLibraryFolderPath + "/EnginePresetVisualLibrary.asset";
+        private static readonly Vector3 DefaultPreviewLocalPosition = new(-0.81f, 0.65f, 0f);
 
         static ResearchPrototypeSceneBootstrap()
         {
             EditorApplication.delayCall += TryInstallInActiveScene;
             EditorSceneManager.sceneOpened += (_, _) => TryInstallInActiveScene();
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredEditMode)
+            {
+                EditorApplication.delayCall += TryInstallInActiveScene;
+            }
         }
 
         [MenuItem("Border/Research/Install Research Prototype In Active Scene")]
         public static void TryInstallInActiveScene()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                return;
+            }
+
             Scene scene = SceneManager.GetActiveScene();
             if (!scene.IsValid())
             {
@@ -36,7 +59,7 @@ namespace Border.Editor.Research
 
             if (scene.name == ResearchFlowSession.MainSceneName)
             {
-                InstallResearchController(scene, installEngineLab: false);
+                InstallResearchController(scene, installEngineLab: true);
             }
         }
 
@@ -71,7 +94,7 @@ namespace Border.Editor.Research
                 return;
             }
 
-            ResearchOperationUIController controller = Object.FindFirstObjectByType<ResearchOperationUIController>();
+            ResearchOperationUIController controller = UnityEngine.Object.FindFirstObjectByType<ResearchOperationUIController>();
             if (controller == null)
             {
                 var host = new GameObject(ResearchHostName);
@@ -111,11 +134,12 @@ namespace Border.Editor.Research
                 changed |= researchLabChanged;
                 ResearchEnginePreviewController preview = EnsureEnginePreview(scene, registerUndo, out bool previewChanged);
                 changed |= previewChanged;
-                changed |= ConfigureResearchController(controller, preview, researchLabRoot);
-                changed |= ConfigureSceneCamera(scene);
+                changed |= EnsureResearchCinemachineCamera(scene, registerUndo, out Transform researchCameraTransform);
+                changed |= ConfigureResearchController(controller, preview, researchLabRoot, researchCameraTransform);
+                EnsureVisibleEditModePreview(preview);
             }
 
-            if (changed)
+            if (changed && !EditorApplication.isPlayingOrWillChangePlaymode)
             {
                 EditorSceneManager.MarkSceneDirty(scene);
             }
@@ -184,7 +208,9 @@ namespace Border.Editor.Research
                 changed = true;
             }
 
-            Transform previewRoot = FindRoot(scene, PreviewRootName)?.transform;
+            Transform researchLabTransform = FindRoot(scene, ResearchLabName)?.transform;
+            Transform placementCube = FindPreviewPlacementCube(researchLabTransform);
+            Transform previewRoot = FindPreviewRoot(scene, placementCube);
             if (previewRoot == null)
             {
                 var root = new GameObject(PreviewRootName);
@@ -198,16 +224,72 @@ namespace Border.Editor.Research
                 changed = true;
             }
 
-            previewRoot.SetPositionAndRotation(new Vector3(0f, 0.9f, -1.5f), Quaternion.Euler(0f, 180f, 0f));
-            previewRoot.localScale = Vector3.one;
+            if (placementCube != null)
+            {
+                if (previewRoot.parent != placementCube.parent)
+                {
+                    previewRoot.SetParent(placementCube.parent, false);
+                    changed = true;
+                }
+
+                if (previewRoot.localPosition != placementCube.localPosition || previewRoot.localRotation != placementCube.localRotation)
+                {
+                    previewRoot.SetLocalPositionAndRotation(placementCube.localPosition, placementCube.localRotation);
+                    changed = true;
+                }
+            }
+            else
+            {
+                Quaternion fallbackRotation = Quaternion.identity;
+                if (researchLabTransform != null)
+                {
+                    if (previewRoot.parent != researchLabTransform)
+                    {
+                        previewRoot.SetParent(researchLabTransform, false);
+                        changed = true;
+                    }
+
+                    if (previewRoot.localPosition != DefaultPreviewLocalPosition || previewRoot.localRotation != fallbackRotation)
+                    {
+                        previewRoot.SetLocalPositionAndRotation(DefaultPreviewLocalPosition, fallbackRotation);
+                        changed = true;
+                    }
+                }
+                else
+                {
+                    if (previewRoot.parent != null)
+                    {
+                        previewRoot.SetParent(null, false);
+                        changed = true;
+                    }
+
+                    if (previewRoot.position != DefaultPreviewLocalPosition || previewRoot.rotation != fallbackRotation)
+                    {
+                        previewRoot.SetPositionAndRotation(DefaultPreviewLocalPosition, fallbackRotation);
+                        changed = true;
+                    }
+                }
+            }
+
+            if (previewRoot.localScale != Vector3.one)
+            {
+                previewRoot.localScale = Vector3.one;
+                changed = true;
+            }
 
             EnginePresetVisualLibrarySO visualLibrary = EnsureVisualLibraryAsset();
             GameObject defaultPreviewPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DefaultEnginePreviewPrefabPath);
+            changed |= EnsureDefaultArchetypePrefabs(visualLibrary, defaultPreviewPrefab);
 
             var serializedPreview = new SerializedObject(preview);
             changed |= SetObjectReference(serializedPreview, "previewRoot", previewRoot);
             changed |= SetObjectReference(serializedPreview, "visualLibrary", visualLibrary);
             changed |= SetObjectReference(serializedPreview, "defaultPreviewPrefab", defaultPreviewPrefab);
+            changed |= SetBool(serializedPreview, "normalizePreviewBounds", true);
+            changed |= SetFloat(serializedPreview, "targetPreviewHeight", 1.25f);
+            changed |= SetFloat(serializedPreview, "targetPreviewGroundY", -0.5f);
+            changed |= SetVector3(serializedPreview, "previewLocalEulerAngles", new Vector3(-90f, 0f, 0f));
+            changed |= SetBool(serializedPreview, "showEditModePreview", true);
             if (serializedPreview.ApplyModifiedProperties())
             {
                 changed = true;
@@ -215,10 +297,21 @@ namespace Border.Editor.Research
 
             if (changed)
             {
+                EditorUtility.SetDirty(previewRoot);
                 EditorUtility.SetDirty(preview);
             }
 
             return preview;
+        }
+
+        private static void EnsureVisibleEditModePreview(ResearchEnginePreviewController preview)
+        {
+            if (preview == null || EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                return;
+            }
+
+            preview.ShowHologram(EnginePresetId.Engine01, EngineVisualArchetype.Balanced);
         }
 
         private static EnginePresetVisualLibrarySO EnsureVisualLibraryAsset()
@@ -235,7 +328,68 @@ namespace Border.Editor.Research
             return library;
         }
 
-        private static bool ConfigureResearchController(ResearchOperationUIController controller, ResearchEnginePreviewController preview, Transform researchLabRoot)
+        private static bool EnsureDefaultArchetypePrefabs(EnginePresetVisualLibrarySO library, GameObject defaultPreviewPrefab)
+        {
+            if (library == null || defaultPreviewPrefab == null)
+            {
+                return false;
+            }
+
+            bool changed = false;
+            changed |= SetArchetypePreviewPrefab(
+                library,
+                EngineVisualArchetype.Balanced,
+                LoadEnginePreviewPrefab(BalancedEnginePreviewPrefabPath, defaultPreviewPrefab));
+            changed |= SetArchetypePreviewPrefab(
+                library,
+                EngineVisualArchetype.FuelCapacity,
+                LoadEnginePreviewPrefab(FuelCapacityEnginePreviewPrefabPath, defaultPreviewPrefab));
+            changed |= SetArchetypePreviewPrefab(
+                library,
+                EngineVisualArchetype.Cooling,
+                LoadEnginePreviewPrefab(CoolingEnginePreviewPrefabPath, defaultPreviewPrefab));
+            changed |= SetArchetypePreviewPrefab(
+                library,
+                EngineVisualArchetype.MaxOutput,
+                LoadEnginePreviewPrefab(MaxOutputEnginePreviewPrefabPath, defaultPreviewPrefab));
+            changed |= SetArchetypePreviewPrefab(
+                library,
+                EngineVisualArchetype.IgnitionReliability,
+                LoadEnginePreviewPrefab(IgnitionReliabilityEnginePreviewPrefabPath, defaultPreviewPrefab));
+
+            if (changed)
+            {
+                EditorUtility.SetDirty(library);
+            }
+
+            return changed;
+        }
+
+        private static bool SetArchetypePreviewPrefab(
+            EnginePresetVisualLibrarySO library,
+            EngineVisualArchetype archetype,
+            GameObject prefab)
+        {
+            if (library.GetPreviewPrefab(archetype) == prefab)
+            {
+                return false;
+            }
+
+            library.SetArchetypePreviewPrefab(archetype, prefab);
+            return true;
+        }
+
+        private static GameObject LoadEnginePreviewPrefab(string path, GameObject fallback)
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            return prefab != null ? prefab : fallback;
+        }
+
+        private static bool ConfigureResearchController(
+            ResearchOperationUIController controller,
+            ResearchEnginePreviewController preview,
+            Transform researchLabRoot,
+            Transform researchCameraTransform)
         {
             if (controller == null || preview == null)
             {
@@ -245,6 +399,7 @@ namespace Border.Editor.Research
             var serializedController = new SerializedObject(controller);
             bool changed = SetObjectReference(serializedController, "enginePreview", preview);
             changed |= SetObjectReference(serializedController, "researchLabRoot", researchLabRoot);
+            changed |= SetObjectReference(serializedController, "researchCameraTransform", researchCameraTransform);
             if (serializedController.ApplyModifiedProperties())
             {
                 changed = true;
@@ -258,45 +413,137 @@ namespace Border.Editor.Research
             return changed;
         }
 
-        private static bool ConfigureSceneCamera(Scene scene)
+        private static bool EnsureResearchCinemachineCamera(Scene scene, bool registerUndo, out Transform researchCameraTransform)
         {
-            Camera camera = FindComponentInScene<Camera>(scene);
-            if (camera == null)
+            researchCameraTransform = null;
+            Type brainType = Type.GetType("Unity.Cinemachine.CinemachineBrain, Unity.Cinemachine");
+            Type cameraType = Type.GetType("Unity.Cinemachine.CinemachineCamera, Unity.Cinemachine");
+            if (brainType == null || cameraType == null)
+            {
+                Debug.LogWarning("Cinemachine package is installed in manifest, but runtime types were not available.");
+                return false;
+            }
+
+            Camera unityCamera = FindComponentInScene<Camera>(scene);
+            if (unityCamera == null)
             {
                 return false;
             }
 
             bool changed = false;
-            Vector3 position = new(2.6f, 1.75f, -4.8f);
-            Quaternion rotation = Quaternion.Euler(8f, -30f, 0f);
-            if (camera.transform.position != position || camera.transform.rotation != rotation)
+            Component brain = unityCamera.GetComponent(brainType);
+            if (brain == null)
             {
-                camera.transform.SetPositionAndRotation(position, rotation);
+                brain = unityCamera.gameObject.AddComponent(brainType);
+                if (registerUndo)
+                {
+                    Undo.RegisterCreatedObjectUndo(brain, "Add Cinemachine Brain");
+                }
+
                 changed = true;
             }
 
-            if (!Mathf.Approximately(camera.fieldOfView, 62f))
+            GameObject virtualCameraObject = FindRoot(scene, ResearchCinemachineCameraName);
+            Component virtualCamera;
+            if (virtualCameraObject == null)
             {
-                camera.fieldOfView = 62f;
+                virtualCameraObject = new GameObject(ResearchCinemachineCameraName);
+                if (registerUndo)
+                {
+                    Undo.RegisterCreatedObjectUndo(virtualCameraObject, "Install Research Cinemachine Camera");
+                }
+
+                SceneManager.MoveGameObjectToScene(virtualCameraObject, scene);
+                virtualCameraObject.transform.SetPositionAndRotation(unityCamera.transform.position, unityCamera.transform.rotation);
+                virtualCamera = virtualCameraObject.AddComponent(cameraType);
+                changed = true;
+            }
+            else
+            {
+                virtualCamera = virtualCameraObject.GetComponent(cameraType);
+                if (virtualCamera == null)
+                {
+                    virtualCamera = virtualCameraObject.AddComponent(cameraType);
+                    if (registerUndo)
+                    {
+                        Undo.RegisterCreatedObjectUndo(virtualCamera, "Add Research Cinemachine Camera");
+                    }
+
+                    changed = true;
+                }
+            }
+
+            var serializedCamera = new SerializedObject(virtualCamera);
+            changed |= SetInt(serializedCamera, "Priority.m_Value", 20);
+            changed |= SetBool(serializedCamera, "Priority.Enabled", true);
+            changed |= SetFloat(serializedCamera, "Lens.FieldOfView", unityCamera.fieldOfView);
+            if (serializedCamera.ApplyModifiedProperties())
+            {
                 changed = true;
             }
 
-            if (camera.clearFlags != CameraClearFlags.SolidColor)
-            {
-                camera.clearFlags = CameraClearFlags.SolidColor;
-                changed = true;
-            }
+            researchCameraTransform = virtualCameraObject.transform;
 
             if (changed)
             {
-                EditorUtility.SetDirty(camera);
-                EditorUtility.SetDirty(camera.transform);
+                EditorUtility.SetDirty(unityCamera);
+                EditorUtility.SetDirty(brain);
+                EditorUtility.SetDirty(virtualCameraObject);
+                EditorUtility.SetDirty(virtualCamera);
             }
 
             return changed;
         }
 
-        private static bool SetObjectReference(SerializedObject serializedObject, string propertyName, Object value)
+        private static bool SetBool(SerializedObject serializedObject, string propertyName, bool value)
+        {
+            SerializedProperty property = serializedObject.FindProperty(propertyName);
+            if (property == null || property.boolValue == value)
+            {
+                return false;
+            }
+
+            property.boolValue = value;
+            return true;
+        }
+
+        private static bool SetFloat(SerializedObject serializedObject, string propertyName, float value)
+        {
+            SerializedProperty property = serializedObject.FindProperty(propertyName);
+            if (property == null || Mathf.Approximately(property.floatValue, value))
+            {
+                return false;
+            }
+
+            property.floatValue = value;
+            return true;
+        }
+
+        private static bool SetInt(SerializedObject serializedObject, string propertyName, int value)
+        {
+            SerializedProperty property = serializedObject.FindProperty(propertyName);
+            if (property == null || property.intValue == value)
+            {
+                return false;
+            }
+
+            property.intValue = value;
+            return true;
+        }
+
+        private static bool SetVector3(SerializedObject serializedObject, string propertyName, Vector3 value)
+        {
+            SerializedProperty property = serializedObject.FindProperty(propertyName);
+            if (property == null || property.vector3Value == value)
+            {
+                return false;
+            }
+
+            property.vector3Value = value;
+            return true;
+        }
+
+        private static bool SetObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
         {
             SerializedProperty property = serializedObject.FindProperty(propertyName);
             if (property == null || property.objectReferenceValue == value)
@@ -337,6 +584,30 @@ namespace Border.Editor.Research
             return null;
         }
 
+        private static Transform FindPreviewRoot(Scene scene, Transform placementCube)
+        {
+            Transform firstMatch = null;
+            Transform preferredMatch = null;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+                {
+                    if (child.name != PreviewRootName)
+                    {
+                        continue;
+                    }
+
+                    firstMatch ??= child;
+                    if (placementCube != null && child.parent == placementCube.parent)
+                    {
+                        preferredMatch ??= child;
+                    }
+                }
+            }
+
+            return preferredMatch != null ? preferredMatch : firstMatch;
+        }
+
         private static T FindComponentInScene<T>(Scene scene)
             where T : Component
         {
@@ -351,6 +622,29 @@ namespace Border.Editor.Research
                 if (component != null)
                 {
                     return component;
+                }
+            }
+
+            return null;
+        }
+
+        private static Transform FindPreviewPlacementCube(Transform root)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name != PreviewPlacementCubeName)
+                {
+                    continue;
+                }
+
+                if (!PrefabUtility.IsPartOfPrefabInstance(child.gameObject))
+                {
+                    return child;
                 }
             }
 
