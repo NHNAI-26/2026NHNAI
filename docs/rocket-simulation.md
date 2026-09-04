@@ -22,7 +22,8 @@ API는 런타임에 예외를 던진다. 마우스·키보드를 읽으려면 `U
 `Border.Input.asmdef`가 이미 똑같은 방식(중첩 asmdef + `Unity.InputSystem` 참조)을 쓰고 있어
 새로운 패턴이 아니다.
 
-`Border` 참조는 `Border.Core.Log` 때문이다.
+`Border` 참조는 `Border.Core.Log` 때문이고, `Unity.Cinemachine` 참조는 카메라 두 대를 vcam 으로
+돌리기 위한 것이다(아래 "카메라" 절).
 
 uGUI 는 처음에 미뤘다 — 발사 버튼 하나에 Canvas / GraphicRaycaster / Image / TMP 가 딸려오는 게
 12줄 JSON 하나보다 비쌌다. 좌측 프리셋 패널이 들어오면서 이제는 쓴다(`RocketDesignUI`). `autoReferenced`
@@ -161,17 +162,43 @@ GDD 07 §5의 "부품 자세는 로켓 기준" 조항은 이 변경에 맞춰 �
 
 결정 근거는 `docs/specs/rocket-symmetry-assist-spec.md`에 있다.
 
-## 카메라: 로켓 중심 궤도
+## 카메라: Cinemachine vcam 두 대
 
-`RocketBuilder`가 카메라를 로켓 주위 궤도에 두고 매 `LateUpdate`에서 위치를 다시 계산한다.
-초기 yaw/pitch/거리는 `Start`에서 씬에 배치된 카메라 위치로부터 역산하므로, 씬에서 카메라를 옮기면
-시작 각도가 따라온다.
+`Main Camera`는 더 이상 직접 움직이지 않는다. `RocketBuilder.Start()`가 `CinemachineBrain`을 코드로
+붙이고(씬 YAML 디프를 늘리지 않는다 — 정렬 가이드를 코드로 만드는 것과 같은 이유),
+`RocketBuilder.prefab` 안에 든 vcam 두 대를 번갈아 살린다. Cinemachine을 도입한 실질 이유는
+**두 뷰 사이의 1.5초 블렌드** 하나다. 프레이밍 자체는 여전히 코드가 vcam 트랜스폼에 직접 쓴다 —
+Follow/LookAt도, 절차 컴포넌트도 붙이지 않는다. 궤도 회전 입력의 UI 게이트(패널 위 입력 차단, 핸들을
+잡은 동안 카메라 고정)를 `CinemachineInputAxisController`로 옮기면 전부 다시 만들어야 하기 때문이다.
+
+- **`DesignCam`** (Priority 10) — 설계·조립 뷰. 로켓 주위 궤도에 두고 매 `LateUpdate`에서 위치를
+  다시 계산한다. 초기 yaw/pitch/거리는 `Start`에서 **이 vcam의 배치**로부터 역산하므로, 프리팹에서
+  vcam을 옮기면 시작 각도가 따라온다. 씬의 `Main Camera` 트랜스폼은 이제 아무 의미가 없다.
+- **`LaunchCam`** (Priority 0 → 발사 시 20) — 발사 뷰. 발사 순간 플레이어가 보고 있던 방위각에,
+  피치 0, 로켓에서 `launchDistance`(기본 40 m) 떨어진 자리로 세운다. 그 뒤로는 **Y만** 로켓을 따라가고
+  X/Z와 자세는 고정이라 로켓은 화면 한가운데 머물고 배경이 내려간다. 반대편에서 컷하지 않으려고
+  방위각을 그대로 물려받는다.
+
+두 vcam의 Lens는 FOV 60 / near 0.3 / far 1000으로 **명시**해 둔다. `LensSettings.Default`는
+FOV 40 / 0.1 / 5000이고 브레인이 그 값을 카메라에 밀어넣으므로, 비워 두면 화각이 바뀌고
+`cam.fieldOfView`를 쓰는 `GizmoScale()`까지 같이 틀어진다.
+
+브레인은 `UpdateMethods.ManualUpdate`다. `CinemachineBrain`에는 `DefaultExecutionOrder`가 없어
+자동 갱신이면 `RocketBuilder.LateUpdate`와 앞뒤가 정해지지 않는데, 기즈모의 화면 고정 크기는 "카메라가
+이번 프레임 자세를 이미 가졌다"를 전제한다. vcam을 옮기고 → `_brain.ManualUpdate()` → `UpdateGizmo()`
+순서로 직접 잡는다. 뒤집어 말하면 **브레인을 돌리는 주체가 `RocketBuilder`**라, 이 컴포넌트가 없거나
+꺼진 상태에서는 카메라가 갱신되지 않는다.
+
+`UpdateGizmo()`는 발사 후에도 건너뛰지 않는다. 발사는 `Update()`에서 일어나고 `Select(null)`이 선택을
+비우는데, 같은 프레임 `LateUpdate`가 기즈모 갱신을 건너뛰면 `LineRenderer`가 켜진 채 남아 날아가는
+로켓 옆에 유령 기즈모가 붙는다.
 
 **우클릭 드래그**가 회전이다. 좌클릭은 부품 드래그가 이미 점유하고 있어 버튼을 갈랐다 —
 같은 버튼을 공유하면 "로켓 몸통을 눌렀을 때 회전인가 부착인가"가 매번 모호해진다.
 
-`minPitch = -20` / `maxPitch = 80`은 카메라가 지면 아래로 넘어가는 것을 막는다. 발사 후에도 회전은
-그대로 살아 있고 궤도 중심만 로켓을 따라가므로, 상승과 낙하를 원하는 각도에서 볼 수 있다.
+`minPitch = -20` / `maxPitch = 80`은 카메라가 지면 아래로 넘어가는 것을 막는다. 발사 뒤에도 회전·줌
+입력은 계속 `_yaw`/`_pitch`/`_distance`를 갱신하지만 `DesignCam`이 이미 꺼져 있어 화면에는 반영되지
+않는다 — 상승 구간의 그림은 `LaunchCam` 하나가 결정한다.
 
 ## 물리: 아케이드, 그러나 토크는 진짜
 
@@ -276,8 +303,9 @@ GDD 07 §5의 "부품 자세는 로켓 기준" 조항은 이 변경에 맞춰 �
 
 발사대는 `Assets/03. Prefabs/3D/RocketBase.prefab` 인스턴스이고, **로켓은 움직이지 않았다.**
 로켓을 옮기는 대신 발사대를 로켓에 맞춰 놓았다 — `RocketBuilder.Start()`가 카메라 시작 각도를
-카메라-로켓 오프셋에서 역산하므로 로켓을 옮기면 `Main Camera`도 같이 옮겨야 하고, 씬 디프가 그만큼
-늘어난다. 발사대 인스턴스 하나만 오프셋하면 `Rocket`·`Main Camera`·`Builder`는 손댈 필요가 없다.
+`DesignCam`–로켓 오프셋에서 역산하므로 로켓을 옮기면 `RocketBuilder.prefab` 안의 vcam도 같이 옮겨야
+하고, 그러면 이 프리팹을 쓰는 모든 씬의 시작 각도가 따라 움직인다. 발사대 인스턴스 하나만 오프셋하면
+`Rocket`·`Builder`는 손댈 필요가 없다.
 
 배치 값은 `position (0.16, -1, 0.74)`, `rotation (0, 180, 0)`. 이 오프셋이 하는 일은 두 가지다.
 

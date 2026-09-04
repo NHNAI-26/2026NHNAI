@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Border.Core;
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -32,6 +33,15 @@ namespace Simulation
         [SerializeField] private RocketPart enginePrefab;
         [Tooltip("좌측 패널에 띄울 엔진 프리셋 목록.")]
         [SerializeField] private EnginePresetLibrarySO presetLibrary;
+
+        [Header("Cinemachine")]
+        [Tooltip("설계 단계 카메라. 이 트랜스폼이 궤도 회전·줌의 결과를 받는다.")]
+        [SerializeField] private CinemachineCamera designCam;
+        [Tooltip("발사 뒤 카메라. 발사 순간 배치되고 그 뒤로는 로켓 높이만 따라간다.")]
+        [SerializeField] private CinemachineCamera launchCam;
+        [Tooltip("발사 뷰가 로켓에서 떨어져 있는 거리(m).")]
+        [SerializeField] private float launchDistance = 40f;
+        [SerializeField] private float launchBlendSeconds = 1.5f;
 
         [Header("Orbit camera")]
         [SerializeField] private float orbitSensitivity = 0.3f; // 도/픽셀
@@ -96,6 +106,7 @@ namespace Simulation
         private RocketPart _selected;
         private EditMode _mode;
 
+        private CinemachineBrain _brain;
         private float _yaw;
         private float _pitch;
         private float _distance;
@@ -129,7 +140,19 @@ namespace Simulation
             if (cam == null) cam = Camera.main;
             if (rocket == null) rocket = FindFirstObjectByType<Rocket>();
 
-            Vector3 offset = cam.transform.position - rocket.transform.position;
+            // 브레인은 코드로 붙인다 — 씬 YAML diff 를 늘리지 않고, additive 로 올라왔을 때
+            // 어느 카메라가 잡히든 그 카메라가 브레인을 갖는다.
+            if (!cam.TryGetComponent(out _brain)) _brain = cam.gameObject.AddComponent<CinemachineBrain>();
+            // 자동 갱신은 순서가 없다 — CinemachineBrain 에는 DefaultExecutionOrder 가 없어서
+            // 이 컴포넌트의 LateUpdate 와 앞뒤가 정해지지 않는다. 기즈모가 한 프레임 밀리지 않도록
+            // 브레인을 직접 돌린다(LateUpdate 끝).
+            _brain.UpdateMethod = CinemachineBrain.UpdateMethods.ManualUpdate;
+            _brain.DefaultBlend =
+                new CinemachineBlendDefinition(CinemachineBlendDefinition.Styles.EaseInOut, launchBlendSeconds);
+
+            // 시작 각도의 소유자는 씬의 Main Camera 가 아니라 DesignCam 이다 — 브레인이 카메라를
+            // 덮어쓰므로 카메라 트랜스폼에서 역산하면 첫 프레임 이후 기준이 사라진다.
+            Vector3 offset = designCam.transform.position - rocket.transform.position;
             _distance = offset.magnitude;
             _yaw = Mathf.Atan2(-offset.x, -offset.z) * Mathf.Rad2Deg;
             _pitch = Mathf.Asin(Mathf.Clamp(offset.y / _distance, -1f, 1f)) * Mathf.Rad2Deg;
@@ -153,6 +176,7 @@ namespace Simulation
                     // 이동·회전 버튼도 켜진 채로 남는다. 선택이 없을 때도 UI 가 갱신되도록 직접 알린다.
                     Select(null);
                     Changed?.Invoke();
+                    PlaceLaunchCamera();
                 }
                 if (keyboard.escapeKey.wasPressedThisFrame) SetMode(EditMode.None);
                 if (keyboard.deleteKey.wasPressedThisFrame || keyboard.backspaceKey.wasPressedThisFrame)
@@ -198,12 +222,38 @@ namespace Simulation
             if (_dragged == null) Select(null); // 빈 공간 클릭은 선택 해제
         }
 
+        /// <summary>
+        /// 발사 뷰를 플레이어가 마지막으로 보고 있던 방위각에 세운다 — 반대편에서 컷하면 방향 감각이 끊긴다.
+        /// 피치는 0 이라 로켓이 화면 한가운데 놓이고, 이후 <see cref="LateUpdate"/> 가 높이만 갱신한다.
+        /// </summary>
+        private void PlaceLaunchCamera()
+        {
+            Quaternion rotation = Quaternion.Euler(0f, _yaw, 0f);
+            launchCam.transform.SetPositionAndRotation(
+                rocket.transform.position + rotation * new Vector3(0f, 0f, -launchDistance), rotation);
+            launchCam.Priority = 20; // PrioritySettings 는 int 암시 변환
+        }
+
         private void LateUpdate()
         {
-            Quaternion rotation = Quaternion.Euler(_pitch, _yaw, 0f);
-            cam.transform.position = rocket.transform.position + rotation * new Vector3(0f, 0f, -_distance);
-            cam.transform.rotation = rotation;
+            if (rocket.Launched)
+            {
+                // 발사 뷰는 Y 만 따라간다 — X/Z 와 자세를 고정해야 상승이 상승으로 읽힌다.
+                Vector3 position = launchCam.transform.position;
+                position.y = rocket.transform.position.y;
+                launchCam.transform.position = position;
+            }
+            else
+            {
+                Quaternion rotation = Quaternion.Euler(_pitch, _yaw, 0f);
+                designCam.transform.SetPositionAndRotation(
+                    rocket.transform.position + rotation * new Vector3(0f, 0f, -_distance), rotation);
+            }
 
+            // vcam 을 옮긴 뒤에 돌려야 cam 이 이번 프레임 자세를 갖는다.
+            _brain.ManualUpdate();
+            // 발사 뒤에도 건너뛰지 않는다 — 발사 프레임의 Select(null) 을 반영하지 못하면
+            // 기즈모 LineRenderer 가 켜진 채 남아 날아가는 로켓 옆에 유령으로 붙는다.
             UpdateGizmo(); // 카메라가 움직인 뒤여야 화면 고정 크기가 한 프레임 밀리지 않는다
         }
 
