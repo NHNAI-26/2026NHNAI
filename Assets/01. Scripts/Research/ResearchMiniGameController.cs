@@ -45,6 +45,7 @@ namespace Border.Research
         private bool focused;
         private Action<ResearchMiniGameResult> completedCallback;
         private ResearchMiniGameResult pendingResult;
+        private System.Random random = new System.Random(Guid.NewGuid().GetHashCode());
         private bool initialized;
         private bool gameCompleted;
         private bool resultShowing;
@@ -75,13 +76,18 @@ namespace Border.Research
         private TMP_Text instructionText;
         private TMP_Text timerText;
         private TMP_Text stateText;
+        private TMP_Text fuelStatusText;
+        private TMP_Text fuelTargetText;
         private Image fuelFillImage;
         private Image fuelTargetImage;
+        private Image fuelCurrentMarkerImage;
         private Image outputFillImage;
+        private TMP_Text outputLabelText;
         private RectTransform outputSafeZone;
         private Image coolingHotspotImage;
         private RectTransform playArea;
         private Button primaryButton;
+        private Camera fallbackRenderingCamera;
 
         public EngineStatId StatId => statId;
         public bool IsCompleted => gameCompleted;
@@ -89,6 +95,12 @@ namespace Border.Research
 
         public void InitializeForTests(EnginePresetId nextPresetId, EngineStatId nextStatId, bool nextFocused, Action<ResearchMiniGameResult> onCompleted)
         {
+            Initialize(nextPresetId, nextStatId, nextFocused, onCompleted);
+        }
+
+        public void InitializeForTests(EnginePresetId nextPresetId, EngineStatId nextStatId, bool nextFocused, int randomSeed, Action<ResearchMiniGameResult> onCompleted)
+        {
+            random = new System.Random(randomSeed);
             Initialize(nextPresetId, nextStatId, nextFocused, onCompleted);
         }
 
@@ -122,6 +134,24 @@ namespace Border.Research
         public string GetStateTextForTests()
         {
             return stateText == null ? string.Empty : stateText.text;
+        }
+
+        public float GetFuelTargetForTests()
+        {
+            return fuelTargetValue;
+        }
+
+        public int GetActiveValveIndexForTests()
+        {
+            return activeValveIndex;
+        }
+
+        public int[] GetIgnitionSequenceForTests()
+        {
+            int length = GetIgnitionRoundLength(roundIndex);
+            var sequence = new int[length];
+            Array.Copy(ignitionSequence, sequence, length);
+            return sequence;
         }
 
         public static string FormatStateText(string baseText, bool showExample)
@@ -253,14 +283,15 @@ namespace Border.Research
 
             RectTransform background = CreatePanel("Background", canvasTransform, new Color(0.04f, 0.05f, 0.07f, 0.96f));
             Stretch(background, 0f);
+            EnsureRenderingCamera();
 
             RectTransform panel = CreatePanel("MiniGamePanel", canvasTransform, new Color(0.13f, 0.16f, 0.2f, 0.98f));
             panel.anchorMin = new Vector2(0.5f, 0.5f);
             panel.anchorMax = new Vector2(0.5f, 0.5f);
             panel.pivot = new Vector2(0.5f, 0.5f);
             panel.anchoredPosition = Vector2.zero;
-            panel.sizeDelta = new Vector2(980f, 590f);
-            AddVerticalLayout(panel, 18f, 18f, 16f, 12f);
+            panel.sizeDelta = new Vector2(1040f, 560f);
+            AddVerticalLayout(panel, 20f, 20f, 18f, 10f);
 
             RectTransform topRow = CreateGroup("TopRow", panel);
             AddHorizontalLayout(topRow, 0f, 0f, 0f, 10f);
@@ -271,13 +302,13 @@ namespace Border.Research
             timerText.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
 
             instructionText = CreateText("Instruction", panel, 16, FontStyles.Bold, TextAlignmentOptions.Left, string.Empty);
-            instructionText.gameObject.AddComponent<LayoutElement>().preferredHeight = 34f;
+            instructionText.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
 
             playArea = CreatePanel("PlayArea", panel, new Color(0.07f, 0.09f, 0.12f, 1f));
             playArea.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
             stateText = CreateText("State", panel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
-            stateText.gameObject.AddComponent<LayoutElement>().preferredHeight = 64f;
+            stateText.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
 
             primaryButton = CreateButton("PrimaryActionButton", panel, string.Empty, 0f, 54f);
         }
@@ -317,8 +348,14 @@ namespace Border.Research
             fuelAttemptIndex = 0;
             SetupFuelAttempt();
 
+            fuelStatusText = CreateText("FuelStatusText", playArea, 18, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            fuelStatusText.rectTransform.anchorMin = new Vector2(0.08f, 0.68f);
+            fuelStatusText.rectTransform.anchorMax = new Vector2(0.92f, 0.84f);
+            fuelStatusText.rectTransform.offsetMin = Vector2.zero;
+            fuelStatusText.rectTransform.offsetMax = Vector2.zero;
+
             RectTransform gaugeFrame = CreatePanel("FuelGaugeFrame", playArea, new Color(0.14f, 0.18f, 0.23f, 1f));
-            gaugeFrame.anchorMin = new Vector2(0.08f, 0.36f);
+            gaugeFrame.anchorMin = new Vector2(0.08f, 0.28f);
             gaugeFrame.anchorMax = new Vector2(0.92f, 0.62f);
             gaugeFrame.offsetMin = Vector2.zero;
             gaugeFrame.offsetMax = Vector2.zero;
@@ -326,14 +363,16 @@ namespace Border.Research
             fuelFillImage = CreatePanel("FuelFill", gaugeFrame, new Color(0.26f, 0.74f, 0.88f, 1f)).GetComponent<Image>();
             SetHorizontalFill(fuelFillImage.rectTransform, 0f);
 
-            fuelTargetImage = CreatePanel("FuelTarget", gaugeFrame, new Color(1f, 0.88f, 0.24f, 1f)).GetComponent<Image>();
-            fuelTargetImage.rectTransform.anchorMin = new Vector2(fuelTargetValue, 0f);
-            fuelTargetImage.rectTransform.anchorMax = new Vector2(fuelTargetValue, 1f);
-            fuelTargetImage.rectTransform.sizeDelta = new Vector2(6f, 0f);
-            fuelTargetImage.rectTransform.anchoredPosition = Vector2.zero;
+            fuelCurrentMarkerImage = CreatePanel("FuelCurrentMarker", gaugeFrame, new Color(0.92f, 0.98f, 1f, 1f)).GetComponent<Image>();
+            SetVerticalMarker(fuelCurrentMarkerImage.rectTransform, 0f, 4f);
 
-            TMP_Text markerText = CreateText("FuelGaugeLabels", gaugeFrame, 15, FontStyles.Bold, TextAlignmentOptions.Center, "현재 주입량                      목표선");
-            Stretch(markerText.rectTransform, 6f);
+            fuelTargetImage = CreatePanel("FuelTarget", gaugeFrame, new Color(1f, 0.88f, 0.24f, 1f)).GetComponent<Image>();
+            SetVerticalMarker(fuelTargetImage.rectTransform, fuelTargetValue, 7f);
+
+            fuelTargetText = CreateText("FuelGaugeLabel", gaugeFrame, 15, FontStyles.Bold, TextAlignmentOptions.Center, "목표선");
+            fuelTargetText.color = new Color(1f, 0.94f, 0.42f, 1f);
+            SetFuelTargetLabel();
+            UpdateFuelStatusText();
 
             AddPointer(primaryButton.gameObject, EventTriggerType.PointerDown, () => fuelFilling = true);
             AddPointer(primaryButton.gameObject, EventTriggerType.PointerUp, RecordFuelAttempt);
@@ -343,12 +382,12 @@ namespace Border.Research
         private void BuildCoolingGame()
         {
             primaryButton.gameObject.SetActive(false);
-            activeValveIndex = 1;
+            activeValveIndex = NextIndex(coolingButtons.Length);
             coolingExampleActive = true;
 
             coolingHotspotImage = CreatePanel("CoolingHotspot", playArea, GetValveColor(activeValveIndex, true)).GetComponent<Image>();
-            coolingHotspotImage.rectTransform.anchorMin = new Vector2(0.34f, 0.62f);
-            coolingHotspotImage.rectTransform.anchorMax = new Vector2(0.66f, 0.84f);
+            coolingHotspotImage.rectTransform.anchorMin = new Vector2(0.34f, 0.70f);
+            coolingHotspotImage.rectTransform.anchorMax = new Vector2(0.66f, 0.90f);
             coolingHotspotImage.rectTransform.offsetMin = Vector2.zero;
             coolingHotspotImage.rectTransform.offsetMax = Vector2.zero;
 
@@ -356,11 +395,11 @@ namespace Border.Research
             Stretch(hotspotLabel.rectTransform, 6f);
 
             RectTransform valveGrid = CreateGroup("CoolingValveGrid", playArea);
-            valveGrid.anchorMin = new Vector2(0.16f, 0.08f);
-            valveGrid.anchorMax = new Vector2(0.84f, 0.55f);
+            valveGrid.anchorMin = new Vector2(0.20f, 0.06f);
+            valveGrid.anchorMax = new Vector2(0.80f, 0.55f);
             valveGrid.offsetMin = Vector2.zero;
             valveGrid.offsetMax = Vector2.zero;
-            AddGrid(valveGrid, 2, 2, 14f, 190f, 74f);
+            AddGrid(valveGrid, 2, 2, 16f, 170f, 64f);
 
             for (int i = 0; i < coolingButtons.Length; i++)
             {
@@ -375,17 +414,23 @@ namespace Border.Research
 
         private void BuildOutputGame()
         {
+            outputLabelText = CreateText("OutputLabel", playArea, 18, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            outputLabelText.rectTransform.anchorMin = new Vector2(0.08f, 0.70f);
+            outputLabelText.rectTransform.anchorMax = new Vector2(0.92f, 0.86f);
+            outputLabelText.rectTransform.offsetMin = Vector2.zero;
+            outputLabelText.rectTransform.offsetMax = Vector2.zero;
+
             RectTransform gaugeFrame = CreatePanel("OutputGaugeFrame", playArea, new Color(0.14f, 0.18f, 0.23f, 1f));
-            gaugeFrame.anchorMin = new Vector2(0.08f, 0.36f);
-            gaugeFrame.anchorMax = new Vector2(0.92f, 0.6f);
+            gaugeFrame.anchorMin = new Vector2(0.08f, 0.34f);
+            gaugeFrame.anchorMax = new Vector2(0.92f, 0.58f);
             gaugeFrame.offsetMin = Vector2.zero;
             gaugeFrame.offsetMax = Vector2.zero;
 
-            outputFillImage = CreatePanel("OutputFill", gaugeFrame, new Color(0.88f, 0.5f, 0.2f, 1f)).GetComponent<Image>();
-            SetHorizontalFill(outputFillImage.rectTransform, 0f);
-
             outputSafeZone = CreatePanel("SafeZone", gaugeFrame, new Color(0.22f, 0.72f, 0.38f, 0.82f));
             UpdateOutputSafeZone();
+
+            outputFillImage = CreatePanel("OutputFill", gaugeFrame, new Color(0.88f, 0.5f, 0.2f, 0.92f)).GetComponent<Image>();
+            SetHorizontalFill(outputFillImage.rectTransform, 0f);
 
             outputStageIndex = 0;
             primaryButton.GetComponentInChildren<TMP_Text>().text = "안전 영역에서 출력 올리기";
@@ -397,11 +442,11 @@ namespace Border.Research
             primaryButton.gameObject.SetActive(false);
 
             RectTransform igniterGrid = CreateGroup("IgniterGrid", playArea);
-            igniterGrid.anchorMin = new Vector2(0.19f, 0.18f);
-            igniterGrid.anchorMax = new Vector2(0.81f, 0.78f);
+            igniterGrid.anchorMin = new Vector2(0.25f, 0.10f);
+            igniterGrid.anchorMax = new Vector2(0.75f, 0.78f);
             igniterGrid.offsetMin = Vector2.zero;
             igniterGrid.offsetMax = Vector2.zero;
-            AddGrid(igniterGrid, 2, 2, 16f, 150f, 100f);
+            AddGrid(igniterGrid, 2, 2, 18f, 136f, 88f);
 
             for (int i = 0; i < ignitionButtons.Length; i++)
             {
@@ -439,10 +484,11 @@ namespace Border.Research
             if (fuelFilling)
             {
                 fuelGaugeValue = Mathf.Clamp01(fuelGaugeValue + Time.deltaTime * 0.55f);
-                SetHorizontalFill(fuelFillImage.rectTransform, fuelGaugeValue);
+                SetFuelGaugeValue(fuelGaugeValue);
             }
 
-            SetStateText($"시도 {fuelAttemptIndex + 1}/{FuelAttemptCount}  목표 {Mathf.RoundToInt(fuelTargetValue * 100f)}  현재 {Mathf.RoundToInt(fuelGaugeValue * 100f)}", false);
+            UpdateFuelStatusText();
+            SetStateText($"시도 {fuelAttemptIndex + 1}/{FuelAttemptCount}", false);
         }
 
         private void UpdateCoolingGame()
@@ -471,6 +517,7 @@ namespace Border.Research
             float stageDuration = GetOutputStageDuration(outputStageIndex);
             outputGaugeValue = Mathf.Clamp01(roundElapsedSeconds / stageDuration);
             SetHorizontalFill(outputFillImage.rectTransform, outputGaugeValue);
+            outputLabelText.text = $"{GetOutputStageLabel(outputStageIndex)} 단계  안전 영역 안에서 한 번 클릭";
 
             if (roundElapsedSeconds >= stageDuration)
             {
@@ -516,17 +563,20 @@ namespace Border.Research
         {
             fuelGaugeValue = 0f;
             fuelFilling = false;
-            fuelTargetValue = 0.45f + fuelAttemptIndex * 0.17f;
+            fuelTargetValue = NextFloat(0.38f, 0.84f);
             if (fuelTargetImage != null)
             {
-                fuelTargetImage.rectTransform.anchorMin = new Vector2(fuelTargetValue, 0f);
-                fuelTargetImage.rectTransform.anchorMax = new Vector2(fuelTargetValue, 1f);
+                SetVerticalMarker(fuelTargetImage.rectTransform, fuelTargetValue, 7f);
             }
+
+            SetFuelTargetLabel();
 
             if (fuelFillImage != null)
             {
-                SetHorizontalFill(fuelFillImage.rectTransform, 0f);
+                SetFuelGaugeValue(0f);
             }
+
+            UpdateFuelStatusText();
         }
 
         private void RecordFuelAttempt()
@@ -551,7 +601,7 @@ namespace Border.Research
         private void SetupCoolingRound()
         {
             roundElapsedSeconds = 0f;
-            activeValveIndex = (roundIndex * 3 + 1) % coolingButtons.Length;
+            activeValveIndex = NextIndex(coolingButtons.Length, activeValveIndex);
             coolingHotspotImage.color = GetValveColor(activeValveIndex, true);
             for (int i = 0; i < coolingButtons.Length; i++)
             {
@@ -634,7 +684,8 @@ namespace Border.Research
             int length = GetIgnitionRoundLength(roundIndex);
             for (int i = 0; i < length; i++)
             {
-                ignitionSequence[i] = (roundIndex + i * 2) % ignitionButtons.Length;
+                int previousIndex = i == 0 ? -1 : ignitionSequence[i - 1];
+                ignitionSequence[i] = NextIndex(ignitionButtons.Length, previousIndex);
             }
 
             for (int i = 0; i < ignitionButtons.Length; i++)
@@ -905,12 +956,84 @@ namespace Border.Research
             return active ? new Color(1f, 0.82f, 0.24f, 1f) : color;
         }
 
+        private void SetFuelGaugeValue(float value)
+        {
+            float clampedValue = Mathf.Clamp01(value);
+            if (fuelFillImage != null)
+            {
+                SetHorizontalFill(fuelFillImage.rectTransform, clampedValue);
+            }
+
+            if (fuelCurrentMarkerImage != null)
+            {
+                SetVerticalMarker(fuelCurrentMarkerImage.rectTransform, clampedValue, 4f);
+            }
+        }
+
+        private void UpdateFuelStatusText()
+        {
+            if (fuelStatusText == null)
+            {
+                return;
+            }
+
+            int current = Mathf.RoundToInt(fuelGaugeValue * 100f);
+            int target = Mathf.RoundToInt(fuelTargetValue * 100f);
+            int remaining = Mathf.Max(0, FuelAttemptCount - fuelAttemptIndex);
+            fuelStatusText.text = $"현재 {current}% / 목표 {target}% / 남은 시도 {remaining}";
+        }
+
+        private void SetFuelTargetLabel()
+        {
+            if (fuelTargetText == null)
+            {
+                return;
+            }
+
+            float left = Mathf.Clamp01(fuelTargetValue - 0.1f);
+            float right = Mathf.Clamp01(fuelTargetValue + 0.1f);
+            fuelTargetText.rectTransform.anchorMin = new Vector2(left, 0.56f);
+            fuelTargetText.rectTransform.anchorMax = new Vector2(right, 0.98f);
+            fuelTargetText.rectTransform.offsetMin = Vector2.zero;
+            fuelTargetText.rectTransform.offsetMax = Vector2.zero;
+        }
+
+        private int NextIndex(int length, int excludedIndex = -1)
+        {
+            if (length <= 1)
+            {
+                return 0;
+            }
+
+            if (excludedIndex < 0 || excludedIndex >= length)
+            {
+                return random.Next(0, length);
+            }
+
+            int value = random.Next(0, length - 1);
+            return value >= excludedIndex ? value + 1 : value;
+        }
+
+        private float NextFloat(float minInclusive, float maxInclusive)
+        {
+            return minInclusive + (float)random.NextDouble() * (maxInclusive - minInclusive);
+        }
+
         private static void SetHorizontalFill(RectTransform target, float fill)
         {
             target.anchorMin = new Vector2(0f, 0f);
             target.anchorMax = new Vector2(Mathf.Clamp01(fill), 1f);
             target.offsetMin = Vector2.zero;
             target.offsetMax = Vector2.zero;
+        }
+
+        private static void SetVerticalMarker(RectTransform target, float normalizedPosition, float width)
+        {
+            float position = Mathf.Clamp01(normalizedPosition);
+            target.anchorMin = new Vector2(position, 0f);
+            target.anchorMax = new Vector2(position, 1f);
+            target.sizeDelta = new Vector2(width, 0f);
+            target.anchoredPosition = Vector2.zero;
         }
 
         private static void AddPointer(GameObject target, EventTriggerType triggerType, Action callback)
@@ -1069,6 +1192,25 @@ namespace Border.Research
             {
                 eventSystem.gameObject.AddComponent(inputSystemUiModuleType);
             }
+        }
+
+        private void EnsureRenderingCamera()
+        {
+            if (Camera.allCamerasCount > 0)
+            {
+                return;
+            }
+
+            var cameraObject = new GameObject("Research Mini Game Fallback Camera");
+            cameraObject.transform.SetParent(transform, false);
+            fallbackRenderingCamera = cameraObject.AddComponent<Camera>();
+            fallbackRenderingCamera.clearFlags = CameraClearFlags.SolidColor;
+            fallbackRenderingCamera.backgroundColor = new Color(0.04f, 0.05f, 0.07f, 1f);
+            fallbackRenderingCamera.cullingMask = 0;
+            fallbackRenderingCamera.depth = -100f;
+            fallbackRenderingCamera.orthographic = true;
+            fallbackRenderingCamera.nearClipPlane = 0.1f;
+            fallbackRenderingCamera.farClipPlane = 10f;
         }
 
         private static void DestroyUnityObject(UnityEngine.Object target)

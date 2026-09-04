@@ -285,6 +285,46 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void MiniGameTargets_UseSeededRandomExceptMaxOutput()
+        {
+            var fuelHostA = new GameObject("Fuel Mini Game Test Host A");
+            var fuelHostB = new GameObject("Fuel Mini Game Test Host B");
+            var fuelHostC = new GameObject("Fuel Mini Game Test Host C");
+            var coolingHost = new GameObject("Cooling Mini Game Test Host");
+            var ignitionHost = new GameObject("Ignition Mini Game Test Host");
+
+            try
+            {
+                ResearchMiniGameController fuelA = fuelHostA.AddComponent<ResearchMiniGameController>();
+                ResearchMiniGameController fuelB = fuelHostB.AddComponent<ResearchMiniGameController>();
+                ResearchMiniGameController fuelC = fuelHostC.AddComponent<ResearchMiniGameController>();
+                ResearchMiniGameController cooling = coolingHost.AddComponent<ResearchMiniGameController>();
+                ResearchMiniGameController ignition = ignitionHost.AddComponent<ResearchMiniGameController>();
+
+                fuelA.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, _ => { });
+                fuelB.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, _ => { });
+                fuelC.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 78, _ => { });
+                cooling.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 79, _ => { });
+                ignition.InitializeForTests(EnginePresetId.Engine01, EngineStatId.IgnitionReliability, false, 80, _ => { });
+
+                Assert.That(fuelA.GetFuelTargetForTests(), Is.InRange(0.38f, 0.84f));
+                Assert.That(fuelA.GetFuelTargetForTests(), Is.EqualTo(fuelB.GetFuelTargetForTests()));
+                Assert.That(fuelA.GetFuelTargetForTests(), Is.Not.EqualTo(fuelC.GetFuelTargetForTests()));
+                Assert.That(cooling.GetActiveValveIndexForTests(), Is.InRange(0, 3));
+                Assert.That(ignition.GetIgnitionSequenceForTests(), Has.Length.EqualTo(2));
+                Assert.That(ResearchMiniGameController.CalculateMaxOutputScoreFromFills(0.35f, 0.6f, 0.85f), Is.GreaterThanOrEqualTo(80));
+            }
+            finally
+            {
+                Object.DestroyImmediate(fuelHostA);
+                Object.DestroyImmediate(fuelHostB);
+                Object.DestroyImmediate(fuelHostC);
+                Object.DestroyImmediate(coolingHost);
+                Object.DestroyImmediate(ignitionHost);
+            }
+        }
+
+        [Test]
         public void MiniGameController_ForceComplete_ShowsResultBeforeCallback()
         {
             var host = new GameObject("Mini Game Test Host");
