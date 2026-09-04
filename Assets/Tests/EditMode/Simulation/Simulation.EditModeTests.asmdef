@@ -3,7 +3,8 @@
     "rootNamespace": "Simulation.Tests",
     "references": [
         "Border",
-        "Simulation"
+        "Simulation",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"

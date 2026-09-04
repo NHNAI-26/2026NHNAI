@@ -4,6 +4,7 @@ using Border.Core;
 using Border.Research;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace Simulation.Tests
 {
@@ -170,6 +171,112 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void ClosestPointOnAxis_TracksTheRayAlongTheAxis_AndRefusesWhenParallel()
+        {
+            var origin = new Vector3(0f, 1f, 0f);
+
+            // +X 축을 +Z 로 가로지르는 광선. 축과 직교하므로 t 는 광선의 x 오프셋 그대로다.
+            Assert.IsTrue(RocketBuilder.ClosestPointOnAxis(origin, Vector3.right,
+                new Ray(new Vector3(5f, 1f, -10f), Vector3.forward), out float t));
+            Assert.AreEqual(5f, t, 1e-4f, "직교 광선이면 t 는 광선 원점의 축 방향 오프셋이다.");
+
+            // 비스듬한 광선은 정답을 손으로 못 적는다 — 최소점이라는 성질로 확인한다.
+            var oblique = new Ray(new Vector3(3f, 4f, -6f), new Vector3(0.3f, -0.4f, 1f));
+            Assert.IsTrue(RocketBuilder.ClosestPointOnAxis(origin, Vector3.right, oblique, out float best));
+            Assert.Less(Gap(origin + Vector3.right * best, oblique),
+                Gap(origin + Vector3.right * (best + 0.01f), oblique), "t 보다 큰 쪽이 더 가까우면 안 된다.");
+            Assert.Less(Gap(origin + Vector3.right * best, oblique),
+                Gap(origin + Vector3.right * (best - 0.01f), oblique), "t 보다 작은 쪽이 더 가까우면 안 된다.");
+
+            // 축을 정면으로 바라보면 어느 점이든 똑같이 가까워 t 가 발산한다 — 그 프레임은 버려야 한다.
+            Assert.IsFalse(RocketBuilder.ClosestPointOnAxis(origin, Vector3.right,
+                new Ray(new Vector3(-9f, 1f, 0f), Vector3.right), out _),
+                "광선이 축과 평행하면 t 를 정할 수 없다.");
+        }
+
+        [Test]
+        public void AngleOnPlane_MatchesAngleAxis_AndRefusesEdgeOnRays()
+        {
+            var origin = new Vector3(0f, 1f, 0f);
+
+            // xz 평면(법선 +Y), 기준 +X. (0, 1, -2) 로 내리꽂으면 기준에서 90° 떨어진 지점이다.
+            Assert.IsTrue(RocketBuilder.AngleOnPlane(origin, Vector3.up, Vector3.right,
+                new Ray(new Vector3(0f, 6f, -2f), Vector3.down), out float degrees));
+            Assert.AreEqual(90f, degrees, 1e-3f);
+
+            // 부호 규약 잠금: 같은 각도를 AngleAxis 로 다시 만들면 실제 교점이 나와야 한다.
+            // 여기서 외적 순서가 뒤집히면 링이 커서를 따라오는 대신 반대로 도망간다.
+            Vector3 reconstructed = origin + Quaternion.AngleAxis(degrees, Vector3.up) * Vector3.right * 2f;
+            Assert.That(Vector3.Distance(new Vector3(0f, 1f, -2f), reconstructed), Is.LessThan(1e-3f),
+                "AngleOnPlane 의 부호는 Quaternion.AngleAxis 와 같은 방향이어야 한다.");
+
+            Assert.IsFalse(RocketBuilder.AngleOnPlane(origin, Vector3.up, Vector3.right,
+                new Ray(new Vector3(5f, 1f, 0f), Vector3.left), out _), "링을 옆에서 보면 교점이 없다.");
+            Assert.IsFalse(RocketBuilder.AngleOnPlane(origin, Vector3.up, Vector3.right,
+                new Ray(new Vector3(0f, -6f, -2f), Vector3.down), out _), "교점이 카메라 뒤면 버린다.");
+            Assert.IsFalse(RocketBuilder.AngleOnPlane(origin, Vector3.up, Vector3.right,
+                new Ray(new Vector3(0f, 6f, 0f), Vector3.down), out _), "중심을 정조준하면 각도가 정의되지 않는다.");
+        }
+
+        [Test]
+        public void ProjectOntoCapsule_LandsOnTheSurface_FromInsideOutsideAndTheCaps()
+        {
+            // SimulationTest 씬의 본체 값: 반지름 0.5, 축 선분 절반 1.5 (전체 높이 4).
+            const float HalfSegment = 1.5f;
+            const float Radius = 0.5f;
+
+            Vector3 outside = RocketBuilder.ProjectOntoCapsule(
+                new Vector3(3f, 0.7f, 0f), HalfSegment, Radius, Vector3.right);
+            Assert.AreEqual(new Vector3(0.5f, 0.7f, 0f), outside, "원통 구간에서는 높이·방위각이 그대로다.");
+
+            // Collider.ClosestPoint 가 틀리는 경우 — 내부 점은 입력을 그대로 돌려줘서 부품이 파묻힌다.
+            Vector3 inside = RocketBuilder.ProjectOntoCapsule(
+                new Vector3(0.05f, -1f, 0f), HalfSegment, Radius, Vector3.right);
+            Assert.AreEqual(new Vector3(0.5f, -1f, 0f), inside, "본체 안쪽 점도 표면으로 밀려나야 한다.");
+
+            Vector3 cap = RocketBuilder.ProjectOntoCapsule(
+                new Vector3(0f, 3f, 0f), HalfSegment, Radius, Vector3.right);
+            Assert.AreEqual(new Vector3(0f, 2f, 0f), cap, "축 위 캡 바깥은 캡 꼭대기로 내려온다.");
+
+            // 축 위에서는 방위각이 없다 — 잡기 시작한 방향의 수평 성분만 쓴다(높이 성분은 버린다).
+            Vector3 onAxis = RocketBuilder.ProjectOntoCapsule(
+                new Vector3(0f, 0.5f, 0f), HalfSegment, Radius, new Vector3(0f, 9f, -2f));
+            Assert.AreEqual(new Vector3(0f, 0.5f, -0.5f), onAxis, "축 위에서는 fallback 의 수평 방향을 쓴다.");
+        }
+
+        [Test]
+        public void MovedPart_SnapsThenProjects_SoItNeverLeavesTheBodySurface()
+        {
+            const float HalfSegment = 1.5f;
+            const float Radius = 0.5f;
+
+            // 기즈모 이동은 정렬 스냅을 먼저 걸고 표면 투영을 마지막에 한다. 순서를 뒤집으면
+            // 스냅이 마지막 말을 하게 되어 캡 구간에서 부품이 표면 밖으로 떠버린다.
+            var others = new List<Vector3> { new(0.5f, 1f, 0f) };
+
+            RocketBuilder.Alignment onBody = RocketBuilder.Align(new Vector3(2f, 1.05f, 0.1f), others, 0.25f, 20f);
+            Vector3 cylinder = RocketBuilder.ProjectOntoCapsule(onBody.Local, HalfSegment, Radius, Vector3.right);
+            Assert.That(Vector3.Distance(new Vector3(0.5f, 1f, 0f), cylinder), Is.LessThan(1e-4f),
+                "원통 구간에서는 투영이 스냅된 높이·방위각을 그대로 살려 둔다.");
+
+            // 캡 구간: 스냅이 높이를 1.95 로 올려도 반경 2 인 점은 표면 밖이라 투영이 끌어내린다.
+            var high = new List<Vector3> { new(0.4f, 1.95f, 0f) };
+            RocketBuilder.Alignment onCap = RocketBuilder.Align(new Vector3(2f, 1.9f, 0f), high, 0.25f, 20f);
+            Vector3 capped = RocketBuilder.ProjectOntoCapsule(onCap.Local, HalfSegment, Radius, Vector3.right);
+
+            Assert.AreEqual(Radius, AxisGap(capped, HalfSegment), 1e-4f, "결과는 언제나 정확히 표면 위다.");
+            Assert.Less(capped.y, onCap.Local.y, "캡에서는 투영이 스냅된 높이를 끌어내리는 게 맞다.");
+        }
+
+        /// <summary>광선과 점 사이의 수직 거리. 최근접점 테스트에서 최소성만 확인하는 용도.</summary>
+        private static float Gap(Vector3 point, Ray ray) =>
+            Vector3.Cross(ray.direction.normalized, point - ray.origin).magnitude;
+
+        /// <summary>캡슐 축 선분까지의 거리. 표면 위라면 정확히 반지름이 나온다.</summary>
+        private static float AxisGap(Vector3 local, float halfSegment) =>
+            Vector3.Distance(local, new Vector3(0f, Mathf.Clamp(local.y, -halfSegment, halfSegment), 0f));
+
+        [Test]
         public void Flame_TurnsOnWhileBurning_AndOffWhenDry()
         {
             RocketPart part = CreateEngine(Stats(fuel: 10f, cooling: 1000f, output: BaselineOutput, ignition: 100f));
@@ -264,6 +371,17 @@ namespace Simulation.Tests
             builder.SetPresetLibrary(runtimeLibrary);
 
             Assert.AreSame(runtimeLibrary, builder.PresetLibrary);
+        }
+
+        [Test]
+        public void PresetEntry_ImplementsIDragHandler_SoBeginDragActuallyFires()
+        {
+            // 입력 모듈은 pointerDrag 를 IDragHandler 로만 찾는다. IBeginDragHandler 만 달면 컴파일도
+            // 되고 경고도 안 나는데 OnBeginDrag 가 영영 안 불린다 — 조용히 깨지는 종류라 잠가 둔다.
+            var entry = typeof(RocketDesignUI).GetNestedType("PresetEntry", BindingFlags.NonPublic);
+            Assert.IsNotNull(entry, "RocketDesignUI.PresetEntry 를 찾지 못했다.");
+            Assert.IsTrue(typeof(IDragHandler).IsAssignableFrom(entry),
+                "PresetEntry 가 IDragHandler 를 구현하지 않으면 프리셋 드래그가 시작되지 않는다.");
         }
 
         private EngineStatsSO Stats(float fuel, float cooling, float output, float ignition)

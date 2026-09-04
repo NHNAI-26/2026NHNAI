@@ -9,6 +9,8 @@ namespace Simulation
 {
     /// <summary>
     /// 씬 컨트롤러: 좌클릭 부품 부착·선택, 우클릭 궤도 회전, 발사 키.
+    /// 선택한 부품은 유니티 씬 뷰처럼 축 구속 기즈모로 옮기고 돌린다 — 자유 조작이 아니라
+    /// 부품 로컬 축 하나에 묶인다.
     /// 좌측 프리셋 패널(<see cref="RocketDesignUI"/>)이 이 컴포넌트의 드래그·선택 상태를 그대로 쓴다.
     /// </summary>
     [DisallowMultipleComponent]
@@ -39,8 +41,9 @@ namespace Simulation
         [SerializeField] private float minDistance = 4f;
         [SerializeField] private float maxDistance = 60f;
 
-        [Header("Part editing")]
-        [SerializeField] private float rotateSensitivity = 0.5f; // 도/픽셀
+        [Header("Part gizmo")]
+        [Tooltip("기즈모 반지름을 화면 절반 높이 대비 비율로 정한다. 0.2 면 화면 높이의 10%.")]
+        [SerializeField] private float gizmoScreenSize = 0.2f;
 
         [Header("Alignment guides")]
         [SerializeField] private float heightTolerance = 0.25f; // m
@@ -52,11 +55,27 @@ namespace Simulation
 
         private const int RingSegments = 32;
         private const float MinRadius = 1e-3f; // 축 위에서는 방위각이 정의되지 않는다
+        private const float HandleGrabPixels = 14f;
+
+        // 유니티 씬 뷰와 같은 배색. 초록(로컬 up)이 추력 방향이라 플레이어가 제일 자주 잡는 축이다.
+        private static readonly Color[] AxisColors = { Color.red, Color.green, Color.blue };
 
         private readonly List<RocketPart> _attached = new();
         private readonly List<Vector3> _attachedLocal = new();
         private LineRenderer _ring;
         private LineRenderer _axis;
+
+        private Transform _gizmoRoot;
+        private LineRenderer[] _gizmo; // 0..2 이동 화살표, 3..5 회전 링
+        private float _bodyRadius = 0.5f;
+        private float _bodyHalfSegment = 1.5f;
+
+        private int _grabAxis = -1;
+        private Vector3 _grabAxisWorld;
+        private Vector3 _grabReference;
+        private Vector3 _grabPosition;
+        private float _grabT;
+        private float _grabAngle;
 
         private RocketPart _dragged;
         private Collider _draggedCollider;
@@ -100,13 +119,21 @@ namespace Simulation
 
         private void Start()
         {
+            // 프리팹 에셋은 씬 오브젝트 참조를 직렬화할 수 없다 — 프리팹으로 꺼내 놓은 Builder 는
+            // cam/rocket 이 비어 들어오므로 씬에서 직접 찾는다. 씬 인스턴스는 오버라이드를 그대로 쓴다.
+            if (cam == null) cam = Camera.main;
+            if (rocket == null) rocket = FindFirstObjectByType<Rocket>();
+
             Vector3 offset = cam.transform.position - rocket.transform.position;
             _distance = offset.magnitude;
             _yaw = Mathf.Atan2(-offset.x, -offset.z) * Mathf.Rad2Deg;
             _pitch = Mathf.Asin(Mathf.Clamp(offset.y / _distance, -1f, 1f)) * Mathf.Rad2Deg;
 
-            _ring = CreateGuide("AlignmentRing", RingSegments, true);
-            _axis = CreateGuide("AlignmentAxis", 2, false);
+            _ring = CreateGuide("AlignmentRing", rocket.transform, RingSegments, true, guideColor);
+            _axis = CreateGuide("AlignmentAxis", rocket.transform, 2, false, guideColor);
+
+            CacheBodyShape();
+            BuildGizmo();
         }
 
         private void Update()
@@ -128,12 +155,14 @@ namespace Simulation
             // 패널 위에서 시작한 입력은 3D 로 새면 안 된다 — 패널을 드래그하면 카메라가 돌아버린다.
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
-            Orbit(mouse, delta, overUI);
+            // 핸들을 잡은 동안에는 카메라를 묶는다. 잡을 때의 t·각도는 고정이지만 광선은 아니라,
+            // 궤도 회전이나 휠 줌이 끼어들면 부품이 한 프레임에 튄다.
+            Orbit(mouse, delta, overUI || _grabAxis >= 0);
             _lastMouse = position;
 
             if (_mode != EditMode.None)
             {
-                EditSelected(mouse, position, delta, overUI);
+                EditSelected(mouse, position, overUI);
                 return;
             }
 
@@ -155,6 +184,8 @@ namespace Simulation
             Quaternion rotation = Quaternion.Euler(_pitch, _yaw, 0f);
             cam.transform.position = rocket.transform.position + rotation * new Vector3(0f, 0f, -_distance);
             cam.transform.rotation = rotation;
+
+            UpdateGizmo(); // 카메라가 움직인 뒤여야 화면 고정 크기가 한 프레임 밀리지 않는다
         }
 
         // 우클릭 드래그로 로켓 주위를 돈다. 좌클릭 부품 드래그와 버튼이 갈려 동시에 성립하지 않는다.
@@ -203,14 +234,12 @@ namespace Simulation
         /// <summary>이동·회전 버튼이 부르는 모드 전환. 같은 모드를 다시 누르면 해제된다.</summary>
         public void SetMode(EditMode mode)
         {
-            if (_selected == null) mode = EditMode.None;
+            if (_selected == null || rocket.Launched) mode = EditMode.None;
             if (mode == _mode) mode = EditMode.None;
             if (mode == _mode) return;
 
-            // 이동 중에는 자기 콜라이더가 표면 레이캐스트를 가로막는다.
-            if (_selected != null && _selected.TryGetComponent(out Collider collider))
-                collider.enabled = mode != EditMode.Move;
-
+            // 모드 재진입은 반드시 여기를 지난다 — 삭제·선택 해제로 남은 잡기 상태를 여기서 끊는다.
+            _grabAxis = -1;
             _mode = mode;
             if (mode != EditMode.Move) HideGuides(); // 이동을 끝내면 가이드도 같이 사라져야 한다
             Changed?.Invoke();
@@ -222,6 +251,7 @@ namespace Simulation
 
             Destroy(_selected.gameObject);
             _mode = EditMode.None;
+            _grabAxis = -1;
             _selected = null;
             Changed?.Invoke();
         }
@@ -331,9 +361,9 @@ namespace Simulation
             _spawnedFromPreset = false;
         }
 
-        // ---- 선택 부품 편집 -----------------------------------------------------------------
+        // ---- 선택 부품 편집 (축 구속 기즈모) --------------------------------------------------
 
-        private void EditSelected(Mouse mouse, Vector2 position, Vector2 delta, bool overUI)
+        private void EditSelected(Mouse mouse, Vector2 position, bool overUI)
         {
             if (_selected == null)
             {
@@ -341,26 +371,283 @@ namespace Simulation
                 return;
             }
 
-            if (_mode == EditMode.Move)
+            // 잡고 있는 동안에는 overUI 를 보지 않는다 — 버튼 바가 부품을 따라다녀서, 드래그 중
+            // 커서가 그 위를 스치면 부품이 그 프레임만 멈춰 손이 미끄러진 것처럼 보인다.
+            if (_grabAxis >= 0)
             {
-                if (Physics.Raycast(cam.ScreenPointToRay(position), out RaycastHit hit) &&
-                    hit.collider.GetComponentInParent<Rocket>() == rocket)
-                    _selected.transform.position = SnapToGuides(hit.point, _selected);
-                else
-                    HideGuides();
+                if (mouse.leftButton.isPressed)
+                {
+                    DragHandle(position);
+                    return;
+                }
 
-                if (mouse.leftButton.wasPressedThisFrame && !overUI) SetMode(EditMode.None); // 클릭으로 확정
+                _grabAxis = -1;
+                HideGuides();
+
+                // 지면에 두었던 부품을 표면까지 끌어왔으면 이제 진짜 자식으로 붙인다.
+                // 안 그러면 발사할 때 혼자 남는다.
+                if (_selected.transform.parent != rocket.transform)
+                    rocket.Attach(_selected, _selected.transform.position);
+
                 return;
             }
 
-            HideGuides();
+            if (overUI || !mouse.leftButton.wasPressedThisFrame) return;
 
-            // 회전: 화면 기준으로 돌린다. 가로 드래그는 카메라 up, 세로 드래그는 카메라 right 축.
-            // 축·각도 제한을 두지 않으므로 뒤집힌 배치도 그대로 허용된다(추력이 그 방향으로 나간다).
-            if (!mouse.leftButton.isPressed || overUI) return;
+            _grabAxis = PickHandle(position);
+            if (_grabAxis < 0)
+            {
+                SetMode(EditMode.None); // 핸들을 빗나간 클릭이 곧 확정이다
+                return;
+            }
 
-            _selected.transform.Rotate(cam.transform.up, delta.x * rotateSensitivity, Space.World);
-            _selected.transform.Rotate(cam.transform.right, -delta.y * rotateSensitivity, Space.World);
+            Transform part = _selected.transform;
+            Ray ray = cam.ScreenPointToRay(position);
+
+            _grabPosition = part.position;
+            // 축과 기준 방향은 잡는 순간 고정한다. 매 프레임 부품 자세에서 다시 읽으면 회전한 만큼
+            // 기준도 같이 돌아 각도 변화가 정확히 상쇄되고, 링이 죽은 것처럼 보인다.
+            _grabAxisWorld = part.rotation * Axis(_grabAxis);
+            _grabReference = part.rotation * Axis((_grabAxis + 1) % 3);
+
+            if (_mode == EditMode.Move) ClosestPointOnAxis(_grabPosition, _grabAxisWorld, ray, out _grabT);
+            else AngleOnPlane(_grabPosition, _grabAxisWorld, _grabReference, ray, out _grabAngle);
+        }
+
+        private void DragHandle(Vector2 position)
+        {
+            Ray ray = cam.ScreenPointToRay(position);
+            Transform part = _selected.transform;
+
+            if (_mode == EditMode.Move)
+            {
+                if (!ClosestPointOnAxis(_grabPosition, _grabAxisWorld, ray, out float t)) return;
+
+                // 스냅·재투영 결과를 다음 프레임 입력으로 되먹이지 않는다 — 그러면 처음 닿은
+                // 스냅점에 눌어붙어 아무리 끌어도 못 빠져나온다.
+                Vector3 wanted = _grabPosition + _grabAxisWorld * (t - _grabT);
+                part.position = ProjectOntoBody(SnapToGuides(wanted, _selected));
+                return;
+            }
+
+            if (!AngleOnPlane(_grabPosition, _grabAxisWorld, _grabReference, ray, out float angle)) return;
+
+            // ponytail: 프레임 델타를 누적한다. ESC 로 원래 자세 복원이 필요해지면
+            // 잡을 때의 회전을 저장해 절대각(AngleAxis)으로 바꾼다.
+            part.Rotate(_grabAxisWorld, Mathf.DeltaAngle(_grabAngle, angle), Space.World);
+            _grabAngle = angle;
+        }
+
+        /// <summary>
+        /// 화면에서 커서에 가장 가까운 핸들의 축 번호. 없으면 -1.
+        /// 콜라이더를 쓰지 않는다 — 부품 집기가 레이어 마스크 없는 맨 <c>Physics.Raycast</c> 라,
+        /// 기즈모에 콜라이더를 달면 그쪽이 먼저 맞아 드래그·부착이 통째로 깨진다.
+        /// </summary>
+        private int PickHandle(Vector2 screen)
+        {
+            Transform part = _selected.transform;
+            Vector3 origin = part.position;
+            float scale = GizmoScale(origin);
+            Ray ray = cam.ScreenPointToRay(screen);
+
+            int best = -1;
+            float bestDistance = HandleGrabPixels;
+
+            for (int i = 0; i < 3; i++)
+            {
+                Vector3 axis = part.rotation * Axis(i);
+                float distance;
+
+                if (_mode == EditMode.Move)
+                {
+                    if (!ScreenPoint(origin, out Vector2 a)) continue;
+                    if (!ScreenPoint(origin + axis * scale, out Vector2 b)) continue;
+                    distance = DistanceToSegment(screen, a, b);
+                }
+                else
+                {
+                    // 32점 폴리라인을 훑지 않는다. 링 평면과의 교점 각도를 구해 그 각도의 링 위
+                    // 점 하나만 화면에 찍어 비교한다 — 결과는 같고 비스듬히 볼 때 더 정확하다.
+                    Vector3 reference = part.rotation * Axis((i + 1) % 3);
+                    if (!AngleOnPlane(origin, axis, reference, ray, out float angle)) continue;
+                    if (!ScreenPoint(origin + Quaternion.AngleAxis(angle, axis) * reference * scale, out Vector2 p))
+                        continue;
+                    distance = Vector2.Distance(screen, p);
+                }
+
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                best = i;
+            }
+
+            return best;
+        }
+
+        private bool ScreenPoint(Vector3 worldPoint, out Vector2 screen)
+        {
+            Vector3 point = cam.WorldToScreenPoint(worldPoint);
+            screen = point;
+            return point.z > 0f; // 카메라 뒤 좌표는 좌우가 뒤집혀 나온다
+        }
+
+        private Vector3 ProjectOntoBody(Vector3 worldPoint) =>
+            rocket.transform.TransformPoint(ProjectOntoCapsule(
+                rocket.transform.InverseTransformPoint(worldPoint), _bodyHalfSegment, _bodyRadius,
+                rocket.transform.InverseTransformPoint(_grabPosition)));
+
+        // ---- 기즈모 -------------------------------------------------------------------------
+
+        // 본체 캡슐을 로켓 로컬 치수로 한 번 환산해 둔다. 붙어 있는 엔진도
+        // GetComponentInParent<Rocket>() 을 만족해서 레이캐스트로는 본체만 골라 맞힐 수 없다 —
+        // 표면 재투영은 물리가 아니라 수치로 푼다.
+        private void CacheBodyShape()
+        {
+            var body = rocket.GetComponentInChildren<CapsuleCollider>(); // 엔진은 BoxCollider 라 안 걸린다
+            if (body == null)
+            {
+                Log.W("RocketBuilder: rocket has no CapsuleCollider body; using default 0.5 / 1.5", this);
+                return;
+            }
+
+            Vector3 scale = body.transform.lossyScale;
+            _bodyRadius = body.radius * Mathf.Max(scale.x, scale.z); // 유니티의 캡슐 스케일 규칙
+            _bodyHalfSegment = Mathf.Max(0f, body.height * 0.5f * scale.y - _bodyRadius);
+        }
+
+        private void BuildGizmo()
+        {
+            _gizmoRoot = new GameObject("PartGizmo").transform;
+            _gizmoRoot.SetParent(rocket.transform, false); // 로켓 스케일이 1 이라 localScale 이 곧 월드 배율
+            _gizmo = new LineRenderer[6];
+
+            // 단위 벡터로 한 번만 굽는다. 매 프레임 바뀌는 건 루트의 위치·자세·배율뿐이다.
+            for (int i = 0; i < 3; i++)
+            {
+                _gizmo[i] = CreateGuide($"Axis{i}", _gizmoRoot, 2, false, AxisColors[i]);
+                _gizmo[i].SetPosition(1, Axis(i));
+
+                _gizmo[3 + i] = CreateGuide($"Ring{i}", _gizmoRoot, RingSegments, true, AxisColors[i]);
+                for (int s = 0; s < RingSegments; s++)
+                {
+                    float angle = s * 2f * Mathf.PI / RingSegments;
+                    // AngleOnPlane(origin, Axis(i), Axis(i+1), ...) 과 같은 규약이라
+                    // 그린 링과 집는 링이 정확히 같은 원이다.
+                    _gizmo[3 + i].SetPosition(s,
+                        Axis((i + 1) % 3) * Mathf.Cos(angle) + Axis((i + 2) % 3) * Mathf.Sin(angle));
+                }
+            }
+        }
+
+        private void UpdateGizmo()
+        {
+            if (_gizmo == null) return;
+
+            // 표시 여부를 모드에서 매 프레임 유도한다 — show/hide 를 밀어넣지 않으므로
+            // 선택 해제가 유령 기즈모를 남길 수 없다.
+            bool move = _mode == EditMode.Move;
+            bool show = _selected != null && _mode != EditMode.None;
+            for (int i = 0; i < _gizmo.Length; i++) _gizmo[i].enabled = show && (i < 3) == move;
+            if (!show) return;
+
+            float scale = GizmoScale(_selected.transform.position);
+            _gizmoRoot.SetPositionAndRotation(_selected.transform.position, _selected.transform.rotation);
+            _gizmoRoot.localScale = Vector3.one * scale;
+
+            // 선 굵기는 트랜스폼 스케일을 따라가지 않는다 — 맞춰 주지 않으면 줌아웃에서 머리카락이 된다.
+            for (int i = 0; i < _gizmo.Length; i++) _gizmo[i].widthMultiplier = guideWidth * scale;
+        }
+
+        /// <summary>
+        /// 카메라에서 멀어져도 화면상 크기가 같게 만드는 배율. 거리가 아니라 뷰 깊이를 쓴다 —
+        /// 거리로 재면 화면 가장자리에서 기즈모가 부풀어 오른다. 원근 카메라 전용.
+        /// </summary>
+        private float GizmoScale(Vector3 worldPoint)
+        {
+            float depth = Vector3.Dot(worldPoint - cam.transform.position, cam.transform.forward);
+            return Mathf.Max(depth, 0.01f) * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad) * gizmoScreenSize;
+        }
+
+        private static Vector3 Axis(int index) =>
+            index == 0 ? Vector3.right : index == 1 ? Vector3.up : Vector3.forward;
+
+        // ---- 기즈모 수학 (씬 없이 테스트한다) --------------------------------------------------
+
+        /// <summary>
+        /// 마우스 광선에 가장 가까운 축 위의 점을 축 원점 기준 매개변수 <paramref name="t"/>(m)로 준다.
+        /// 축을 정면으로 바라보면(광선 ∥ 축) 어느 점이든 똑같이 가까워 t 가 발산하므로 false 다 —
+        /// 호출부는 그 프레임을 건너뛰어 부품이 무한대로 날아가는 것을 막는다.
+        /// </summary>
+        public static bool ClosestPointOnAxis(Vector3 origin, Vector3 axis, Ray ray, out float t)
+        {
+            t = 0f;
+            Vector3 u = axis.normalized;
+            Vector3 v = ray.direction.normalized;
+            float b = Vector3.Dot(u, v);
+            float denominator = 1f - b * b;
+            if (denominator < 1e-5f) return false;
+
+            Vector3 w = origin - ray.origin;
+            t = (b * Vector3.Dot(v, w) - Vector3.Dot(u, w)) / denominator;
+            return true;
+        }
+
+        /// <summary>
+        /// 회전 링이 놓인 평면(<paramref name="origin"/> 을 지나고 법선 <paramref name="axis"/>)과
+        /// 마우스 광선의 교점을 각도(도)로 준다. 0° 는 <paramref name="reference"/> 방향이고 부호는
+        /// <c>Quaternion.AngleAxis(각도, axis)</c> 와 같다 — 어긋나면 링이 커서에서 도망간다.
+        /// 링을 옆에서 볼 때(광선 ∥ 평면), 교점이 카메라 뒤일 때, 정확히 중심을 가리킬 때는 false.
+        /// </summary>
+        public static bool AngleOnPlane(Vector3 origin, Vector3 axis, Vector3 reference, Ray ray, out float degrees)
+        {
+            degrees = 0f;
+            Vector3 normal = axis.normalized;
+            Vector3 direction = ray.direction.normalized;
+            float denominator = Vector3.Dot(normal, direction);
+            if (Mathf.Abs(denominator) < 1e-5f) return false;
+
+            float distance = Vector3.Dot(normal, origin - ray.origin) / denominator;
+            if (distance <= 0f) return false;
+
+            Vector3 radial = ray.origin + direction * distance - origin;
+            Vector3 x = Vector3.ProjectOnPlane(reference, normal);
+            if (radial.sqrMagnitude < MinRadius * MinRadius || x.sqrMagnitude < MinRadius * MinRadius) return false;
+
+            x.Normalize();
+            Vector3 y = Vector3.Cross(normal, x);
+            degrees = Mathf.Atan2(Vector3.Dot(radial, y), Vector3.Dot(radial, x)) * Mathf.Rad2Deg;
+            return true;
+        }
+
+        /// <summary>화면 좌표에서 점 <paramref name="p"/> 와 선분 ab 의 거리(픽셀).</summary>
+        public static float DistanceToSegment(Vector2 p, Vector2 a, Vector2 b)
+        {
+            Vector2 ab = b - a;
+            float lengthSquared = ab.sqrMagnitude;
+            if (lengthSquared < 1e-6f) return Vector2.Distance(p, a); // 축이 카메라 정면이라 점으로 뭉쳤다
+
+            return Vector2.Distance(p, a + ab * Mathf.Clamp01(Vector2.Dot(p - a, ab) / lengthSquared));
+        }
+
+        /// <summary>
+        /// 로켓 로컬 좌표의 점을 본체 캡슐 표면으로 끌어온다. 캡슐은 선분을 반지름만큼 부풀린
+        /// 모양이라, 축 선분의 최근접점에서 바깥으로 반지름만큼 밀면 그게 곧 표면이다 — 안팎을
+        /// 가리지 않는다(<c>Collider.ClosestPoint</c> 는 내부 점을 그대로 돌려줘서 부품이 파묻힌다).
+        /// 축 위에서는 방위각이 정의되지 않아 <paramref name="fallbackRadial"/> 의 수평 성분을 쓴다.
+        /// </summary>
+        public static Vector3 ProjectOntoCapsule(Vector3 local, float halfSegment, float radius,
+            Vector3 fallbackRadial)
+        {
+            var onAxis = new Vector3(0f, Mathf.Clamp(local.y, -halfSegment, halfSegment), 0f);
+            Vector3 outward = local - onAxis;
+
+            if (outward.sqrMagnitude < MinRadius * MinRadius)
+            {
+                // 중심을 지나 끌 때 부품이 아무 쪽으로나 튀지 않게, 잡기 시작한 방향을 유지한다.
+                outward = new Vector3(fallbackRadial.x, 0f, fallbackRadial.z);
+                if (outward.sqrMagnitude < MinRadius * MinRadius) outward = Vector3.right;
+            }
+
+            return onAxis + outward.normalized * radius;
         }
 
         // ---- 정렬 가이드 ---------------------------------------------------------------------
@@ -484,13 +771,13 @@ namespace Simulation
         }
 
         // 씬에 배치하지 않고 코드로 만든다 — 씬 YAML diff 를 늘리지 않기 위해서.
-        private LineRenderer CreateGuide(string guideName, int points, bool loop)
+        private LineRenderer CreateGuide(string guideName, Transform parent, int points, bool loop, Color color)
         {
             var go = new GameObject(guideName);
-            go.transform.SetParent(rocket.transform, false);
+            go.transform.SetParent(parent, false);
 
             var line = go.AddComponent<LineRenderer>();
-            line.useWorldSpace = false; // 로켓 로컬 좌표로 그린다
+            line.useWorldSpace = false; // 부모 로컬 좌표로 그린다
             line.loop = loop;
             line.positionCount = points;
             line.widthMultiplier = guideWidth;
@@ -498,10 +785,13 @@ namespace Simulation
             line.receiveShadows = false;
 
             // ponytail: Shader.Find 는 에디터 프로토타입 한정. 빌드에 넣으려면 guideMaterial 을 채운다.
+            // URP Unlit 은 _ZTest 프로퍼티가 없어 ZTest LEqual 이 고정이다 — 기즈모를 부품 앞에
+            // 항상 그리려면 Hidden/Internal-Colored + _ZTest Always 로 갈아타야 한다.
+            // 인스턴스를 새로 만든다: 축마다 색이 달라 공유 머티리얼을 쓰면 마지막 색으로 통일된다.
             line.material = guideMaterial != null
-                ? guideMaterial
+                ? new Material(guideMaterial)
                 : new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-            line.material.color = guideColor;
+            line.material.color = color;
             line.enabled = false;
             return line;
         }
@@ -510,11 +800,9 @@ namespace Simulation
         {
             if (_selected == part) return;
 
-            if (_mode == EditMode.Move && _selected != null && _selected.TryGetComponent(out Collider collider))
-                collider.enabled = true;
-
             _selected = part;
             _mode = EditMode.None;
+            _grabAxis = -1;
             Changed?.Invoke();
         }
     }

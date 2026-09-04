@@ -17,12 +17,19 @@ namespace Simulation
     {
         private const string TargetSceneName = "SimulationTest";
 
+        // 버튼 바를 부품 중심 위로 띄우는 세로 간격(캔버스 단위). 기즈모가 화면상 고정
+        // 크기(720 기준 반경 약 72)라 상수 하나로 모든 줌에서 통한다 — 90 이면 +Y 핸들 끝을
+        // 넘어가서 바가 핸들 클릭을 먹지 않는다. 이 컴포넌트는 RuntimeInitializeOnLoadMethod
+        // 로 스폰돼 인스펙터에서 값을 넣을 사람이 없으므로 SerializeField 가 아니라 const 다.
+        private const float ToolsGap = 90f;
+
         private static readonly Color PanelColor = new(0.15f, 0.18f, 0.22f, 0.96f);
         private static readonly Color EntryColor = new(0.22f, 0.26f, 0.31f, 1f);
         private static readonly Color EntryHoverColor = new(0.30f, 0.38f, 0.46f, 1f);
 
         private RocketBuilder builder;
         private Canvas canvas;
+        private RectTransform canvasRect;
         private RectTransform presetPanel;
         private RectTransform statBox;
         private TMP_Text statText;
@@ -72,7 +79,16 @@ namespace Simulation
             // WorldToScreenPoint 는 픽셀이고 anchoredPosition 은 캔버스 단위라, 스케일러 배율로 나눈다.
             Vector3 screen = builder.Cam.WorldToScreenPoint(builder.Selected.transform.position);
             partTools.gameObject.SetActive(screen.z > 0f);
-            partTools.anchoredPosition = new Vector2(screen.x, screen.y) / canvas.scaleFactor;
+
+            // 부품 위로 ToolsGap 만큼 띄운다(pivot 이 아래 가운데). 부품도 기즈모도 가리지 않는다.
+            Vector2 canvasSize = canvasRect.rect.size;
+            Vector2 half = partTools.sizeDelta * 0.5f;
+            Vector2 point = new Vector2(screen.x, screen.y) / canvas.scaleFactor + new Vector2(0f, ToolsGap);
+
+            // 화면 밖으로 나가면 버튼을 누를 수 없다 — 캔버스 안으로 가둔다.
+            partTools.anchoredPosition = new Vector2(
+                Mathf.Clamp(point.x, half.x, Mathf.Max(half.x, canvasSize.x - half.x)),
+                Mathf.Clamp(point.y, 0f, Mathf.Max(0f, canvasSize.y - partTools.sizeDelta.y)));
         }
 
         // ---- 구성 ---------------------------------------------------------------------------
@@ -82,6 +98,7 @@ namespace Simulation
             EnsureEventSystem();
 
             RectTransform canvasTransform = CreateGroup("RocketDesignCanvas", transform);
+            canvasRect = canvasTransform; // 버튼 바 클램프에서 매 프레임 쓴다 — 캐스팅을 반복하지 않는다
             canvas = canvasTransform.gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvasTransform.gameObject.AddComponent<GraphicRaycaster>();
@@ -169,7 +186,7 @@ namespace Simulation
             partTools = CreateGroup("PartTools", canvasTransform);
             partTools.anchorMin = Vector2.zero;
             partTools.anchorMax = Vector2.zero;
-            partTools.pivot = new Vector2(0f, 0.5f);
+            partTools.pivot = new Vector2(0.5f, 0f); // 아래 가운데를 기준점으로 잡아 부품 위에 세운다
             partTools.sizeDelta = new Vector2(160f, 34f);
 
             var layout = partTools.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -242,7 +259,7 @@ namespace Simulation
         // ---- 프리셋 항목 --------------------------------------------------------------------
 
         private sealed class PresetEntry : MonoBehaviour,
-            IPointerEnterHandler, IPointerExitHandler, IBeginDragHandler
+            IPointerEnterHandler, IPointerExitHandler, IBeginDragHandler, IDragHandler
         {
             private RocketDesignUI owner;
             private EngineStatsSO preset;
@@ -272,6 +289,14 @@ namespace Simulation
                 background.color = EntryColor;
                 owner.BeginPresetDrag(preset, eventData.position);
             }
+
+            /// <summary>
+            /// 입력 모듈은 드래그 대상을 <see cref="IBeginDragHandler"/> 가 아니라
+            /// <see cref="IDragHandler"/> 로 찾고(<c>eventData.pointerDrag</c>), 못 찾으면 드래그 처리에
+            /// 들어가기도 전에 빠져나간다 — 이 빈 구현이 없으면 <see cref="OnBeginDrag"/> 가 아예 안 불린다.
+            /// 실제 이동·부착·취소는 <see cref="RocketBuilder"/> 가 마우스를 직접 폴링해서 처리한다.
+            /// </summary>
+            public void OnDrag(PointerEventData eventData) { }
         }
 
         // ---- 생성 헬퍼 ----------------------------------------------------------------------
