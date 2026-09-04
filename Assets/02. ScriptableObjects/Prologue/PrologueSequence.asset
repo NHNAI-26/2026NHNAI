@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c328f53de15d0848908d6a199ff3a66, type: 3}
+  m_Name: PrologueSequence
+  m_EditorClassIdentifier: Border::Border.Prologue.PrologueSequenceSO
+  beats:
+  - line: 
+    typeSecondsPerChar: 0
+    fadeInSeconds: 0
+    holdSeconds: 4
+    fadeOutSeconds: 0
+    fontSize: 48
+    sfxId: Prologue_SecureComms
+  - line: 2017.12
+    typeSecondsPerChar: 0.1
+    fadeInSeconds: 0.8
+    holdSeconds: 2.5
+    fadeOutSeconds: 0.8
+    fontSize: 56
+    sfxId: 
+  - line: "2026\uB144\uAE4C\uC9C0 \uC720\uC778 \uC6B0\uC8FC\uC120\uC744 \uB2EC\uC5D0
+      \uCC29\uB959\uC2DC\uD0A4\uC2ED\uC2DC\uC624."
+    typeSecondsPerChar: 0.06
+    fadeInSeconds: 1
+    holdSeconds: 4.5
+    fadeOutSeconds: 1
+    fontSize: 40
+    sfxId: 
+  - line: 'ARTEMIS: 2026'
+    typeSecondsPerChar: 0.09
+    fadeInSeconds: 1.2
+    holdSeconds: 3.5
+    fadeOutSeconds: 1.2
+    fontSize: 84
+    sfxId: 
+  - line: 
+    typeSecondsPerChar: 0
+    fadeInSeconds: 0
+    holdSeconds: 1
+    fadeOutSeconds: 0
+    fontSize: 48
+    sfxId: 
+  bgmId: Prologue_LowTension
+  bgmFadeInSeconds: 2
+  revealSeconds: 1.5
