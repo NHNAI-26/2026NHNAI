@@ -46,6 +46,17 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void Reset_UnlocksOnlyEngine()
+        {
+            var model = new ResearchPrototypeModel();
+
+            Assert.That(model.GetStage(ResearchStageId.Engine).Unlocked, Is.True);
+            Assert.That(model.GetStage(ResearchStageId.Rocket).Unlocked, Is.False);
+            Assert.That(model.GetStage(ResearchStageId.Orbit).Unlocked, Is.False);
+            Assert.That(model.GetStage(ResearchStageId.Moon).Unlocked, Is.False);
+        }
+
+        [Test]
         public void TryEnterDesign_WhenProgressTooLow_ReturnsProgressTooLow()
         {
             var model = new ResearchPrototypeModel();
@@ -109,6 +120,21 @@ namespace Border.Research.Tests
             Assert.That(model.Year, Is.EqualTo(2018));
             Assert.That(model.Quarter, Is.EqualTo(2));
             Assert.That(model.RemainingTurns, Is.EqualTo(ResearchPrototypeModel.MaxTurns - 1));
+        }
+
+        [Test]
+        public void Unlock_KeepsPreviousStageAvailableAfterNextStageOpens()
+        {
+            var model = new ResearchPrototypeModel();
+            ResearchStageState engine = model.GetStage(ResearchStageId.Engine);
+            engine.Progress = ResearchPrototypeModel.GetStageConfig(ResearchStageId.Engine).UnlockProgressRequirement;
+            engine.HasBestGrade = true;
+            engine.BestGrade = ResearchGrade.C;
+
+            model.ExecuteResearch(ResearchStageId.Engine, false);
+
+            Assert.That(model.GetStage(ResearchStageId.Engine).Unlocked, Is.True);
+            Assert.That(model.GetStage(ResearchStageId.Rocket).Unlocked, Is.True);
         }
 
         private static void SetFunds(ResearchPrototypeModel model, int funds)

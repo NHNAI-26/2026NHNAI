@@ -53,8 +53,6 @@ namespace Border.Research
             GUILayout.Space(10);
             DrawSelectedStage();
             GUILayout.Space(10);
-            DrawForecast();
-            GUILayout.Space(10);
             DrawDesignEntry();
             GUILayout.Space(10);
             DrawLog();
@@ -66,7 +64,7 @@ namespace Border.Research
         private void DrawHeader()
         {
             GUILayout.Label("ARTEMIS: 2026 연구 단계 프로토타입", titleStyle);
-            GUILayout.Label("연구비를 써서 진행도를 올리고, 발사창을 보고 설계 단계로 들어간다.", bodyStyle);
+            GUILayout.Label("연구비와 마감 사이에서 연구, 대기, 설계 진입을 고른다.", bodyStyle);
             GUILayout.Space(8);
 
             GUILayout.BeginHorizontal();
@@ -90,15 +88,23 @@ namespace Border.Research
             {
                 ResearchStageState stage = model.GetStage(config.Id);
                 GUI.enabled = stage.Unlocked;
-                string label = stage.Unlocked ? config.DisplayName : $"{config.DisplayName} 잠김";
-                if (GUILayout.Toggle(selectedStage == config.Id, label, buttonStyle, GUILayout.Height(34)))
+                string label = stage.Unlocked ? config.DisplayName : $"{config.DisplayName}\n잠김";
+                if (GUILayout.Toggle(selectedStage == config.Id, label, buttonStyle, GUILayout.Height(42)))
                 {
                     selectedStage = config.Id;
+                }
+
+                GUI.enabled = true;
+                Rect lastRect = GUILayoutUtility.GetLastRect();
+                if (Event.current.type == EventType.Repaint && !stage.Unlocked)
+                {
+                    GUI.Label(new Rect(lastRect.x, lastRect.yMax + 2, lastRect.width, 38), GetUnlockConditionText(config.Id), smallStyle);
                 }
             }
 
             GUI.enabled = true;
             GUILayout.EndHorizontal();
+            GUILayout.Space(40);
         }
 
         private void DrawSelectedStage()
@@ -121,6 +127,7 @@ namespace Border.Research
             string bestGrade = stage.HasBestGrade ? stage.BestGrade.ToString() : "-";
             GUILayout.Label($"시험 조건: 진행도 {config.MinimumTestProgress}+ | 최고 등급: {bestGrade} | 시도: {stage.AttemptCount}", smallStyle);
             GUILayout.Label($"연구 기준 성공률: {model.CalculateSuccessChance(selectedStage)}%", smallStyle);
+            GUILayout.Label(GetDesignEntryRequirementText(config, stage), smallStyle);
             GUILayout.Space(8);
 
             GUI.enabled = stage.Unlocked && !model.DeadlineReached;
@@ -137,6 +144,12 @@ namespace Border.Research
                 pendingDesignEntry = null;
             }
 
+            bool canEnterDesign = stage.Unlocked
+                && stage.Progress >= config.MinimumTestProgress
+                && model.Funds >= config.TestCost
+                && !model.DeadlineReached;
+
+            GUI.enabled = canEnterDesign;
             if (GUILayout.Button($"설계 진입  비용 {config.TestCost} 필요", buttonStyle, GUILayout.Height(36)))
             {
                 if (model.TryEnterDesign(selectedStage, out ResearchDesignEntryData data) == ResearchActionResult.Success)
@@ -151,7 +164,7 @@ namespace Border.Research
 
             GUILayout.EndHorizontal();
             GUI.enabled = !model.DeadlineReached;
-            if (GUILayout.Button("대기: 한 분기 넘기기", buttonStyle, GUILayout.Height(32)))
+            if (GUILayout.Button($"대기: 한 분기 넘기기 / 연구비 +{model.QuarterlyFunding}", buttonStyle, GUILayout.Height(32)))
             {
                 model.WaitQuarter();
                 pendingDesignEntry = null;
@@ -161,20 +174,43 @@ namespace Border.Research
             GUILayout.EndVertical();
         }
 
-        private void DrawForecast()
+        private string GetUnlockConditionText(ResearchStageId stageId)
         {
-            GUILayout.BeginVertical(boxStyle);
-            GUILayout.Label("현재 포함 4분기 예보", headerStyle);
-            ResearchForecastSlot[] forecast = model.GetForecast(selectedStage);
-            for (int i = 0; i < forecast.Length; i++)
+            if (stageId == ResearchStageId.Engine)
             {
-                ResearchForecastSlot slot = forecast[i];
-                string prefix = i == 0 ? "현재" : $"+{i}";
-                string modifier = slot.StageModifier >= 0 ? $"+{slot.StageModifier}" : slot.StageModifier.ToString();
-                GUILayout.Label($"{prefix}  {slot.Year} Q{slot.Quarter}  {model.GetEnvironmentDisplayName(slot.EnvironmentId)}  {modifier}%p", bodyStyle);
+                return "기본 해금";
             }
 
-            GUILayout.EndVertical();
+            var previousId = (ResearchStageId)((int)stageId - 1);
+            ResearchStageConfig previousConfig = ResearchPrototypeModel.GetStageConfig(previousId);
+            ResearchStageState previousStage = model.GetStage(previousId);
+            string bestGrade = previousStage.HasBestGrade ? previousStage.BestGrade.ToString() : "없음";
+            return $"{previousConfig.DisplayName} {previousStage.Progress}/{previousConfig.UnlockProgressRequirement}, 최고 C 이상: {bestGrade}";
+        }
+
+        private string GetDesignEntryRequirementText(ResearchStageConfig config, ResearchStageState stage)
+        {
+            if (!stage.Unlocked)
+            {
+                return $"설계 진입 불가: {GetUnlockConditionText(config.Id)}";
+            }
+
+            if (stage.Progress < config.MinimumTestProgress && model.Funds < config.TestCost)
+            {
+                return $"설계 진입 불가: 진행도 {stage.Progress}/{config.MinimumTestProgress}, 연구비 {model.Funds}/{config.TestCost}";
+            }
+
+            if (stage.Progress < config.MinimumTestProgress)
+            {
+                return $"설계 진입 불가: 진행도 {stage.Progress}/{config.MinimumTestProgress}";
+            }
+
+            if (model.Funds < config.TestCost)
+            {
+                return $"설계 진입 불가: 연구비 {model.Funds}/{config.TestCost}";
+            }
+
+            return "설계 진입 가능: 비용과 분기는 발사 전까지 소비하지 않음";
         }
 
         private void DrawDesignEntry()
@@ -187,7 +223,7 @@ namespace Border.Research
             ResearchDesignEntryData data = pendingDesignEntry.Value;
             GUILayout.BeginVertical(boxStyle);
             GUILayout.Label("설계 진입 데이터", headerStyle);
-            GUILayout.Label($"단계: {data.StageId} | 날짜: {data.Year} Q{data.Quarter} | 환경: {model.GetEnvironmentDisplayName(data.EnvironmentId)}", bodyStyle);
+            GUILayout.Label($"단계: {data.StageId} | 날짜: {data.Year} Q{data.Quarter}", bodyStyle);
             GUILayout.Label($"맵 시드: {data.MapSeed} | 목표 경로: {data.TargetPathId}", bodyStyle);
             GUILayout.Label($"진행도: {data.CurrentProgress}/100 | 이전 단계 평균: {data.PrerequisiteAverage:0.0} | 경험 보정: +{data.ExperienceBonus}%p", bodyStyle);
             GUILayout.Label($"연구 기준 성공률: {model.CalculateSuccessChance(data.StageId)}%", bodyStyle);

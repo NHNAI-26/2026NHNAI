@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Border.Core;
 
 namespace Border.Research
 {
@@ -10,16 +9,6 @@ namespace Border.Research
         Rocket,
         Orbit,
         Moon
-    }
-
-    public enum ResearchEnvironmentId
-    {
-        Stable,
-        Ideal,
-        HighWind,
-        Thunderstorm,
-        MeteorShower,
-        SolarStorm
     }
 
     public enum ResearchGrade
@@ -80,29 +69,12 @@ namespace Border.Research
         public int UnlockProgressRequirement { get; }
     }
 
-    public readonly struct ResearchForecastSlot
-    {
-        public ResearchForecastSlot(int year, int quarter, ResearchEnvironmentId environmentId, int stageModifier)
-        {
-            Year = year;
-            Quarter = quarter;
-            EnvironmentId = environmentId;
-            StageModifier = stageModifier;
-        }
-
-        public int Year { get; }
-        public int Quarter { get; }
-        public ResearchEnvironmentId EnvironmentId { get; }
-        public int StageModifier { get; }
-    }
-
     public readonly struct ResearchDesignEntryData
     {
         public ResearchDesignEntryData(
             ResearchStageId stageId,
             int year,
             int quarter,
-            ResearchEnvironmentId environmentId,
             int mapSeed,
             string targetPathId,
             int currentProgress,
@@ -112,7 +84,6 @@ namespace Border.Research
             StageId = stageId;
             Year = year;
             Quarter = quarter;
-            EnvironmentId = environmentId;
             MapSeed = mapSeed;
             TargetPathId = targetPathId;
             CurrentProgress = currentProgress;
@@ -123,7 +94,6 @@ namespace Border.Research
         public ResearchStageId StageId { get; }
         public int Year { get; }
         public int Quarter { get; }
-        public ResearchEnvironmentId EnvironmentId { get; }
         public int MapSeed { get; }
         public string TargetPathId { get; }
         public int CurrentProgress { get; }
@@ -153,21 +123,6 @@ namespace Border.Research
             new(ResearchStageId.Moon, "Moon", 650, 1100, 1800, 50, 0),
         };
 
-        private static readonly ResearchEnvironmentId[] EnvironmentIds =
-        {
-            ResearchEnvironmentId.Stable,
-            ResearchEnvironmentId.Ideal,
-            ResearchEnvironmentId.HighWind,
-            ResearchEnvironmentId.Thunderstorm,
-            ResearchEnvironmentId.MeteorShower,
-            ResearchEnvironmentId.SolarStorm,
-        };
-
-        private static readonly int[] EnvironmentWeights = { 35, 15, 15, 10, 15, 10 };
-
-        private readonly DeterministicRng rng = new();
-        private readonly ResearchEnvironmentId[] environmentSchedule = new ResearchEnvironmentId[MaxTurns];
-
         public ResearchPrototypeModel(int seed = 20260904)
         {
             Seed = seed;
@@ -188,7 +143,6 @@ namespace Border.Research
 
         public void Reset()
         {
-            rng.Reseed(Seed);
             Year = StartYear;
             Quarter = StartQuarter;
             RemainingTurns = MaxTurns;
@@ -209,8 +163,6 @@ namespace Border.Research
                     Unlocked = config.Id == ResearchStageId.Engine
                 };
             }
-
-            GenerateEnvironmentSchedule();
         }
 
         public static IReadOnlyList<ResearchStageConfig> GetStageConfigs()
@@ -256,7 +208,7 @@ namespace Border.Research
         public ResearchActionResult WaitQuarter()
         {
             AdvanceQuarter();
-            LastMessage = "한 분기 대기. 발사창을 기다렸습니다.";
+            LastMessage = "한 분기 대기. 정기 연구비를 받았습니다.";
             return DeadlineReached ? ResearchActionResult.DeadlineReached : ResearchActionResult.Success;
         }
 
@@ -284,13 +236,11 @@ namespace Border.Research
                 return ResearchActionResult.NotEnoughFunds;
             }
 
-            ResearchEnvironmentId environmentId = GetCurrentEnvironment();
             int mapSeed = CreateDesignMapSeed(stageId);
             data = new ResearchDesignEntryData(
                 stageId,
                 Year,
                 Quarter,
-                environmentId,
                 mapSeed,
                 CreateTargetPathId(stageId, mapSeed),
                 stage.Progress,
@@ -301,43 +251,18 @@ namespace Border.Research
             return ResearchActionResult.Success;
         }
 
-        public ResearchForecastSlot[] GetForecast(ResearchStageId stageId)
-        {
-            var forecast = new ResearchForecastSlot[4];
-            for (int i = 0; i < forecast.Length; i++)
-            {
-                int turnIndex = CurrentTurnIndex + i;
-                int year;
-                int quarter;
-                if (turnIndex >= MaxTurns)
-                {
-                    year = EndYear;
-                    quarter = EndQuarter;
-                    forecast[i] = new ResearchForecastSlot(year, quarter, ResearchEnvironmentId.Stable, 0);
-                    continue;
-                }
-
-                GetDateForTurn(turnIndex, out year, out quarter);
-                ResearchEnvironmentId environmentId = environmentSchedule[turnIndex];
-                forecast[i] = new ResearchForecastSlot(year, quarter, environmentId, GetEnvironmentModifier(environmentId, stageId));
-            }
-
-            return forecast;
-        }
-
         public int CalculateSuccessChance(ResearchStageId stageId)
         {
             ResearchStageState stage = GetStage(stageId);
             int experience = Math.Min(stage.AttemptCount * 3, 9);
-            int environment = GetEnvironmentModifier(GetCurrentEnvironment(), stageId);
             double raw;
             if (stageId == ResearchStageId.Engine)
             {
-                raw = 20 + stage.Progress * 0.8d + experience + environment;
+                raw = 20 + stage.Progress * 0.8d + experience;
             }
             else
             {
-                raw = 20 + stage.Progress * 0.6d + GetPrerequisiteAverage(stageId) * 0.2d + experience + environment;
+                raw = 20 + stage.Progress * 0.6d + GetPrerequisiteAverage(stageId) * 0.2d + experience;
             }
 
             return Math.Max(10, Math.Min(90, (int)Math.Round(raw)));
@@ -355,27 +280,6 @@ namespace Border.Research
             return stage.Progress >= config.UnlockProgressRequirement
                 && stage.HasBestGrade
                 && stage.BestGrade <= ResearchGrade.C;
-        }
-
-        public string GetEnvironmentDisplayName(ResearchEnvironmentId environmentId)
-        {
-            switch (environmentId)
-            {
-                case ResearchEnvironmentId.Stable:
-                    return "안정";
-                case ResearchEnvironmentId.Ideal:
-                    return "최적 발사창";
-                case ResearchEnvironmentId.HighWind:
-                    return "강풍";
-                case ResearchEnvironmentId.Thunderstorm:
-                    return "뇌우";
-                case ResearchEnvironmentId.MeteorShower:
-                    return "유성우";
-                case ResearchEnvironmentId.SolarStorm:
-                    return "태양 폭풍";
-                default:
-                    return environmentId.ToString();
-            }
         }
 
         private void CheckUnlocks()
@@ -414,12 +318,6 @@ namespace Border.Research
             }
         }
 
-        private ResearchEnvironmentId GetCurrentEnvironment()
-        {
-            int index = Math.Min(CurrentTurnIndex, MaxTurns - 1);
-            return environmentSchedule[index];
-        }
-
         private double GetPrerequisiteAverage(ResearchStageId stageId)
         {
             int count = (int)stageId;
@@ -435,79 +333,6 @@ namespace Border.Research
             }
 
             return total / (double)count;
-        }
-
-        private void GenerateEnvironmentSchedule()
-        {
-            for (int i = 0; i < environmentSchedule.Length; i++)
-            {
-                ResearchEnvironmentId candidate = PickWeightedEnvironment();
-                if (IsThirdSameRiskInARow(i, candidate) || LastThreeWereRisk(i))
-                {
-                    candidate = rng.Next(0, 2) == 0 ? ResearchEnvironmentId.Stable : ResearchEnvironmentId.Ideal;
-                }
-
-                environmentSchedule[i] = candidate;
-            }
-        }
-
-        private ResearchEnvironmentId PickWeightedEnvironment()
-        {
-            int roll = rng.Next(0, 100);
-            int cursor = 0;
-            for (int i = 0; i < EnvironmentWeights.Length; i++)
-            {
-                cursor += EnvironmentWeights[i];
-                if (roll < cursor)
-                {
-                    return EnvironmentIds[i];
-                }
-            }
-
-            return ResearchEnvironmentId.Stable;
-        }
-
-        private bool IsThirdSameRiskInARow(int index, ResearchEnvironmentId candidate)
-        {
-            return index >= 2
-                && IsRisk(candidate)
-                && environmentSchedule[index - 1] == candidate
-                && environmentSchedule[index - 2] == candidate;
-        }
-
-        private bool LastThreeWereRisk(int index)
-        {
-            return index >= 3
-                && IsRisk(environmentSchedule[index - 1])
-                && IsRisk(environmentSchedule[index - 2])
-                && IsRisk(environmentSchedule[index - 3]);
-        }
-
-        private static bool IsRisk(ResearchEnvironmentId environmentId)
-        {
-            return environmentId == ResearchEnvironmentId.HighWind
-                || environmentId == ResearchEnvironmentId.Thunderstorm
-                || environmentId == ResearchEnvironmentId.MeteorShower
-                || environmentId == ResearchEnvironmentId.SolarStorm;
-        }
-
-        private static int GetEnvironmentModifier(ResearchEnvironmentId environmentId, ResearchStageId stageId)
-        {
-            switch (environmentId)
-            {
-                case ResearchEnvironmentId.Ideal:
-                    return 10;
-                case ResearchEnvironmentId.HighWind:
-                    return stageId == ResearchStageId.Engine ? -5 : stageId == ResearchStageId.Rocket ? -20 : 0;
-                case ResearchEnvironmentId.Thunderstorm:
-                    return stageId == ResearchStageId.Engine ? -15 : stageId == ResearchStageId.Rocket ? -25 : 0;
-                case ResearchEnvironmentId.MeteorShower:
-                    return stageId == ResearchStageId.Rocket ? -5 : stageId == ResearchStageId.Orbit ? -25 : stageId == ResearchStageId.Moon ? -20 : 0;
-                case ResearchEnvironmentId.SolarStorm:
-                    return stageId == ResearchStageId.Orbit ? -20 : stageId == ResearchStageId.Moon ? -25 : 0;
-                default:
-                    return 0;
-            }
         }
 
         private int CreateDesignMapSeed(ResearchStageId stageId)
@@ -529,10 +354,5 @@ namespace Border.Research
             return $"{stageId}_Path_{pathIndex}";
         }
 
-        private static void GetDateForTurn(int turnIndex, out int year, out int quarter)
-        {
-            year = StartYear + turnIndex / 4;
-            quarter = StartQuarter + turnIndex % 4;
-        }
     }
 }
