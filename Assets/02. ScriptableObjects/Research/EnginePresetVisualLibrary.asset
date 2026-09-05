@@ -15,9 +15,9 @@ MonoBehaviour:
   previewPrefabs: []
   archetypePreviewPrefabs:
   - Archetype: 0
-    Prefab: {fileID: 8120476766356243560, guid: 171a7a7514d484146b92e0e5202f7057, type: 3}
-  - Archetype: 1
     Prefab: {fileID: 6276918602222369443, guid: bf659a175a87c44baadb75bfceaa6212, type: 3}
+  - Archetype: 1
+    Prefab: {fileID: 8120476766356243560, guid: 171a7a7514d484146b92e0e5202f7057, type: 3}
   - Archetype: 2
     Prefab: {fileID: 2716561207608003426, guid: 64db54ef2b9344fb4a76118709c87940, type: 3}
   - Archetype: 3

@@ -1302,7 +1302,7 @@ UI 도 같이 들어오고, 내리면 같이 나간다 — 코드가 스폰하�
 나온다 — 같은 숫자를 여러 곳에 흩으면 CanvasScaler 가 늘어나는 비율에서 서로 어긋난다.
 
 ```
-TopBar          가로 전체, 높이 64   [ARTEMIS CONTROL] [연/분기·남은 분기] [잔여 자금]  ← 칸마다 패널
+TopBar          가로 전체, 높이 64   [ARTEMIS CONTROL] [연.Q분기 / 남은 분기] [보유 자금 · 설치]  ← 칸마다 패널
 PresetPanel     좌측 폭 200, 두 바 사이                    발사 전
 FlightInfoPanel 좌측 폭 200, PresetPanel 과 같은 자리       발사 후
 Viewport        200 .. 오른쪽 끝, 스테퍼 위 .. 상단 바 아래   (LaunchPip 이 그 안 우하단)
@@ -1351,15 +1351,56 @@ BottomBar       가로 전체, 높이 64   현재 미션 문구 │ [연구 화�
 아트를 입힌 그래픽은 상태를 색이 아니라 **틴트**로 알린다(`TintIdle` / `TintActive`) — 스프라이트에
 어두운 색을 곱하면 그림이 죽는다.
 
-### 잔여 자금은 설치비를 미리 뺀 값이다
+### 날짜와 자금은 연구 화면과 같은 문자열을 쓴다
 
-상단 바 오른쪽은 `예산 − Σ(설치된 부품의 EngineStatsSO.Price)` 를 보여 준다. 실제 차감은 발사 순간
-`ResearchPrototypeModel.BeginLaunch` 가 `ReservedInstallCost` 로 한 번에 하지만, 설계 중에는 엔진을 붙일
-때마다 그 자리에서 줄어드는 것이 읽혀야 한다. 두 숫자는 우연히 같은 것이 아니다 —
-`ResearchEnginePresetRuntimeBridge.BuildRuntimePreset` 이 런타임 프리셋의 `price` 를
-`ResearchPrototypeModel.EngineInstallCost` 로 채우고 모델도 같은 값으로 예약하기 때문에 합이 일치한다.
-(저작 에셋 `EngineStats_*.asset` 의 180~900 가격은 연구 흐름에 넘어가지 않는다 — 단독 재생 전용이다.)
-합계는 캐시하지 않고 매 프레임 다시 센다: 부착은 `builder.Changed` 를 일으키지 않아 캐시가 낡는다.
+같은 모델값을 두 화면이 다르게 적으면 같은 숫자라는 것이 안 읽힌다. 상단 바 날짜는
+`ResearchOperationUIController` 의 것을 **그대로** 복사한 문자열이다:
+
+```
+2018.Q1 / 남은 분기 : 36        보유 자금 : 2,150 $
+                                설치 : 700 $
+```
+
+프로젝트에 공유 포맷터는 없다 — 날짜·금액 표기가 다섯 군데에 인라인으로 흩어져 있고, 이 둘만
+맞춰 두었다. 한쪽을 고치면 다른 쪽도 같이 고쳐야 한다.
+
+**보유 자금은 원본 잔고다.** 예전에는 `예산 − 설치비` 를 한 줄로 보여 줬지만, 연구 화면의
+`보유 자금` 과 같은 이름이 다른 숫자를 가리키게 된다. 지금은 잔고와 예약 설치비를 두 줄로 나눠
+둘 다 그대로 보여 준다. 실제 차감은 여전히 발사 순간 `ResearchPrototypeModel.BeginLaunch` 가
+`ReservedInstallCost` 로 한 번에 한다.
+
+설치비 숫자의 출처는 두 갈래다. 설계 진입 중이면 `CreateDesignEntry` 로 뜬 견적의
+`ReservedInstallCost` 고, 단독 재생이면 `Σ(EngineStatsSO.Price)` 다. 두 값이 우연히 같은 것이
+아니라 `ResearchEnginePresetRuntimeBridge.BuildRuntimePreset` 이 런타임 프리셋의 `price` 를
+설치비로 채우기 때문이다. (저작 에셋 `EngineStats_*.asset` 의 180~900 가격은 연구 흐름에 넘어가지
+않는다 — 단독 재생 전용이다.) 합계는 캐시하지 않고 매 프레임 다시 센다: 부착은 `builder.Changed` 를
+일으키지 않아 캐시가 낡는다.
+
+### 살 수 없는 엔진은 흐려지고 드래그가 막힌다
+
+GDD 03 §6("행동 비용보다 현재 연구비가 적으면 해당 버튼을 비활성화한다")을 프리셋 목록에 적용한 것이다.
+판정은 `RefreshPresetAffordability` 가 매 프레임 한다 — 이벤트로는 못 잡는다(부착이
+`builder.Changed` 를 안 일으킨다).
+
+```
+보유 자금 < 예약 설치비 + 이 프리셋 1개 설치비   →  비활성
+```
+
+- **단가는 `EngineStatsSO.Price` 가 아니다.** `Price` 는 표시 전용이고, 실제 설치비는
+  `ResearchPrototypeModel.GetEngineInstallCost` 가 기본 350 에 프리셋 스탯 평균으로 최대 +20%
+  가산한 값이다. 총합이 `개수 × 단가` 의 단순 선형이라 "한 개 더" 의 값이 곧 단가다.
+- **미션 할인은 반영하지 않는다.** `GetDiscountedInstallCost` 가 걸린 동안 실제 한계비용은 4/5 라
+  최대 70 만큼 일찍 막힌다. 정확히 맞추려면 프리셋마다 `CreateDesignEntry` 로 재견적해야 하는데
+  매 프레임 `int[10]` 열 벌이다.
+- **발사 비용은 보지 않는다.** 그쪽은 발사 버튼의 `interactable` 이 이미 막는다.
+- 설계 진입 중이 아니면(`HasPendingDesignEntry` 가 false, 즉 `SimulationTest` 단독 재생) 연구 예산
+  자체가 없으므로 아무것도 막지 않는다. `PresetIndex` 가 `-1` 인 저작 에셋도 설치비 개념이 없어
+  늘 활성이다.
+
+**흐리게는 알파로 한다.** 아트 카드에 어두운 색을 곱하면 그림이 죽으므로(같은 이유로 선택 상태도
+틴트로 알린다), 비활성은 배경과 라벨의 알파를 `0.35` 로 낮춘다. 호버해도 강조 틴트가 덮지 않고
+커서도 바뀌지 않지만, **스탯 상자는 그대로 뜬다** — 사유 문구를 붙이지 않기로 했으므로 가격을
+봐야 왜 못 사는지 판단이 선다.
 
 ### 비행 단계 스테퍼
 

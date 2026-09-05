@@ -1029,7 +1029,9 @@ MonoBehaviour:
   researchLabRoot: {fileID: 2105710301}
   researchCameraTransform: {fileID: 1543912380}
   cameraPitchDriftDegrees: 0.35
-  cameraPitchDriftCycleSeconds: 18
+  cameraYawOrbitDegrees: 12
+  cameraYawOrbitCycleSeconds: 24
+  cameraReturnSeconds: 0.5
 --- !u!4 &1795880746
 Transform:
   m_ObjectHideFlags: 0
@@ -2645,6 +2647,7 @@ MonoBehaviour:
   targetPreviewHeight: 1.25
   targetPreviewGroundY: -0.5
   previewLocalEulerAngles: {x: -90, y: 0, z: 0}
+  engineSpinDegreesPerSecond: 8
   showEditModePreview: 1
   editModePreviewPresetId: 0
   editModePreviewArchetype: 0

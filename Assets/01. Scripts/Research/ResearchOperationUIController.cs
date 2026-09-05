@@ -33,7 +33,9 @@ namespace Border.Research
         [SerializeField] private Transform researchLabRoot;
         [SerializeField] private Transform researchCameraTransform;
         [SerializeField, Min(0f)] private float cameraPitchDriftDegrees = 0.35f;
-        [SerializeField, Min(0.1f)] private float cameraPitchDriftCycleSeconds = 18f;
+        [SerializeField, Min(0f)] private float cameraYawOrbitDegrees = 12f;
+        [SerializeField, Min(0.1f)] private float cameraYawOrbitCycleSeconds = 24f;
+        [SerializeField, Min(0f)] private float cameraReturnSeconds = 0.5f;
 
         private readonly EngineCardView[] engineCards = new EngineCardView[EngineCount];
 
@@ -51,7 +53,10 @@ namespace Border.Research
         private Sequence designTransitionSequence;
         private Sequence waitFadeSequence;
         private Tween researchCameraDriftTween;
+        private Tween researchCameraReturnTween;
         private Quaternion researchCameraBaseLocalRotation;
+        private Vector3 researchCameraBasePosition;
+        private Vector3 researchCameraOrbitPivot;
         private bool hasResearchCameraBaseLocalRotation;
         private bool isTransitioningToDesign;
         private bool partDevelopmentOpen;
@@ -1051,7 +1056,7 @@ namespace Border.Research
             SetResearchControlsInteractable(false);
             ShowResearchLab();
             ResolveEnginePreview();
-            KillResearchCameraDrift(resetRotation: false);
+            ReturnResearchCameraToBase();
 
             EngineVisualArchetype archetype = GetSelectedEngineArchetype();
             int pendingAnimations = 0;
@@ -1115,7 +1120,7 @@ namespace Border.Research
         private void PlayResearchCameraDrift()
         {
             ResolveResearchCameraTransform();
-            if (researchCameraTransform == null || cameraPitchDriftDegrees <= 0f)
+            if (researchCameraTransform == null || (cameraPitchDriftDegrees <= 0f && cameraYawOrbitDegrees <= 0f))
             {
                 return;
             }
@@ -1126,25 +1131,74 @@ namespace Border.Research
             }
 
             KillResearchCameraDrift(resetRotation: false);
-            researchCameraBaseLocalRotation = researchCameraTransform.localRotation;
-            hasResearchCameraBaseLocalRotation = true;
-            float pitchOffset = -cameraPitchDriftDegrees;
-            researchCameraTransform.localRotation = researchCameraBaseLocalRotation * Quaternion.Euler(pitchOffset, 0f, 0f);
+            if (!hasResearchCameraBaseLocalRotation)
+            {
+                researchCameraBaseLocalRotation = researchCameraTransform.localRotation;
+                researchCameraBasePosition = researchCameraTransform.position;
+                hasResearchCameraBaseLocalRotation = true;
+            }
+
+            researchCameraOrbitPivot = ResolveCameraOrbitPivot();
+
+            // One tween drives both yaw and pitch: they share localRotation, so separate
+            // tweens would overwrite each other. t is absolute in [-1, 1], which is Yoyo-safe.
+            float t = -1f;
+            ApplyResearchCameraOrbit(t);
             researchCameraDriftTween = DOTween.To(
-                    () => pitchOffset,
+                    () => t,
                     value =>
                     {
-                        pitchOffset = value;
-                        if (researchCameraTransform != null)
-                        {
-                            researchCameraTransform.localRotation = researchCameraBaseLocalRotation * Quaternion.Euler(value, 0f, 0f);
-                        }
+                        t = value;
+                        ApplyResearchCameraOrbit(value);
                     },
-                    cameraPitchDriftDegrees,
-                    cameraPitchDriftCycleSeconds * 0.5f)
+                    1f,
+                    cameraYawOrbitCycleSeconds * 0.5f)
                 .SetEase(Ease.InOutSine)
                 .SetLoops(-1, LoopType.Yoyo)
                 .SetTarget(this);
+        }
+
+        private void ApplyResearchCameraOrbit(float t)
+        {
+            if (researchCameraTransform == null)
+            {
+                return;
+            }
+
+            Quaternion yaw = Quaternion.AngleAxis(t * cameraYawOrbitDegrees, Vector3.up);
+            researchCameraTransform.SetPositionAndRotation(
+                researchCameraOrbitPivot + yaw * (researchCameraBasePosition - researchCameraOrbitPivot),
+                yaw * researchCameraBaseLocalRotation * Quaternion.Euler(t * cameraPitchDriftDegrees, 0f, 0f));
+        }
+
+        private Vector3 ResolveCameraOrbitPivot()
+        {
+            ResolveEnginePreview();
+            // No engine to orbit: pivot on the camera itself, so yaw degenerates to an in-place pan.
+            return enginePreview != null && enginePreview.PreviewRoot != null
+                ? enginePreview.PreviewRoot.position
+                : researchCameraTransform.position;
+        }
+
+        private void ReturnResearchCameraToBase()
+        {
+            KillResearchCameraDrift(resetRotation: false);
+            if (!hasResearchCameraBaseLocalRotation || researchCameraTransform == null)
+            {
+                return;
+            }
+
+            if (cameraReturnSeconds <= 0f)
+            {
+                researchCameraTransform.SetPositionAndRotation(researchCameraBasePosition, researchCameraBaseLocalRotation);
+                return;
+            }
+
+            researchCameraReturnTween = DOTween.Sequence()
+                .SetTarget(this)
+                .Join(researchCameraTransform.DOMove(researchCameraBasePosition, cameraReturnSeconds).SetEase(Ease.InOutSine))
+                .Join(researchCameraTransform.DORotateQuaternion(researchCameraBaseLocalRotation, cameraReturnSeconds).SetEase(Ease.InOutSine))
+                .OnComplete(() => researchCameraReturnTween = null);
         }
 
         private void KillResearchCameraDrift(bool resetRotation)
@@ -1155,9 +1209,15 @@ namespace Border.Research
                 researchCameraDriftTween = null;
             }
 
+            if (researchCameraReturnTween != null)
+            {
+                researchCameraReturnTween.Kill();
+                researchCameraReturnTween = null;
+            }
+
             if (resetRotation && hasResearchCameraBaseLocalRotation && researchCameraTransform != null)
             {
-                researchCameraTransform.localRotation = researchCameraBaseLocalRotation;
+                researchCameraTransform.SetPositionAndRotation(researchCameraBasePosition, researchCameraBaseLocalRotation);
             }
         }
 

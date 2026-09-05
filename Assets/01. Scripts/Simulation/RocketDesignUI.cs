@@ -56,6 +56,10 @@ namespace Simulation
         private static readonly Color TintIdle = Color.white;
         private static readonly Color TintActive = new(0.55f, 0.95f, 1f, 1f);
 
+        // 자금이 모자라 못 꺼내는 카드. 어두운 색을 곱하지 않고 알파만 낮춘다 — 위 주석대로
+        // 곱하면 아트가 죽는다.
+        private static readonly Color TintDisabled = new(1f, 1f, 1f, 0.35f);
+
         // 단계 스테퍼는 시트에 맞는 조각이 없어 색만 쓴다. 강조색은 ArtemisCursor 의 시안과 같은 자리다.
         private static readonly Color StageActiveColor = new(0.11f, 0.91f, 0.93f, 1f);
         private static readonly Color StagePendingColor = new(0.30f, 0.38f, 0.46f, 1f);
@@ -68,8 +72,6 @@ namespace Simulation
         private RectTransform viewport;
         private TMP_Text dateText;
         private TMP_Text fundsText;
-        private TMP_Text pendingEffectsText;
-        private RectTransform pendingEffectsPanel;
         private readonly int[] installedPresetCounts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
         private TMP_Text missionText;
         private RectTransform stageStrip;
@@ -92,6 +94,9 @@ namespace Simulation
         private Canvas canvas;
         private RectTransform canvasRect;
         private RectTransform presetPanel;
+
+        // 자금 판정을 매 프레임 돌리므로 행을 들고 있는다 — GetComponentsInChildren 을 반복하지 않는다.
+        private readonly List<PresetEntry> presetEntries = new();
         private RectTransform flightInfoPanel;
         private TMP_Text[] flightInfoValues;
         private string launchGradeLabel;
@@ -230,6 +235,7 @@ namespace Simulation
         /// </summary>
         private void FillPresetPanel()
         {
+            presetEntries.Clear();
             for (int i = presetPanel.childCount - 1; i >= 1; i--)
             {
                 Transform child = presetPanel.GetChild(i);
@@ -264,9 +270,15 @@ namespace Simulation
                 Fill((RectTransform)label.transform, 10f);
 
                 if (testerInterface)
+                {
                     row.gameObject.AddComponent<DesignTesterPresetEntry>().SetPreset(preset);
+                }
                 else
-                    row.gameObject.AddComponent<PresetEntry>().Bind(this, preset, row.GetComponent<Image>());
+                {
+                    var entry = row.gameObject.AddComponent<PresetEntry>();
+                    entry.Bind(this, preset, row.GetComponent<Image>(), label);
+                    presetEntries.Add(entry);
+                }
             }
 
             if (shown == 0)
@@ -446,27 +458,40 @@ namespace Simulation
                 installed = quote.ReservedInstallCost;
                 launchButton.interactable = placedParts.Count > 0 && model.Funds >= model.GetLaunchPaymentCost(quote);
             }
-            string pending = launched ? string.Empty : model.PendingLaunchEffectsText;
-            pendingEffectsPanel.gameObject.SetActive(!string.IsNullOrEmpty(pending));
-            float effectsHeight = 0f;
-            if (!string.IsNullOrEmpty(pending))
-            {
-                pendingEffectsText.text = "남은 이벤트 효과\n" + pending;
-                float width = Mathf.Max(100f, canvasRect.rect.width - ViewportLeft - 24f);
-                effectsHeight = pendingEffectsText.GetPreferredValues(pendingEffectsText.text, width, 0f).y + 24f;
-                pendingEffectsPanel.offsetMin = new Vector2(ViewportLeft, -BarHeight - effectsHeight);
-                pendingEffectsPanel.offsetMax = new Vector2(0f, -BarHeight);
-            }
-            viewport.offsetMax = new Vector2(0f, -BarHeight - effectsHeight);
-            dateText.text = $"{model.Year}.{model.Quarter}분기   ·   남은 {model.RemainingTurns}분기";
-            fundsText.text = $"잔여 자금 {model.Funds - installed:N0}"
-                             + $"   (설치 {installed:N0} · 분기 +{model.QuarterlyFunding:N0})";
+            // 설계 진입 중이 아니면(SimulationTest 단독 재생) 연구 예산 자체가 없어 아무것도 막지 않는다.
+            RefreshPresetAffordability(model, installed, !launched && session.HasPendingDesignEntry);
+
+            // 연구 운영 화면(ResearchOperationUIController)과 같은 문자열이다 — 두 화면이 같은 값을
+            // 다르게 적으면 같은 숫자라는 것이 안 읽힌다. 고칠 때 양쪽을 같이 고친다.
+            dateText.text = $"{model.Year}.Q{model.Quarter} / 남은 분기 : {model.RemainingTurns}";
+            fundsText.text = $"보유 자금 : {model.Funds:N0} $\n설치 : {installed:N0} $";
 
             missionText.text = launched && mission != null
                 ? mission.Objective + "\n" + mission.Status
                 : stageHost != null && !string.IsNullOrEmpty(stageHost.LaunchMessage)
                     ? stageHost.LaunchMessage
                     : mission != null ? mission.Objective : string.Empty;
+        }
+
+        /// <summary>
+        /// 살 수 없는 엔진 카드를 흐리게 하고 드래그를 막는다. 기준은 <b>예약 설치비 + 이 엔진 1개</b>
+        /// 이고 발사 비용은 보지 않는다. 한 개 더 붙일 때의 값은 프리셋마다 다르다 —
+        /// <see cref="EngineStatsSO.Price"/> 는 표시 전용이고 실제 설치비는
+        /// <c>ResearchPrototypeModel.GetEngineInstallCost</c> 가 스탯 평균으로 최대 +20% 가산한다.
+        ///
+        /// 이벤트로 갱신할 수 없어 매 프레임 돌린다 — <c>builder.Changed</c> 는 부착 때 발생하지 않는다.
+        /// </summary>
+        // ponytail: 미션 할인(GetDiscountedInstallCost)이 걸린 동안 실제 한계비용은 이 값의 4/5 라
+        // 최대 70 만큼 일찍 막힌다. 정확히 맞추려면 프리셋마다 CreateDesignEntry 로 재견적해야 하는데
+        // 매 프레임 int[10] 열 벌이다 — 눈에 띄면 그때 견적으로 바꾼다.
+        private void RefreshPresetAffordability(ResearchPrototypeModel model, int reserved, bool gate)
+        {
+            for (int i = 0; i < presetEntries.Count; i++)
+            {
+                PresetEntry entry = presetEntries[i];
+                entry.SetAffordable(!gate || !entry.HasPresetId
+                                    || model.Funds >= reserved + model.GetEngineInstallCost(entry.PresetId));
+            }
         }
 
         /// <summary>
@@ -664,8 +689,6 @@ namespace Simulation
             dateText = topBar.Find("DateCell/Date").GetComponent<TMP_Text>();
             fundsText = topBar.Find("FundsCell/Funds").GetComponent<TMP_Text>();
 
-            pendingEffectsPanel = (RectTransform)canvasRect.Find("PendingLaunchEffects");
-            pendingEffectsText = pendingEffectsPanel.GetComponentInChildren<TMP_Text>(true);
             viewport = (RectTransform)canvasRect.Find("Viewport");
 
             stageStrip = (RectTransform)canvasRect.Find("StageStrip");
@@ -746,30 +769,60 @@ namespace Simulation
             private RocketDesignUI owner;
             private EngineStatsSO preset;
             private Image background;
+            private TMP_Text label;
+            private bool affordable = true;
 
-            public void Bind(RocketDesignUI ui, EngineStatsSO stats, Image image)
+            /// <summary>연구가 만든 런타임 프리셋만 슬롯 번호를 가진다 — 저작 에셋은 설치비가 없다.</summary>
+            public bool HasPresetId { get; private set; }
+
+            public EnginePresetId PresetId { get; private set; }
+
+            public void Bind(RocketDesignUI ui, EngineStatsSO stats, Image image, TMP_Text text)
             {
                 owner = ui;
                 preset = stats;
                 background = image;
+                label = text;
+                HasPresetId = TryGetPresetId(stats, out EnginePresetId id);
+                PresetId = id;
             }
+
+            /// <summary>자금이 되는지에 따라 카드를 켜고 끈다. 매 프레임 불리므로 값이 같으면 즉시 빠진다.</summary>
+            public void SetAffordable(bool value)
+            {
+                if (affordable == value) return;
+
+                affordable = value;
+                background.color = Idle;
+                label.color = value ? Color.white : TintDisabled;
+            }
+
+            /// <summary>가리키지 않을 때의 배경색. 못 사는 카드는 흐린 쪽이 기본이다.</summary>
+            private Color Idle => affordable ? TintIdle : TintDisabled;
 
             public void OnPointerEnter(PointerEventData eventData)
             {
-                background.color = TintActive;
-                ArtemisCursor.Request(ArtemisCursor.Visual.Hover);
+                // 못 사는 카드도 스탯은 보여 준다 — 왜 못 사는지는 가격을 봐야 판단이 선다.
+                if (affordable)
+                {
+                    background.color = TintActive;
+                    ArtemisCursor.Request(ArtemisCursor.Visual.Hover);
+                }
+
                 owner.ShowStats(preset, (RectTransform)transform);
             }
 
             public void OnPointerExit(PointerEventData eventData)
             {
-                background.color = TintIdle;
+                background.color = Idle;
                 owner.HideStats();
             }
 
             public void OnBeginDrag(PointerEventData eventData)
             {
-                background.color = TintIdle;
+                if (!affordable) return;
+
+                background.color = Idle;
                 owner.BeginPresetDrag(preset, eventData.position);
             }
 

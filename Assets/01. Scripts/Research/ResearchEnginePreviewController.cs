@@ -54,6 +54,7 @@ namespace Border.Research
         [SerializeField, Min(0.01f)] private float targetPreviewHeight = 1.25f;
         [SerializeField] private float targetPreviewGroundY;
         [SerializeField] private Vector3 previewLocalEulerAngles = new(-90f, 0f, 0f);
+        [SerializeField] private float engineSpinDegreesPerSecond = 8f;
         [SerializeField] private bool showEditModePreview = true;
         [SerializeField] private EnginePresetId editModePreviewPresetId = EnginePresetId.Engine01;
         [SerializeField] private EngineVisualArchetype editModePreviewArchetype = EngineVisualArchetype.Balanced;
@@ -69,6 +70,7 @@ namespace Border.Research
         private bool editModePreviewRefreshQueued;
 #endif
 
+        public Transform PreviewRoot => previewRoot != null ? previewRoot : transform;
         public GameObject ActiveInstance => activeInstance;
         public bool HasActivePreset => hasActivePreset;
         public EnginePresetId ActivePresetId => activePresetId;
@@ -199,6 +201,22 @@ namespace Border.Research
             KillActiveTweens();
             DestroyActiveInstance();
             hasActivePreset = false;
+            if (Application.isPlaying && previewRoot != null)
+            {
+                previewRoot.localRotation = Quaternion.identity;
+            }
+        }
+
+        private void Update()
+        {
+            // Idle spin for the engine room preview. previewRoot is the pivot because
+            // NormalizePreviewInstance centers the model bounds on its origin.
+            if (!Application.isPlaying || previewRoot == null || activeInstance == null || engineSpinDegreesPerSecond == 0f)
+            {
+                return;
+            }
+
+            previewRoot.Rotate(0f, engineSpinDegreesPerSecond * Time.deltaTime, 0f, Space.World);
         }
 
         private void OnDisable()
