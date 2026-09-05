@@ -119,6 +119,21 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void Dialog_ReopenForNextMission_RefreshesMissionTitle()
+        {
+            var model = new ResearchPrototypeModel();
+            var dialog = CreateDialog();
+
+            dialog.Open(model, LaunchMissionId.LowAltitude, _ => ResearchActionResult.Success);
+            Assert.That(Find<TMP_Text>("Mission").text, Is.EqualTo("MISSION 1 : 낮은 고도 도달"));
+
+            dialog.Hide();
+            dialog.Open(model, LaunchMissionId.HighAltitude, _ => ResearchActionResult.Success);
+
+            Assert.That(Find<TMP_Text>("Mission").text, Is.EqualTo("MISSION 2 : 높은 고도 도달"));
+        }
+
+        [Test]
         public void Dialog_FinalMissionDefaultsToPublicAndExplainsPublicRequirement()
         {
             var model = new ResearchPrototypeModel();
