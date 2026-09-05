@@ -441,25 +441,7 @@ namespace Border.Rendering.Tests
                 "new KeywordBinding(\"_LightSweepEnabled\", \"_LIGHT_SWEEP_ON\", 1)",
                 gui);
 
-            int uiVariantsStart = variants.IndexOf(
-                "guid: 1aad80d3fa14854488c67ee35f470633", StringComparison.Ordinal);
-            int particleVariantsStart = variants.IndexOf(
-                "guid: 23426744f12288344b3e94900b3f7cc9", StringComparison.Ordinal);
-            Assert.That(uiVariantsStart, Is.GreaterThanOrEqualTo(0));
-            Assert.That(particleVariantsStart, Is.GreaterThan(uiVariantsStart));
-            string uiVariants = variants.Substring(uiVariantsStart,
-                particleVariantsStart - uiVariantsStart);
-            string[] serialized = Regex.Matches(uiVariants,
-                    @"(?m)^\s*- keywords:\s*(?<value>[^\r\n]*_LIGHT_SWEEP[^\r\n]*)\r?\n" +
-                    @"\s*passType:\s*14\s*$").Cast<Match>()
-                .Select(match => match.Groups["value"].Value.Trim()).ToArray();
-            CollectionAssert.AreEqual(new[]
-            {
-                "_LIGHT_SWEEP_MULTIPLY _LIGHT_SWEEP_ON",
-                "_LIGHT_SWEEP_MULTIPLY _LIGHT_SWEEP_ON _LIGHT_SWEEP_SHARP",
-                "_LIGHT_SWEEP_ON",
-                "_LIGHT_SWEEP_ON _LIGHT_SWEEP_SHARP",
-            }, serialized);
+            Assert.That(UberShaderVariantManifest.Rows.Where(row => row.ShaderName == UIShaderName).Any(row => row.Keywords.Contains("_HOLOGRAM_ON") || row.Keywords.Contains("_LIGHT_SWEEP_ON")), Is.False);
 
             Material material = new Material(Shader.Find(UIShaderName));
             try
@@ -683,7 +665,7 @@ namespace Border.Rendering.Tests
             }, PragmaRows(shader, "_GLITCH_ON"));
             CollectionAssert.AreEqual(new[]
             {
-                "#pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW",
+                "#pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW",
             }, PragmaRows(shader, "_UBER_QUALITY_LOW"));
             StringAssert.DoesNotContain(
                 "multi_compile_local_fragment _ _HOLOGRAM", shader);
@@ -756,27 +738,7 @@ namespace Border.Rendering.Tests
                 StringAssert.Contains(contract, include);
             }
 
-            int uiVariantsStart = variants.IndexOf(
-                "guid: 1aad80d3fa14854488c67ee35f470633", StringComparison.Ordinal);
-            int particleVariantsStart = variants.IndexOf(
-                "guid: 23426744f12288344b3e94900b3f7cc9", StringComparison.Ordinal);
-            Assert.That(uiVariantsStart, Is.GreaterThanOrEqualTo(0));
-            Assert.That(particleVariantsStart, Is.GreaterThan(uiVariantsStart));
-            string uiVariants = variants.Substring(uiVariantsStart,
-                particleVariantsStart - uiVariantsStart);
-            string[] serialized = Regex.Matches(uiVariants,
-                    @"(?m)^\s*- keywords:\s*(?<value>[^\r\n]*_HOLOGRAM[^\r\n]*)\r?\n" +
-                    @"\s*passType:\s*14\s*$").Cast<Match>()
-                .Select(match => match.Groups["value"].Value.Trim()).ToArray();
-            CollectionAssert.AreEqual(new[]
-            {
-                "_GLITCH_ON _HOLOGRAM_ON",
-                "_HOLOGRAM_ON",
-                "_HOLOGRAM_ON _HOLOGRAM_SCREEN_SPACE",
-                "_HOLOGRAM_ON _HOLOGRAM_WORLD_SPACE",
-            }, serialized);
-            Assert.That(Regex.IsMatch(uiVariants,
-                @"(?m)^\s*- keywords: _GLITCH_ON\r?$"), Is.True);
+            Assert.That(UberShaderVariantManifest.Rows.Where(row => row.ShaderName == UIShaderName).Any(row => row.Keywords.Contains("_HOLOGRAM_ON") || row.Keywords.Contains("_LIGHT_SWEEP_ON")), Is.False);
 
             Material material = new Material(Shader.Find(UIShaderName));
             try

@@ -181,15 +181,15 @@ Shader "Shader/Uber/2D Sprite"
             #pragma vertex UberSpriteForwardVertex
             #pragma fragment UberSpriteForwardFragment
 
-            #pragma multi_compile_local _ _SURFACE_TYPE_TRANSPARENT
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
-            #pragma multi_compile_local_fragment _ _NORMALMAP
-            #pragma multi_compile_local_fragment _ _METALLICMAP
-            #pragma multi_compile_local_fragment _ _SMOOTHNESSMAP
-            #pragma multi_compile_local_fragment _ _UNLIT_ON
-            #pragma multi_compile_local _ _RECEIVE_SHADOWS_OFF
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local _ _SURFACE_TYPE_TRANSPARENT
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
+            #pragma shader_feature_local_fragment _ _NORMALMAP
+            #pragma shader_feature_local_fragment _ _METALLICMAP
+            #pragma shader_feature_local_fragment _ _SMOOTHNESSMAP
+            #pragma shader_feature_local_fragment _ _UNLIT_ON
+            #pragma shader_feature_local _ _RECEIVE_SHADOWS_OFF
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
 
             #pragma shader_feature_local_fragment _ _SECONDARY_LAYER_ON
             #pragma shader_feature_local_fragment _ _COLOR_ADJUST_ON
@@ -211,26 +211,28 @@ Shader "Shader/Uber/2D Sprite"
             #pragma shader_feature_local_fragment _ _HOLOGRAM_WORLD_SPACE _HOLOGRAM_SCREEN_SPACE
             #pragma shader_feature_local_fragment _ _GLITCH_ON
 
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
-            #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
-            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
-            #pragma multi_compile_fragment _ _REFLECTION_PROBE_BLENDING
-            #pragma multi_compile_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
-            #pragma multi_compile_fragment _ _REFLECTION_PROBE_ATLAS
-            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
-            #pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
-            #pragma multi_compile_fragment _ _LIGHT_COOKIES
-            #pragma multi_compile _ _LIGHT_LAYERS
-            #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
-            #pragma multi_compile _ LIGHTMAP_SHADOW_MIXING
-            #pragma multi_compile _ SHADOWS_SHADOWMASK
-            #pragma multi_compile _ DIRLIGHTMAP_COMBINED
-            #pragma multi_compile _ LIGHTMAP_ON
-            #pragma multi_compile_fog
-            #pragma multi_compile_instancing
+            #pragma shader_feature _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma shader_feature _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+            #pragma shader_feature_fragment _ _ADDITIONAL_LIGHT_SHADOWS
+            #pragma shader_feature_fragment _ _REFLECTION_PROBE_BLENDING
+            #pragma shader_feature_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
+            #pragma shader_feature_fragment _ _REFLECTION_PROBE_ATLAS
+            #pragma shader_feature_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
+            #pragma shader_feature_fragment _ _SCREEN_SPACE_OCCLUSION
+            #pragma shader_feature_fragment _ _LIGHT_COOKIES
+            #pragma shader_feature _ _LIGHT_LAYERS
+            #pragma shader_feature _ _CLUSTER_LIGHT_LOOP
+            #pragma shader_feature _ LIGHTMAP_SHADOW_MIXING
+            #pragma shader_feature _ SHADOWS_SHADOWMASK
+            #pragma shader_feature _ DIRLIGHTMAP_COMBINED
+            #pragma shader_feature _ LIGHTMAP_ON
+            #pragma shader_feature _ FOG_LINEAR FOG_EXP FOG_EXP2
+            #pragma shader_feature _ INSTANCING_ON
             #pragma instancing_options renderinglayer
-            #pragma multi_compile _ SKINNED_SPRITE
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature _ SKINNED_SPRITE
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
             #include "UberSprite.hlsl"
             ENDHLSL
         }
@@ -250,12 +252,12 @@ Shader "Shader/Uber/2D Sprite"
             #pragma vertex UberSprite2DVertex
             #pragma fragment UberSprite2DFragment
 
-            #pragma multi_compile_local _ _SURFACE_TYPE_TRANSPARENT
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
-            #pragma multi_compile_local_fragment _ _NORMALMAP
-            #pragma multi_compile_local_fragment _ _UNLIT_ON
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local _ _SURFACE_TYPE_TRANSPARENT
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
+            #pragma shader_feature_local_fragment _ _NORMALMAP
+            #pragma shader_feature_local_fragment _ _UNLIT_ON
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
 
             #pragma shader_feature_local_fragment _ _SECONDARY_LAYER_ON
             #pragma shader_feature_local_fragment _ _COLOR_ADJUST_ON
@@ -277,10 +279,14 @@ Shader "Shader/Uber/2D Sprite"
             #pragma shader_feature_local_fragment _ _HOLOGRAM_WORLD_SPACE _HOLOGRAM_SCREEN_SPACE
             #pragma shader_feature_local_fragment _ _GLITCH_ON
 
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/ShapeLightShared.hlsl"
-            #pragma multi_compile_instancing
-            #pragma multi_compile _ DEBUG_DISPLAY
-            #pragma multi_compile _ SKINNED_SPRITE
+            #pragma shader_feature _ USE_SHAPE_LIGHT_TYPE_0
+            #pragma shader_feature _ USE_SHAPE_LIGHT_TYPE_1
+            #pragma shader_feature _ USE_SHAPE_LIGHT_TYPE_2
+            #pragma shader_feature _ USE_SHAPE_LIGHT_TYPE_3
+
+            #pragma shader_feature _ INSTANCING_ON
+            #pragma shader_feature _ DEBUG_DISPLAY
+            #pragma shader_feature _ SKINNED_SPRITE
             #include "UberSprite.hlsl"
             ENDHLSL
         }
@@ -299,9 +305,9 @@ Shader "Shader/Uber/2D Sprite"
             #pragma vertex UberSpriteNormalsVertex
             #pragma fragment UberSpriteNormalsFragment
 
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _NORMALMAP
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _NORMALMAP
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
             #pragma shader_feature_local_fragment _ _SECONDARY_LAYER_ON
             #pragma shader_feature_local_fragment _ _UV_FADE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
@@ -310,8 +316,8 @@ Shader "Shader/Uber/2D Sprite"
             #pragma shader_feature_local_fragment _ _PIXEL_OUTLINE_ON
             #pragma shader_feature_local_fragment _ _GLITCH_ON
 
-            #pragma multi_compile_instancing
-            #pragma multi_compile _ SKINNED_SPRITE
+            #pragma shader_feature _ INSTANCING_ON
+            #pragma shader_feature _ SKINNED_SPRITE
             #include "UberSprite.hlsl"
             ENDHLSL
         }
@@ -331,8 +337,8 @@ Shader "Shader/Uber/2D Sprite"
             #pragma vertex UberSpriteShadowVertex
             #pragma fragment UberSpriteSilhouetteFragment
 
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
             #pragma shader_feature_local_fragment _ _SECONDARY_LAYER_ON
             #pragma shader_feature_local_fragment _ _UV_FADE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
@@ -341,10 +347,12 @@ Shader "Shader/Uber/2D Sprite"
             #pragma shader_feature_local_fragment _ _PIXEL_OUTLINE_ON
             #pragma shader_feature_local_fragment _ _GLITCH_ON
 
-            #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
-            #pragma multi_compile_instancing
-            #pragma multi_compile _ SKINNED_SPRITE
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
+            #pragma shader_feature _ INSTANCING_ON
+            #pragma shader_feature _ SKINNED_SPRITE
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
             #include "UberSprite.hlsl"
             ENDHLSL
         }
@@ -363,8 +371,8 @@ Shader "Shader/Uber/2D Sprite"
             #pragma vertex UberSpriteDepthVertex
             #pragma fragment UberSpriteSilhouetteFragment
 
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
             #pragma shader_feature_local_fragment _ _SECONDARY_LAYER_ON
             #pragma shader_feature_local_fragment _ _UV_FADE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
@@ -373,9 +381,11 @@ Shader "Shader/Uber/2D Sprite"
             #pragma shader_feature_local_fragment _ _PIXEL_OUTLINE_ON
             #pragma shader_feature_local_fragment _ _GLITCH_ON
 
-            #pragma multi_compile_instancing
-            #pragma multi_compile _ SKINNED_SPRITE
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature _ INSTANCING_ON
+            #pragma shader_feature _ SKINNED_SPRITE
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
             #include "UberSprite.hlsl"
             ENDHLSL
         }
@@ -393,9 +403,9 @@ Shader "Shader/Uber/2D Sprite"
             #pragma vertex UberSpriteNormalsVertex
             #pragma fragment UberSpriteDepthNormalsFragment
 
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _NORMALMAP
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _NORMALMAP
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
             #pragma shader_feature_local_fragment _ _SECONDARY_LAYER_ON
             #pragma shader_feature_local_fragment _ _UV_FADE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
@@ -404,10 +414,12 @@ Shader "Shader/Uber/2D Sprite"
             #pragma shader_feature_local_fragment _ _PIXEL_OUTLINE_ON
             #pragma shader_feature_local_fragment _ _GLITCH_ON
 
-            #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
-            #pragma multi_compile_instancing
-            #pragma multi_compile _ SKINNED_SPRITE
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature_fragment _ _GBUFFER_NORMALS_OCT
+            #pragma shader_feature _ INSTANCING_ON
+            #pragma shader_feature _ SKINNED_SPRITE
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
             #include "UberSprite.hlsl"
             ENDHLSL
         }

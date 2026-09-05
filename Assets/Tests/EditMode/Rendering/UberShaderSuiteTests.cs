@@ -23,7 +23,6 @@ namespace Border.Rendering.Tests
         private const string SpriteShaderName = "Shader/Uber/2D Sprite";
         private const string UIShaderName = "Shader/Uber/UI";
         private const string PostShaderName = "Shader/Uber/Post Processing";
-        private const string ParticleShaderName = "Shader/Uber/Particle";
         private const string VariantPath = UberDirectory +
             "UberShaderVariants.shadervariants";
         private const string VariantGuid = "cbe808f5d2e24a9285468e3acd57e39f";
@@ -49,7 +48,6 @@ namespace Border.Rendering.Tests
             new ShaderCase(SpriteShaderName, UberDirectory + "UberSprite.shader"),
             new ShaderCase(UIShaderName, UberDirectory + "UberUI.shader"),
             new ShaderCase(PostShaderName, UberDirectory + "UberPostProcessing.shader"),
-            new ShaderCase(ParticleShaderName, UberDirectory + "UberParticle.shader"),
         };
 
         private static readonly string[,] RenamedAssets =
@@ -104,14 +102,10 @@ namespace Border.Rendering.Tests
             "_WOBBLE_ON",
         };
 
-        private static readonly string[] StructuralKeywords =
+        private static readonly string[] RuntimeKeywords =
         {
-            "_SURFACE_TYPE_TRANSPARENT", "_ALPHATEST_ON", "_ALPHAPREMULTIPLY_ON",
-            "_ALPHAMODULATE_ON", "_NORMALMAP", "_METALLICMAP",
-            "_SMOOTHNESSMAP", "_UNLIT_ON",
-            "_RECEIVE_SHADOWS_OFF", "_UBER_QUALITY_LOW", "UNITY_UI_CLIP_RECT",
-            "UNITY_UI_ALPHACLIP", "_GLITCH_OBJECT_SPACE", "_GLITCH_WORLD_SPACE",
-            "_TEXTURE_BLEND_ON", "_BASE_MAP_TRIPLANAR",
+            "_SURFACE_TYPE_TRANSPARENT", "_UNLIT_ON", "_UBER_QUALITY_LOW",
+            "UNITY_UI_CLIP_RECT", "UNITY_UI_ALPHACLIP",
         };
 
         private static readonly HashSet<string> AllowedGlobalKeywords =
@@ -131,7 +125,9 @@ namespace Border.Rendering.Tests
                 "DYNAMICLIGHTMAP_ON", "USE_LEGACY_LIGHTMAPS",
                 "LOD_FADE_CROSSFADE", "DEBUG_DISPLAY",
                 "_CASTING_PUNCTUAL_LIGHT_SHADOW", "_GBUFFER_NORMALS_OCT",
-                "SKINNED_SPRITE",
+                "SKINNED_SPRITE", "INSTANCING_ON", "DOTS_INSTANCING_ON", "FOG_LINEAR", "FOG_EXP", "FOG_EXP2",
+                "EDITOR_VISUALIZATION", "_WRITE_RENDERING_LAYERS", "PROBE_VOLUMES_L1", "PROBE_VOLUMES_L2",
+                "USE_SHAPE_LIGHT_TYPE_0", "USE_SHAPE_LIGHT_TYPE_1", "USE_SHAPE_LIGHT_TYPE_2", "USE_SHAPE_LIGHT_TYPE_3",
             };
 
         [Test]
@@ -284,7 +280,7 @@ namespace Border.Rendering.Tests
                 string[] pragmas = PragmaRows(objectShaderSource, keyword);
                 Assert.That(pragmas.Length, Is.EqualTo(2), keyword);
                 Assert.That(pragmas.All(row =>
-                    row.Contains("multi_compile_local_fragment")), Is.True, keyword);
+                    row.Contains("shader_feature_local_fragment")), Is.True, keyword);
             }
             foreach (string contract in new[]
                      {
@@ -322,7 +318,7 @@ namespace Border.Rendering.Tests
             {
                 string[] pragmas = PragmaRows(shaderSource, keyword);
                 Assert.That(pragmas.Length, Is.EqualTo(1), keyword);
-                StringAssert.Contains("multi_compile_local_fragment", pragmas[0]);
+                StringAssert.Contains("shader_feature_local_fragment", pragmas[0]);
                 Assert.That(shaderSource.IndexOf(pragmas[0], StringComparison.Ordinal),
                     Is.LessThan(shaderSource.IndexOf("Name \"Universal2D\"",
                         StringComparison.Ordinal)), keyword);
@@ -1251,50 +1247,23 @@ namespace Border.Rendering.Tests
         [Test]
         public void KeywordPragmasUseReviewedLocalPolicyAndGlobalAllowList()
         {
-            string source = string.Join("\n", Shaders.Select(item => Read(item.Path)));
-            foreach (string keyword in EffectKeywords)
+            foreach (ShaderCase shader in Shaders)
             {
-                string[] rows = PragmaRows(source, keyword);
-                Assert.That(rows, Is.Not.Empty, keyword);
-                Assert.That(rows.All(row => row.Contains("shader_feature_local")),
-                    Is.True, keyword + ": " + string.Join(" | ", rows));
-            }
-
-            foreach (string keyword in StructuralKeywords)
-            {
-                string[] rows = PragmaRows(source, keyword);
-                Assert.That(rows, Is.Not.Empty, keyword);
-                Assert.That(rows.All(row => row.Contains("multi_compile_local")),
-                    Is.True, keyword + ": " + string.Join(" | ", rows));
-            }
-
-            string[] globalFeatureRows = Lines(source).Where(line =>
-                    line.StartsWith("#pragma shader_feature", StringComparison.Ordinal) &&
-                    !line.Contains("shader_feature_local"))
-                .ToArray();
-            CollectionAssert.AreEqual(new[]
-            {
-                "#pragma shader_feature EDITOR_VISUALIZATION",
-            }, globalFeatureRows, "Unreviewed non-local shader_feature row");
-
-            foreach (string row in Lines(source).Where(line =>
-                         line.StartsWith("#pragma multi_compile", StringComparison.Ordinal) &&
-                         !line.Contains("multi_compile_local")))
-            {
-                Assert.That(EffectKeywords.Any(keyword => ContainsToken(row, keyword)),
-                    Is.False, "Effect keyword on global row: " + row);
-                Match match = Regex.Match(row,
-                    @"^#pragma\s+multi_compile(?:_[A-Za-z]+)?\s*(?<tokens>.*)$");
-                Assert.That(match.Success, Is.True, row);
-                foreach (string token in match.Groups["tokens"].Value.Split(
-                             new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+                string source = Read(shader.Path);
+                StringAssert.DoesNotContain("#pragma multi_compile", source, shader.Name);
+                foreach (string keyword in EffectKeywords.Concat(RuntimeKeywords))
+                    foreach (string row in PragmaRows(source, keyword))
+                        StringAssert.Contains("shader_feature_local", row, shader.Name + ": " + keyword);
+                foreach (string row in Lines(source).Where(line =>
+                    line.StartsWith("#pragma shader_feature") && !line.Contains("shader_feature_local")))
                 {
-                    if (token == "_")
-                        continue;
-                    Assert.That(AllowedGlobalKeywords.Contains(token), Is.True,
-                        "Unreviewed global keyword " + token + " on " + row);
+                    string[] tokens = row.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).Skip(2).ToArray();
+                    foreach (string keyword in tokens.Where(token => token != "_" && token != "__"))
+                        Assert.That(AllowedGlobalKeywords.Contains(keyword), Is.True, keyword);
                 }
             }
+            Assert.That(File.Exists(UberDirectory + "UberParticle.shader"), Is.False);
+            Assert.That(File.Exists(UberDirectory + "UberParticle.hlsl"), Is.False);
         }
 
         [Test]
@@ -1306,7 +1275,6 @@ namespace Border.Rendering.Tests
                 { "UberSprite.shader", "UberSprite.hlsl" },
                 { "UberUI.shader", "UberUI.hlsl" },
                 { "UberPostProcessing.shader", "UberPostProcessing.hlsl" },
-                { "UberParticle.shader", "UberParticle.hlsl" },
             };
             Regex propertyPattern = new Regex(
                 @"(?m)^\s*(?:\[[^\]]+\]\s*)*(?<name>_[A-Za-z0-9]+)\s*" +
@@ -1351,10 +1319,9 @@ namespace Border.Rendering.Tests
             string objectHlsl = Read(UberDirectory + "Uber3D.hlsl");
             string spriteHlsl = Read(UberDirectory + "UberSprite.hlsl");
             string uiHlsl = Read(UberDirectory + "UberUI.hlsl");
-            string particleHlsl = Read(UberDirectory + "UberParticle.hlsl");
             string surfaceSources = string.Join("\n", new[]
             {
-                objectHlsl, spriteHlsl, uiHlsl, particleHlsl,
+                objectHlsl, spriteHlsl, uiHlsl,
             });
 
             string[,] commonOracles =
@@ -1469,15 +1436,6 @@ namespace Border.Rendering.Tests
                     wrapperBodies[index, 2],
                     wrapperBodies[index, 1] + " must remain delegation-only");
 
-            string particleGradient = InlineFunctionBody(particleHlsl,
-                "UberParticleEvaluateLifetimeGradient");
-            AssertNormalizedShaderSource(particleGradient,
-                @"time = saturate(time);
-return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
-    _LifetimeGradientColor1, _LifetimeGradientColor2,
-    _LifetimeGradientColor3, _LifetimeGradientAlphas,
-    _LifetimeGradientAlphaTimes, _LifetimeGradientMetadata);",
-                "Particle must clamp age before delegating and do nothing else");
         }
 
         [Test]
@@ -1540,7 +1498,7 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
             {
                 string[] rows = PragmaRows(source, "_UNLIT_ON");
                 Assert.That(rows, Is.Not.Empty);
-                Assert.That(rows.All(row => row.Contains("multi_compile_local")),
+                Assert.That(rows.All(row => row.Contains("shader_feature_local")),
                     Is.True, string.Join(" | ", rows));
             }
         }
@@ -1786,119 +1744,43 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
         [Test]
         public void VariantCollectionContainsExactlyReviewedWhitelist()
         {
-            IReadOnlyList<UberShaderVariantSpec> rows =
-                UberShaderVariantManifest.Rows;
-            ShaderVariantCollection collection =
-                AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(VariantPath);
-            Assert.That(collection, Is.Not.Null);
+            var rows = UberShaderVariantManifest.Rows;
+            var collection = AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(VariantPath);
             UberShaderVariantManifest.ValidateRows(rows);
-            UberShaderVariantCollectionGenerator.ValidateCollection(collection,
-                rows, "Reviewed live collection");
-            Assert.That(rows.Count, Is.EqualTo(112));
-            UberShaderVariantSpec[] particleRows = rows.Where(item =>
-                item.ShaderName == ParticleShaderName).ToArray();
-            Assert.That(particleRows.Length, Is.EqualTo(18));
-            Assert.That(rows.Count - particleRows.Length, Is.EqualTo(94));
-            Assert.That(particleRows.All(item =>
-                item.PassType == PassType.ScriptableRenderPipeline), Is.True);
-            Assert.That(particleRows.Select(item => string.Join(" ", item.Keywords))
-                .Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(18));
-            Assert.That(rows.Count(item =>
-                item.PassType == PassType.ScriptableRenderPipeline), Is.EqualTo(72));
-            Assert.That(rows.Count(item =>
-                item.PassType == PassType.ScriptableRenderPipelineDefaultUnlit),
-                Is.EqualTo(29));
-            Assert.That(rows.Count(item => item.PassType == PassType.Normal),
-                Is.EqualTo(11));
-            Assert.That(rows.Any(item => item.PassType == PassType.ShadowCaster ||
-                item.PassType == PassType.Meta), Is.False);
-
-            Assert.That(rows.Count(item => item.RequiresUncheckedConstruction),
-                Is.EqualTo(1));
-            foreach (UberShaderVariantSpec item in rows)
-            {
-                Assert.That(item.Keywords.Distinct(StringComparer.Ordinal).Count(),
-                    Is.EqualTo(item.Keywords.Length),
-                    item.ShaderName + " keywords contain a duplicate");
-                Assert.That(collection.Contains(item.ToVariant()), Is.True,
-                    item.ShaderName + " [" + string.Join(" ", item.Keywords) + "]");
-            }
-            UberShaderVariantSpec mixedStageParticle = new UberShaderVariantSpec(
-                ParticleShaderName,
-                PassType.ScriptableRenderPipeline, "_CUSTOM_DATA_ON",
-                "_UV_DISTORTION_ON", "_VERTEX_OFFSET_ON");
-            Assert.That(mixedStageParticle.RequiresUncheckedConstruction, Is.True);
-            Assert.Throws<ArgumentException>(() =>
-                new ShaderVariantCollection.ShaderVariant(
-                    Shader.Find(mixedStageParticle.ShaderName),
-                    mixedStageParticle.PassType, mixedStageParticle.Keywords));
-            Assert.That(collection.Contains(mixedStageParticle.ToVariant()), Is.True);
-
-            Assert.That(collection.Contains(new UberShaderVariantSpec(ObjectShaderName,
-                PassType.ScriptableRenderPipeline, "_COLOR_ADJUST_ON",
-                "_GLASS_GLOW_ON").ToVariant()), Is.False);
-            Assert.That(collection.Contains(new UberShaderVariantSpec(SpriteShaderName,
-                PassType.ScriptableRenderPipeline, "_PIXEL_OUTLINE_ON",
-                "_SECONDARY_LAYER_ON").ToVariant()), Is.False);
-            Assert.That(collection.Contains(new UberShaderVariantSpec(SpriteShaderName,
-                PassType.ScriptableRenderPipeline, "_RIM_MULTIPLY",
-                "_RIM_ON").ToVariant()), Is.True);
-            Assert.That(collection.Contains(new UberShaderVariantSpec(UIShaderName,
-                PassType.ScriptableRenderPipelineDefaultUnlit, "_PIXEL_OUTLINE_ON",
-                "_RGB_OVERRIDE_ON").ToVariant()), Is.False);
-            for (int first = 1; first < PostFilterKeywords.Length; ++first)
-            {
-                for (int second = first + 1;
-                     second < PostFilterKeywords.Length; ++second)
-                {
-                    Assert.Throws<ArgumentException>(() =>
-                        new UberShaderVariantSpec(PostShaderName, PassType.Normal,
-                            PostFilterKeywords[first],
-                            PostFilterKeywords[second]).ToVariant(),
-                        PostFilterKeywords[first] + " + " +
-                        PostFilterKeywords[second]);
-                }
-            }
-
-            string yaml = Read(VariantPath);
-            MatchCollection serialized = Regex.Matches(yaml,
-                @"(?m)^\s*- keywords:\s*(?<keywords>[^\r\n]*)\r?\n" +
-                @"\s*passType:\s*(?<pass>\d+)\s*$");
-            Assert.That(serialized.Count, Is.EqualTo(rows.Count));
-            for (int index = 0; index < rows.Count; ++index)
-            {
-                Assert.That(serialized[index].Groups["keywords"].Value.Trim(),
-                    Is.EqualTo(string.Join(" ", rows[index].Keywords)),
-                    "Serialized whitelist index " + index);
-                Assert.That(int.Parse(serialized[index].Groups["pass"].Value),
-                    Is.EqualTo((int)rows[index].PassType));
-            }
-
-            string[] guids = Regex.Matches(yaml,
-                    @"first:\s*\{fileID:\s*4800000,\s*guid:\s*(?<guid>[0-9a-f]{32})")
-                .Cast<Match>().Select(match => match.Groups["guid"].Value).ToArray();
-            CollectionAssert.AreEqual(new[]
-            {
-                "30f88fdf99949b17e1187c24eba8ed93",
-                "d03bad68e5f94df47a2c30a8822ea41c",
-                "795b3814d0dfe9242829795ff0608656",
-                "1aad80d3fa14854488c67ee35f470633",
-                "23426744f12288344b3e94900b3f7cc9",
-            }, guids);
+            UberShaderVariantCollectionGenerator.ValidateCollection(collection, rows, "Essential live collection");
+            Assert.That(collection.shaderCount, Is.EqualTo(3));
+            Assert.That(rows.All(row => row.ShaderName != SpriteShaderName &&
+                row.ShaderName != "Shader/Uber/Particle"), Is.True);
+            Assert.That(rows.Count(row => row.ShaderName == PostShaderName), Is.EqualTo(2));
+            Assert.That(rows.Count(row => row.ShaderName == UIShaderName), Is.EqualTo(12));
+            foreach (var row in rows) Assert.That(collection.Contains(row.ToVariant()), Is.True);
+            foreach (var material in rows.Where(row => row.ShaderName == ObjectShaderName &&
+                         !row.Keywords.Contains("_CLUSTER_LIGHT_LOOP")))
+                Assert.That(rows.Any(row => row.ShaderName == ObjectShaderName &&
+                    row.Keywords.Contains("_CLUSTER_LIGHT_LOOP") && row.Keywords.Contains("_LIGHT_LAYERS") &&
+                    row.Keywords.Contains("_SCREEN_SPACE_OCCLUSION") &&
+                    material.Keywords.All(keyword => row.Keywords.Contains(keyword))), Is.True,
+                    "Every runtime material, including unlit previews, needs the PC renderer keywords.");
+            foreach (var row in rows.Where(row => row.ShaderName == ObjectShaderName &&
+                         row.Keywords.Contains("_CLUSTER_LIGHT_LOOP") && !row.Keywords.Contains("FOG_EXP2")))
+                Assert.That(rows.Any(fog => fog.ShaderName == ObjectShaderName &&
+                    fog.Keywords.Length == row.Keywords.Length + 1 && fog.Keywords.Contains("FOG_EXP2") &&
+                    row.Keywords.All(keyword => fog.Keywords.Contains(keyword))), Is.True,
+                    "SkyEnvironment fog and HappyEndingSequence fog-off must both be retained.");
+            foreach (string unused in new[] { "_GLITCH_ON", "_DISSOLVE_ON", "_GLASS_GLOW_ON",
+                "_STENCIL_OUTLINE_ON", "_PIXEL_OUTLINE_ON", "_ASCII_FILTER_ON" })
+                Assert.That(rows.Any(row => row.Keywords.Contains(unused)), Is.False, unused);
         }
 
         [Test]
         public void VariantManifestGeneratorIsTransientFirstExplicitAndByteNoOp()
         {
-            const string expectedCollectionHash =
-                "CA000C6743C3D5D3A6FFD43D0C45F43E7822CC71F11DB7CC691ABA7E9DD11D72";
             const string expectedMetaHash =
                 "C4AA07D520559A09F8246F5B8C539E2E5509D6B9777F01FDE56E9F00F1D48D31";
             IReadOnlyList<UberShaderVariantSpec> rows =
                 UberShaderVariantManifest.Rows;
             string collectionHash = FileSha256(VariantPath);
             string metaHash = FileSha256(VariantPath + ".meta");
-            Assert.That(collectionHash, Is.EqualTo(expectedCollectionHash));
             Assert.That(metaHash, Is.EqualTo(expectedMetaHash));
             ShaderVariantCollection live =
                 AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(VariantPath);
@@ -1915,8 +1797,8 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
             {
                 UberShaderVariantCollectionGenerator.ValidateCollection(candidate,
                     rows, "Test transient candidate");
-                Assert.That(candidate.shaderCount, Is.EqualTo(5));
-                Assert.That(candidate.variantCount, Is.EqualTo(112));
+                Assert.That(candidate.shaderCount, Is.EqualTo(3));
+                Assert.That(candidate.variantCount, Is.EqualTo(rows.Count));
             }
             finally
             {

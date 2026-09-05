@@ -253,7 +253,7 @@ Five problems surfaced on the first F8 playback. All fixes stayed inside `HappyE
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| No typewriter on the dialogue | `ShowLine` only faded alpha | Added `TypeText`, raising `maxVisibleCharacters` the way the prologue does. Typewriter on the B2 lines only; the B1 date card keeps its fade. **No key clicks** (user decision) |
+| No typewriter on the dialogue | `ShowLine` only faded alpha | Added `TypeText`, raising `maxVisibleCharacters` the way the prologue does. Typewriter on the B2 lines only; the B1 date card keeps its fade. Newly revealed non-whitespace characters play `keyboard01..04`, at most once per frame. Completion, click-to-complete and disable stop the owned key sounds |
 | Night launch far too dark | ambient `(0.02,0.03,0.06)`, moonlight 0.35, spot intensity 40 | ambient `(0.08,0.09,0.12)`, moonlight 0.8, spot `intensity 6 / range 60 / spotAngle 70`. URP has no Physical Light Units, so spot intensity is an arbitrary unit where 1~10 is the normal range |
 | Space shot pitch black | **Every light was a child of `pad`, so `pad.SetActive(false)` left zero light sources** | Split lighting into `Pad Rig` / `Space Rig` directly under `stage` and swap them at the cut. The space rig is a directional key plus fill, so it works wherever the rocket is |
 | UI visible during the 3D beats | The research screen is a Screen Space Overlay canvas and draws even with its camera disabled | `BuildStage` disables the research root and the newspaper beat restores it |
@@ -281,7 +281,7 @@ outside just produces a flame with no ramp.
 | Flight effects | `Suspend(rocket)` removed; `rocket.Launch()` is called normally. The external `PlayParticles`/`ResetParticles` are deleted — `RocketPart` drives them properly now |
 | Authored path | New `HappyEndingFlight` component. It re-forces `isKinematic = true` in both `FixedUpdate` and `LateUpdate` (undoing `ReleaseLift()`, which frees the body 2.5 s after liftoff) and writes the position. The first 2.5 s uses the same formula as the in-game assisted lift so the picture overlaps, then continues at constant acceleration |
 | Lean | Only after 3.5 s from liftoff, up to 12°. Tilting earlier makes `hasUpwardEngine` false, which cuts the lift smoke and releases the kinematic pin |
-| Audio | `RocketAudio` is left alone. SparkStart → RocketLaunch/RocketLoop and the `Launch` BGM play exactly as in game |
+| Audio | `RocketAudio` is left alone. SparkStart → RocketLaunch/RocketLoop play as in game. Immediately after `rocket.Launch()`, the ending replaces `Launch` with `ToSpace`, which continues through the Moon and newspaper beats and fades out before returning to the title |
 | Moon texture | `Assets/05. Arts/Texture/Noise/Craters/Craters_03-512x512.png` moved to `Assets/05. Arts/Texture/Resources/` and loaded with `Resources.Load`. Nothing referenced it. The material changed from Unlit to **Lit** so the key light gives a terminator |
 | Night sky | `SkyBlend.shader` gains `_MidColor` and `_MidBlend`. **`_MidBlend` defaults to 0, so unless it is switched on the result is identical to the old two-colour lerp** — the in-game sky is untouched. The ending sets it to 1 for horizon pink (0.72,0.26,0.45) → mid purple (0.42,0.20,0.52) → zenith navy (0.07,0.08,0.26), with `_AtmosphereThickness 3` and `_SpaceBlend` dropped from 0.35 to 0.12 because the blue nebula was eating the pink |
 

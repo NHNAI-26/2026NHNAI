@@ -54,6 +54,9 @@ namespace Simulation
             "…이제, 올려보내면 됩니다."
         };
 
+        private static readonly string[] TypingSoundIds =
+            { "keyboard01", "keyboard02", "keyboard03", "keyboard04" };
+
         [SerializeField] private string dateCard = "2026.04";
         [SerializeField, TextArea(1, 3)] private string[] phoneLines = DefaultPhoneLines;
 
@@ -69,7 +72,7 @@ namespace Simulation
         [SerializeField, Min(0f)] private float transitSeconds = 10f;
         [SerializeField, Min(0f)] private float finalFadeSeconds = 1.2f;
 
-        // 발사 구간의 소리는 RocketAudio 가 인게임과 똑같이 낸다 — 여기서 따로 재생하지 않는다.
+        // 발사 효과음은 RocketAudio가 담당하고, 엔딩 BGM은 발사 직후 ToSpace로 전환한다.
         [Header("사운드 (비우면 무음으로 진행한다)")]
         [SerializeField] private string phoneSfxId = string.Empty;
 
@@ -87,6 +90,8 @@ namespace Simulation
 
         private readonly List<Behaviour> suspended = new();
         private readonly List<ParticleSystem> exhaust = new();
+        private readonly List<SoundHandle> typingSounds = new();
+        private int typingSoundIndex;
         private bool researchWasActive;
 
         private Coroutine routine;
@@ -163,6 +168,7 @@ namespace Simulation
             yield return NewspaperRoutine();
 
             // B7 — 페이드 후 타이틀
+            SoundManager.Instance?.StopBgm(finalFadeSeconds);
             yield return FadeOverlay(1f, finalFadeSeconds);
             LeaveToTitle();
         }
@@ -203,6 +209,8 @@ namespace Simulation
             {
                 flight = HappyEndingFlight.Attach(rocket, -stageCamera.transform.forward);
                 rocket.Launch();
+                // LaunchStarted에서 RocketAudio가 선택한 Launch를 같은 프레임에 교체한다.
+                SoundManager.Instance?.PlayBgm("ToSpace", 0f);
             }
 
             bool frozen = false;
@@ -720,7 +728,7 @@ namespace Simulation
         /// <summary>
         /// 글자를 하나씩 드러낸다. 알파가 아니라 <see cref="TMP_Text.maxVisibleCharacters"/> 만 올리므로
         /// 레이아웃이 처음부터 확정돼 줄이 늘어날 때 텍스트가 위아래로 튀지 않는다 — 프롤로그가 같은
-        /// 이유로 이 방식을 쓴다. 다만 타건음은 깔지 않는다. 해피엔딩의 전화 대사는 무음으로 간다.
+        /// 이유로 이 방식을 쓴다. 공백을 제외한 새 글자가 나타날 때 키보드 효과음을 재생한다.
         /// </summary>
         private IEnumerator TypeText(string line)
         {
@@ -737,12 +745,38 @@ namespace Simulation
                     // 타이핑 중 클릭은 그 줄을 즉시 다 드러낸다. 뒤의 유지 시간은 그대로 남는다.
                     if (ConsumeAdvance()) break;
                     elapsed += Time.unscaledDeltaTime;
+                    int previous = lineText.maxVisibleCharacters;
                     lineText.maxVisibleCharacters = Mathf.Min(total, Mathf.FloorToInt(elapsed / typeSecondsPerChar));
+                    PlayTypingSound(line, previous, lineText.maxVisibleCharacters);
                     yield return null;
                 }
             }
 
             lineText.maxVisibleCharacters = int.MaxValue;
+            StopTypingSound();
+        }
+
+        private void PlayTypingSound(string text, int previous, int visible)
+        {
+            if (visible <= previous) return;
+            typingSounds.RemoveAll(handle => !handle.IsValid);
+            for (int i = previous; i < visible; i++)
+            {
+                if (char.IsWhiteSpace(text[i])) continue;
+                if (SoundManager.Instance != null)
+                {
+                    typingSounds.Add(SoundManager.Instance.PlaySfx(TypingSoundIds[typingSoundIndex]));
+                    typingSoundIndex = (typingSoundIndex + 1) % TypingSoundIds.Length;
+                }
+                // 여러 글자가 한 프레임에 표시되어도 타건음은 한 번만 낸다.
+                break;
+            }
+        }
+
+        private void StopTypingSound()
+        {
+            foreach (SoundHandle sound in typingSounds) sound.Stop();
+            typingSounds.Clear();
         }
 
         private IEnumerator FadeText(float from, float to, float seconds)
@@ -867,6 +901,7 @@ namespace Simulation
 
         private void OnDisable()
         {
+            StopTypingSound();
             if (routine != null) StopCoroutine(routine);
             routine = null;
             TearDownStage();

@@ -39,6 +39,8 @@ Unity.exe -batchmode -projectPath . -runTests -testPlatform PlayMode -testResult
 
 Use `dotnet build` for C# compile feedback; use batchmode for Unity behavior.
 
+After creating and verifying a distributable game build, provide it to the user for testing. Upload its packaged artifacts to GitHub Releases for this repository only after the user has tested that build and explicitly approved the upload. A build request alone does not authorize release creation, artifact upload, or publication. Compile-only checks and test runs do not require a release.
+
 Do not run `dotnet build`, Unity compilation, or Unity batchmode tests for trivial edits, small documentation changes, formatting-only work, or read-only investigation. When compilation or tests are needed, batch related changes first and run the fewest meaningful verification commands so the user can keep testing in Unity without repeated interruptions.
 
 ## Coding Style & Naming Conventions

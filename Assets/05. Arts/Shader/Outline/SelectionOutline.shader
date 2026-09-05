@@ -27,7 +27,7 @@ Shader "Shader/Selection Outline"
             #pragma target 2.0
             #pragma vertex SelectionMaskVertex
             #pragma fragment SelectionMaskFragment
-            #pragma multi_compile_instancing
+            #pragma shader_feature _ INSTANCING_ON
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 

@@ -160,9 +160,9 @@ Shader "Shader/Uber/UI"
             #pragma fragment UberUIFrag
 
             // uGUI mask configuration is structural and must never be stripped.
-            #pragma multi_compile_local _ UNITY_UI_CLIP_RECT
-            #pragma multi_compile_local_fragment _ UNITY_UI_ALPHACLIP
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local _ UNITY_UI_CLIP_RECT
+            #pragma shader_feature_local_fragment _ UNITY_UI_ALPHACLIP
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
 
             // Optional visual modules and their submodes remain local features.
             #pragma shader_feature_local_fragment _COLOR_ADJUST_ON

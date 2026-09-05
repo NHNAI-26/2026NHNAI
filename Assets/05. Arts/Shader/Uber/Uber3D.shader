@@ -166,17 +166,17 @@ Shader "Shader/Uber/3D Object"
             #pragma vertex UberForwardVertex
             #pragma fragment UberForwardFragment
 
-            #pragma multi_compile_local _ _NORMALMAP
-            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
-            #pragma multi_compile_local_fragment _ _METALLICMAP
-            #pragma multi_compile_local_fragment _ _ROUGHNESSMAP
-            #pragma multi_compile_local_fragment _ _TEXTURE_BLEND_ON
-            #pragma multi_compile_local_fragment _ _SURFACE_TYPE_TRANSPARENT
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
-            #pragma multi_compile_local_fragment _ _UNLIT_ON
-            #pragma multi_compile_local _ _RECEIVE_SHADOWS_OFF
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local _ _NORMALMAP
+            #pragma shader_feature_local _ _BASE_MAP_TRIPLANAR
+            #pragma shader_feature_local_fragment _ _METALLICMAP
+            #pragma shader_feature_local_fragment _ _ROUGHNESSMAP
+            #pragma shader_feature_local_fragment _ _TEXTURE_BLEND_ON
+            #pragma shader_feature_local_fragment _ _SURFACE_TYPE_TRANSPARENT
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
+            #pragma shader_feature_local_fragment _ _UNLIT_ON
+            #pragma shader_feature_local _ _RECEIVE_SHADOWS_OFF
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
 
             #pragma shader_feature_local_fragment _ _COLOR_ADJUST_ON
             #pragma shader_feature_local_fragment _ _EMISSION
@@ -187,43 +187,49 @@ Shader "Shader/Uber/3D Object"
             #pragma shader_feature_local_fragment _ _HOLOGRAM_WORLD_SPACE _HOLOGRAM_SCREEN_SPACE
             #pragma shader_feature_local _ _GLITCH_ON
             #pragma shader_feature_local_vertex _ _WOBBLE_ON
-            #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
+            #pragma shader_feature_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
             #pragma shader_feature_local_fragment _ _DITHER_FADE_ON
 
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
-            #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
-            #pragma multi_compile _ EVALUATE_SH_MIXED EVALUATE_SH_VERTEX
-            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
-            #pragma multi_compile_fragment _ _REFLECTION_PROBE_BLENDING
-            #pragma multi_compile_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
-            #pragma multi_compile_fragment _ _REFLECTION_PROBE_ATLAS
-            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
-            #pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
-            #pragma multi_compile_fragment _ _SCREEN_SPACE_IRRADIANCE
-            #pragma multi_compile_fragment _ _LIGHT_COOKIES
-            #pragma multi_compile _ _LIGHT_LAYERS
-            #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
+            #pragma shader_feature _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma shader_feature _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+            #pragma shader_feature _ EVALUATE_SH_MIXED EVALUATE_SH_VERTEX
+            #pragma shader_feature_fragment _ _ADDITIONAL_LIGHT_SHADOWS
+            #pragma shader_feature_fragment _ _REFLECTION_PROBE_BLENDING
+            #pragma shader_feature_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
+            #pragma shader_feature_fragment _ _REFLECTION_PROBE_ATLAS
+            #pragma shader_feature_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
+            #pragma shader_feature_fragment _ _SCREEN_SPACE_OCCLUSION
+            #pragma shader_feature_fragment _ _SCREEN_SPACE_IRRADIANCE
+            #pragma shader_feature_fragment _ _LIGHT_COOKIES
+            #pragma shader_feature _ _LIGHT_LAYERS
+            #pragma shader_feature _ _CLUSTER_LIGHT_LOOP
             #include_with_pragmas "Packages/com.unity.render-pipelines.core/ShaderLibrary/FoveatedRenderingKeywords.hlsl"
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/RenderingLayers.hlsl"
+            #pragma shader_feature_fragment _ _WRITE_RENDERING_LAYERS
+            #pragma target 4.5 _WRITE_RENDERING_LAYERS
 
-            #pragma multi_compile _ LIGHTMAP_SHADOW_MIXING
-            #pragma multi_compile _ SHADOWS_SHADOWMASK
-            #pragma multi_compile _ DIRLIGHTMAP_COMBINED
-            #pragma multi_compile _ LIGHTMAP_ON
-            #pragma multi_compile_fragment _ LIGHTMAP_BICUBIC_SAMPLING
-            #pragma multi_compile_fragment _ REFLECTION_PROBE_ROTATION
-            #pragma multi_compile _ DYNAMICLIGHTMAP_ON
-            #pragma multi_compile _ USE_LEGACY_LIGHTMAPS
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_fragment _ DEBUG_DISPLAY
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Fog.hlsl"
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ProbeVolumeVariants.hlsl"
 
-            #pragma multi_compile_instancing
+            #pragma shader_feature _ LIGHTMAP_SHADOW_MIXING
+            #pragma shader_feature _ SHADOWS_SHADOWMASK
+            #pragma shader_feature _ DIRLIGHTMAP_COMBINED
+            #pragma shader_feature _ LIGHTMAP_ON
+            #pragma shader_feature_fragment _ LIGHTMAP_BICUBIC_SAMPLING
+            #pragma shader_feature_fragment _ REFLECTION_PROBE_ROTATION
+            #pragma shader_feature _ DYNAMICLIGHTMAP_ON
+            #pragma shader_feature _ USE_LEGACY_LIGHTMAPS
+            #pragma shader_feature _ LOD_FADE_CROSSFADE
+            #pragma shader_feature_fragment _ DEBUG_DISPLAY
+            #pragma shader_feature _ FOG_LINEAR FOG_EXP FOG_EXP2
+            #include "Packages/com.unity.render-pipelines.universal-config/Runtime/ShaderConfig.cs.hlsl"
+            #pragma shader_feature _ PROBE_VOLUMES_L1 PROBE_VOLUMES_L2
+
+
+            #pragma shader_feature _ INSTANCING_ON
             #pragma instancing_options renderinglayer
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
 
             #define UBER_FORWARD_PASS
             #include "Uber3D.hlsl"
@@ -250,20 +256,22 @@ Shader "Shader/Uber/3D Object"
             #pragma target 3.5
             #pragma vertex UberOutlineVertex
             #pragma fragment UberOutlineFragment
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
-            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local_fragment _ _STENCIL_OUTLINE_ON
             #pragma shader_feature_local _ _GLITCH_ON
             #pragma shader_feature_local_vertex _ _WOBBLE_ON
-            #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
+            #pragma shader_feature_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
             #pragma shader_feature_local_fragment _ _DITHER_FADE_ON
             #pragma shader_feature_local_fragment _ _HEIGHT_FADE_ON
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_instancing
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature _ LOD_FADE_CROSSFADE
+            #pragma shader_feature _ INSTANCING_ON
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
             #define UBER_OUTLINE_PASS
             #include "Uber3D.hlsl"
             ENDHLSL
@@ -282,20 +290,22 @@ Shader "Shader/Uber/3D Object"
             #pragma target 3.5
             #pragma vertex UberShadowVertex
             #pragma fragment UberSilhouetteFragment
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
-            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local _ _GLITCH_ON
             #pragma shader_feature_local_vertex _ _WOBBLE_ON
-            #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
+            #pragma shader_feature_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
             #pragma shader_feature_local_fragment _ _DITHER_FADE_ON
             #pragma shader_feature_local_fragment _ _HEIGHT_FADE_ON
-            #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_instancing
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
+            #pragma shader_feature _ LOD_FADE_CROSSFADE
+            #pragma shader_feature _ INSTANCING_ON
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
             #define UBER_SHADOW_PASS
             #include "Uber3D.hlsl"
             ENDHLSL
@@ -313,19 +323,21 @@ Shader "Shader/Uber/3D Object"
             #pragma target 3.5
             #pragma vertex UberDepthVertex
             #pragma fragment UberSilhouetteFragment
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
-            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local _ _GLITCH_ON
             #pragma shader_feature_local_vertex _ _WOBBLE_ON
-            #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
+            #pragma shader_feature_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
             #pragma shader_feature_local_fragment _ _DITHER_FADE_ON
             #pragma shader_feature_local_fragment _ _HEIGHT_FADE_ON
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_instancing
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature _ LOD_FADE_CROSSFADE
+            #pragma shader_feature _ INSTANCING_ON
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
             #define UBER_DEPTH_PASS
             #include "Uber3D.hlsl"
             ENDHLSL
@@ -342,23 +354,27 @@ Shader "Shader/Uber/3D Object"
             #pragma target 3.5
             #pragma vertex UberDepthNormalsVertex
             #pragma fragment UberDepthNormalsFragment
-            #pragma multi_compile_local _ _NORMALMAP
-            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
+            #pragma shader_feature_local _ _NORMALMAP
+            #pragma shader_feature_local _ _BASE_MAP_TRIPLANAR
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _UBER_QUALITY_LOW
             #pragma shader_feature_local _ _GLITCH_ON
             #pragma shader_feature_local_vertex _ _WOBBLE_ON
-            #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
+            #pragma shader_feature_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
             #pragma shader_feature_local_fragment _ _DITHER_FADE_ON
             #pragma shader_feature_local_fragment _ _HEIGHT_FADE_ON
-            #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/RenderingLayers.hlsl"
-            #pragma multi_compile_instancing
+            #pragma shader_feature_fragment _ _GBUFFER_NORMALS_OCT
+            #pragma shader_feature _ LOD_FADE_CROSSFADE
+            #pragma shader_feature_fragment _ _WRITE_RENDERING_LAYERS
+            #pragma target 4.5 _WRITE_RENDERING_LAYERS
+
+            #pragma shader_feature _ INSTANCING_ON
             #pragma instancing_options renderinglayer
-            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature _ DOTS_INSTANCING_ON
+            #pragma target 4.5 DOTS_INSTANCING_ON
+
             #define UBER_DEPTH_NORMALS_PASS
             #include "Uber3D.hlsl"
             ENDHLSL
@@ -374,12 +390,12 @@ Shader "Shader/Uber/3D Object"
             #pragma target 3.5
             #pragma vertex UberMetaVertex
             #pragma fragment UberMetaFragment
-            #pragma multi_compile_local_fragment _ _ALPHATEST_ON
-            #pragma multi_compile_local_fragment _ _UNLIT_ON
-            #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
-            #pragma multi_compile_local_fragment _ _METALLICMAP
-            #pragma multi_compile_local_fragment _ _ROUGHNESSMAP
-            #pragma multi_compile_local_fragment _ _TEXTURE_BLEND_ON
+            #pragma shader_feature_local_fragment _ _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _ _UNLIT_ON
+            #pragma shader_feature_local _ _BASE_MAP_TRIPLANAR
+            #pragma shader_feature_local_fragment _ _METALLICMAP
+            #pragma shader_feature_local_fragment _ _ROUGHNESSMAP
+            #pragma shader_feature_local_fragment _ _TEXTURE_BLEND_ON
             #pragma shader_feature_local_fragment _ _COLOR_ADJUST_ON
             #pragma shader_feature_local_fragment _ _EMISSION
             #pragma shader_feature EDITOR_VISUALIZATION

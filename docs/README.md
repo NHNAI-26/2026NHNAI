@@ -1,5 +1,7 @@
 # 프로젝트 문서
 
+빌드의 제품 이름(`Player Settings > Product Name`)은 `ARTEMIS2026`입니다.
+
 ## 게임 기획 문서
 
 - [ARTEMIS: 2026 GDD v1.0](artemis-2026-gdd/00_README.md)

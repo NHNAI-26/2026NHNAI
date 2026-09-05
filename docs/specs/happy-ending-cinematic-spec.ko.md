@@ -253,7 +253,7 @@ F8 첫 재생에서 나온 문제 다섯을 고쳤다. 전부 `HappyEndingSequen
 
 | 증상 | 원인 | 수정 |
 | --- | --- | --- |
-| 대사에 타이핑 효과 없음 | `ShowLine` 이 알파 페이드만 했다 | `TypeText` 추가. `maxVisibleCharacters` 를 올리는 프롤로그 기법. B2 대사만 타이핑, B1 날짜 카드는 페이드 유지. **타건음은 넣지 않는다**(사용자 결정) |
+| 대사에 타이핑 효과 없음 | `ShowLine` 이 알파 페이드만 했다 | `TypeText` 추가. `maxVisibleCharacters` 를 올리는 프롤로그 기법. B2 대사만 타이핑, B1 날짜 카드는 페이드 유지. 새 글자가 나타나면 공백을 제외하고 `keyboard01..04`를 프레임당 한 번 재생한다. 타이핑 완료·클릭으로 즉시 완성·비활성화 시 해당 타건음을 정리한다 |
 | 야간 발사가 너무 어두움 | ambient `(0.02,0.03,0.06)`, moonlight 0.35, Spot intensity 40 | ambient `(0.08,0.09,0.12)`, moonlight 0.8, Spot `intensity 6 / range 60 / spotAngle 70`. URP 는 Physical Light Units 를 쓰지 않아 Spot intensity 는 임의 단위이고 1~10 이 정상 범위다 |
 | 우주가 새까맘 | **조명이 전부 `pad` 자식이라 `pad.SetActive(false)` 와 함께 광원이 0개가 됐다** | 조명을 `Pad Rig` / `Space Rig` 로 분리해 `stage` 직속에 두고 컷에서 교체. 우주 리그는 Directional 키 + fill 이라 로켓 위치와 무관하게 먹는다 |
 | 3D 구간에 UI 가 뜸 | 연구 화면이 Screen Space Overlay 라 카메라를 꺼도 그려진다 | `BuildStage` 에서 연구 화면 루트를 끄고 신문 비트에서 되살린다 |
@@ -281,7 +281,7 @@ F8 첫 재생에서 나온 문제 다섯을 고쳤다. 전부 `HappyEndingSequen
 | 비행 이펙트 | `Suspend(rocket)` 제거. `rocket.Launch()` 를 정상적으로 부른다. 파티클을 밖에서 켜던 `PlayParticles`/`ResetParticles` 삭제 — 이제 `RocketPart` 가 제대로 켠다 |
 | 정해진 경로 | 새 컴포넌트 `HappyEndingFlight`. 매 `FixedUpdate`·`LateUpdate` 에서 `isKinematic = true` 를 재강제하고(이륙 2.5초 뒤 `ReleaseLift()` 가 스스로 푸는 것을 되돌린다) 위치를 경로로 덮어쓴다. 앞 2.5초는 인게임 보조 상승과 같은 식이라 그림이 겹치고, 그 뒤 등가속으로 이어 붙인다 |
 | 기울기 | 이륙 후 3.5초가 지난 뒤에만 최대 12도. 그 전에 눕히면 `hasUpwardEngine` 이 false 가 되어 리프트 연기가 끊기고 kinematic 이 풀린다 |
-| 사운드 | `RocketAudio` 를 재우지 않는다. SparkStart → RocketLaunch/RocketLoop, BGM `Launch` 가 인게임과 똑같이 나온다 |
+| 사운드 | `RocketAudio` 를 재우지 않는다. SparkStart → RocketLaunch/RocketLoop는 인게임과 같다. `rocket.Launch()` 직후 BGM을 `ToSpace`로 교체하고, 달 항행과 신문까지 유지한 뒤 타이틀 복귀 전에 페이드 아웃한다 |
 | 달 텍스처 | `Assets/05. Arts/Texture/Noise/Craters/Craters_03-512x512.png` 를 `Assets/05. Arts/Texture/Resources/` 로 이동해 `Resources.Load` 로 읽는다. 아무도 참조하지 않던 파일이다. Unlit → **Lit** 으로 바꿔 키 라이트가 명암 경계를 만든다 |
 | 밤하늘 | `SkyBlend.shader` 에 `_MidColor` + `_MidBlend` 추가. **`_MidBlend` 기본값 0 이라 켜지 않으면 기존 2색 lerp 와 완전히 동일** — 인게임 하늘은 안 변한다. 엔딩만 1 로 켜서 지평선 핑크 (0.72,0.26,0.45) → 중간 보라 (0.42,0.20,0.52) → 천정 남색 (0.07,0.08,0.26). `_AtmosphereThickness 3`, `_SpaceBlend` 0.35 → 0.12 (파란 성운이 핑크를 먹어서) |
 

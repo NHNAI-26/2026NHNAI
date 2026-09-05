@@ -109,25 +109,7 @@ namespace Border.Rendering.Tests
                 @"spriteSurface\.hologramEdge").Count,
                 Is.EqualTo(2));
 
-            int spriteVariantsStart = variants.IndexOf(
-                "guid: 795b3814d0dfe9242829795ff0608656", StringComparison.Ordinal);
-            int uiVariantsStart = variants.IndexOf(
-                "guid: 1aad80d3fa14854488c67ee35f470633", StringComparison.Ordinal);
-            Assert.That(spriteVariantsStart, Is.GreaterThanOrEqualTo(0));
-            Assert.That(uiVariantsStart, Is.GreaterThan(spriteVariantsStart));
-            string spriteVariants = variants.Substring(spriteVariantsStart,
-                uiVariantsStart - spriteVariantsStart);
-            string[] serialized = Regex.Matches(spriteVariants,
-                    @"(?m)^\s*- keywords:\s*(?<value>[^\r\n]*_HOLOGRAM[^\r\n]*)\r?\n" +
-                    @"\s*passType:\s*13\s*$").Cast<Match>()
-                .Select(match => match.Groups["value"].Value.Trim()).ToArray();
-            CollectionAssert.AreEqual(new[]
-            {
-                "_GLITCH_ON _HOLOGRAM_ON",
-                "_HOLOGRAM_ON",
-                "_HOLOGRAM_ON _HOLOGRAM_SCREEN_SPACE",
-                "_HOLOGRAM_ON _HOLOGRAM_WORLD_SPACE",
-            }, serialized);
+            Assert.That(UberShaderVariantManifest.Rows.Any(row => row.ShaderName == SpriteShaderName), Is.False);
 
             Material material = new Material(Shader.Find(SpriteShaderName));
             try
@@ -650,18 +632,8 @@ namespace Border.Rendering.Tests
                 "new KeywordBinding(\"_DissolveMode\", \"_DISSOLVE_SWIPE\", 2,",
                 gui);
 
-            string spriteGuid = AssetDatabase.AssetPathToGUID(
-                UberDirectory + "UberSprite.shader");
-            Match spriteVariantBlock = Regex.Match(variants,
-                @"(?sm)^\s*- first:\s*\{fileID:\s*4800000,\s*guid:\s*" +
-                Regex.Escape(spriteGuid) + @".*?(?=^\s*- first:|\z)");
-            Assert.That(spriteVariantBlock.Success, Is.True, spriteGuid);
-            string[] swipeVariants = Regex.Matches(spriteVariantBlock.Value,
-                    @"(?m)^\s*- keywords:\s*(?<value>[^\r\n]*_DISSOLVE_SWIPE[^\r\n]*)\r?\n" +
-                    @"\s*passType:\s*13\s*$").Cast<Match>()
-                .Select(match => match.Groups["value"].Value.Trim()).ToArray();
-            CollectionAssert.AreEqual(new[] { "_DISSOLVE_ON _DISSOLVE_SWIPE" },
-                swipeVariants);
+            Assert.That(UberShaderVariantManifest.Rows.Any(row => row.ShaderName == SpriteShaderName), Is.False);
+
             StringAssert.DoesNotContain("_DISSOLVE_SWIPE",
                 Read(UberDirectory + "Uber3D.shader") +
                 Read(UberDirectory + "Uber3D.hlsl"));
@@ -793,17 +765,7 @@ namespace Border.Rendering.Tests
                 "new KeywordBinding(\"_LightSweepBlendMode\", \"_LIGHT_SWEEP_MULTIPLY\", 1,",
                 gui);
 
-            string[] serialized = Regex.Matches(variants,
-                    @"(?m)^\s*- keywords:\s*(?<value>[^\r\n]*_LIGHT_SWEEP[^\r\n]*)\r?\n" +
-                    @"\s*passType:\s*13\s*$").Cast<Match>()
-                .Select(match => match.Groups["value"].Value.Trim()).ToArray();
-            CollectionAssert.AreEqual(new[]
-            {
-                "_LIGHT_SWEEP_MULTIPLY _LIGHT_SWEEP_ON",
-                "_LIGHT_SWEEP_MULTIPLY _LIGHT_SWEEP_ON _LIGHT_SWEEP_SHARP",
-                "_LIGHT_SWEEP_ON",
-                "_LIGHT_SWEEP_ON _LIGHT_SWEEP_SHARP",
-            }, serialized);
+            Assert.That(UberShaderVariantManifest.Rows.Any(row => row.ShaderName == SpriteShaderName), Is.False);
 
             Material material = new Material(Shader.Find(SpriteShaderName));
             try
@@ -1067,10 +1029,10 @@ namespace Border.Rendering.Tests
                 AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(VariantPath);
             Assert.That(collection.Contains(new UberShaderVariantSpec(SpriteShaderName,
                 PassType.ScriptableRenderPipeline, "_GLITCH_ON").ToVariant()),
-                Is.True);
+                Is.False);
             Assert.That(collection.Contains(new UberShaderVariantSpec(SpriteShaderName,
                 PassType.ScriptableRenderPipeline, "_GLITCH_ON",
-                "_HOLOGRAM_ON").ToVariant()), Is.True);
+                "_HOLOGRAM_ON").ToVariant()), Is.False);
 
             Material material = new Material(Shader.Find(SpriteShaderName));
             try
@@ -1266,12 +1228,7 @@ namespace Border.Rendering.Tests
             StringAssert.Contains(
                 "new KeywordBinding(\"_DissolveEdgeColorMode\", \"_DISSOLVE_EDGE_GRADIENT\", 1,",
                 gui);
-            string[] rows = Regex.Matches(variants,
-                    @"(?m)^\s*- keywords:\s*(?<value>[^\r\n]*_DISSOLVE_EDGE_GRADIENT[^\r\n]*)\r?\n" +
-                    @"\s*passType:\s*13\s*$").Cast<Match>()
-                .Select(match => match.Groups["value"].Value.Trim()).ToArray();
-            CollectionAssert.AreEqual(new[]
-                { "_DISSOLVE_EDGE_GRADIENT _DISSOLVE_ON" }, rows);
+            Assert.That(UberShaderVariantManifest.Rows.Any(row => row.ShaderName == SpriteShaderName), Is.False);
 
             Material material = new Material(Shader.Find(SpriteShaderName));
             try

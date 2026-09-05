@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -97,8 +98,8 @@ internal static class UberShaderVariantCollectionGenerator
         UberShaderVariantManifest.ValidateRows(rows);
         Require(collection.name == UberShaderVariantManifest.CollectionName,
             context + " name differs.");
-        Require(collection.shaderCount == 5 && collection.variantCount == rows.Count,
-            context + " must contain five shaders and " + rows.Count +
+        Require(collection.shaderCount == rows.Select(row => row.ShaderName).Distinct().Count() && collection.variantCount == rows.Count,
+            context + " has an unexpected shader count or " + rows.Count +
             " variants.");
         for (int index = 0; index < rows.Count; ++index)
             Require(collection.Contains(rows[index].ToVariant()),
@@ -106,7 +107,7 @@ internal static class UberShaderVariantCollectionGenerator
         var serialized = new SerializedObject(collection);
         serialized.UpdateIfRequiredOrScript();
         SerializedProperty groups = serialized.FindProperty("m_Shaders");
-        Require(groups != null && groups.arraySize == 5,
+        Require(groups != null && groups.arraySize == collection.shaderCount,
             context + " serialized shader groups differ.");
         int rowIndex = 0;
         for (int groupIndex = 0; groupIndex < groups.arraySize; ++groupIndex)

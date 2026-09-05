@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -162,6 +162,162 @@ namespace Border.Rendering.Tests
         }
 
         [Test]
+        public void RuntimeRocketPartStatesRetainAuthoredEngineKeywords()
+        {
+            Type partType = Type.GetType("Simulation.RocketPart, Simulation", true);
+            const BindingFlags instance = BindingFlags.NonPublic | BindingFlags.Instance;
+            string[] paths = AssetDatabase.GetDependencies(
+                "Assets/02. ScriptableObjects/Research/EnginePresetVisualLibrary.asset", true);
+            Material[] sources = paths.Select(AssetDatabase.LoadAssetAtPath<Material>)
+                .Where(material => material != null && material.HasProperty("_HologramEnabled"))
+                .ToArray();
+            Assert.That(sources.Length, Is.GreaterThanOrEqualTo(5));
+            foreach (Material source in sources)
+            foreach (string creation in new[] { "serialized", "cloned", "validated" })
+            {
+                var root = new GameObject("Runtime keyword retention");
+                root.SetActive(false);
+                root.AddComponent<BoxCollider>();
+                Component part = root.AddComponent(partType);
+                var material = new Material(source);
+                if (creation == "serialized") material.shaderKeywords = source.shaderKeywords;
+                if (creation == "validated") new UberShaderGUI().ValidateMaterial(material);
+                partType.GetField("_uberMaterials", instance)
+                    .SetValue(part, new[] { material });
+                try
+                {
+                    // Exercise both directions, including the state where the effects overlap.
+                    foreach (bool hologram in new[] { false, true, false })
+                    foreach (float heat in new[] { 0f, 1f, 0f })
+                    {
+                        partType.GetMethod("SetHologram").Invoke(part, new object[] { hologram });
+                        partType.GetMethod("SetOverheatVisual", instance)
+                            .Invoke(part, new object[] { heat });
+                        AssertRuntimeMaterialVariant(material,
+                            AssetDatabase.GetAssetPath(source) + " (" + creation + ")");
+                    }
+                }
+                finally
+                {
+                    // RocketPart owns and releases the injected material clone.
+                    UnityEngine.Object.DestroyImmediate(root);
+                    if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        [Test]
+        public void RuntimePreviewAndTargetHologramVariantsAreRetained()
+        {
+            const BindingFlags instance = BindingFlags.NonPublic | BindingFlags.Instance;
+            const BindingFlags statics = BindingFlags.NonPublic | BindingFlags.Static;
+            Type previewType = typeof(Border.Research.ResearchEnginePreviewController);
+            var root = new GameObject("Runtime preview keyword retention");
+            root.SetActive(false);
+            Component preview = root.AddComponent(previewType);
+            Material fallback = null;
+            Material guide = null;
+            try
+            {
+                Material source = AssetDatabase.LoadAssetAtPath<Material>(
+                    "Assets/05. Arts/FBX/Engine/Cold/Material.001.mat");
+                Assert.That(source, Is.Not.Null);
+                fallback = (Material)previewType.GetMethod("CreateFallbackHologramMaterial", instance)
+                    .Invoke(preview, new object[] { source });
+                previewType.GetMethod("ApplyTransparentMaterialState", statics)
+                    .Invoke(null, new object[] { fallback, Color.cyan, Color.cyan });
+                AssertRuntimeMaterialVariant(fallback, "ResearchEnginePreviewController fallback");
+
+                Type guideType = Type.GetType("Simulation.LaunchTargetZoneGuide, Simulation", true);
+                guide = (Material)guideType.GetMethod("CreateHologramMaterial", statics)
+                    .Invoke(null, new object[] { Color.cyan });
+                AssertRuntimeMaterialVariant(guide, "LaunchTargetZoneGuide hologram");
+
+                var solidFallback = new UberShaderVariantSpec(ObjectShaderName,
+                    PassType.ScriptableRenderPipeline, "_UNLIT_ON");
+                Assert.That(AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(VariantPath)
+                    .Contains(solidFallback.ToVariant()), Is.True, "Target solid Uber fallback");
+            }
+            finally
+            {
+                if (fallback != null) UnityEngine.Object.DestroyImmediate(fallback);
+                if (guide != null) UnityEngine.Object.DestroyImmediate(guide);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void RuntimeRocketBodyWobbleToggleVariantsAreRetained()
+        {
+            Type rocketType = Type.GetType("Simulation.Rocket, Simulation", true);
+            const BindingFlags instance = BindingFlags.NonPublic | BindingFlags.Instance;
+            var root = new GameObject("Runtime wobble keyword retention");
+            root.SetActive(false);
+            Component rocket = root.AddComponent(rocketType);
+            MeshRenderer renderer = root.AddComponent<MeshRenderer>();
+            Material source = AssetDatabase.LoadAssetAtPath<Material>(
+                "Assets/05. Arts/FBX/RocketBody/MAT_RocketBody.mat");
+            Assert.That(source, Is.Not.Null);
+            var material = new Material(source);
+            rocketType.GetField("bounceRenderer", instance).SetValue(rocket, renderer);
+            rocketType.GetField("_bounceMaterial", instance).SetValue(rocket, material);
+            try
+            {
+                foreach (float amplitude in new[] { 0f, 0.2f, 0f })
+                {
+                    rocketType.GetMethod("SetWobble", instance)
+                        .Invoke(rocket, new object[] { amplitude });
+                    AssertRuntimeMaterialVariant(material, "Rocket.SetWobble");
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+            }
+        }
+
+        [Test]
+        public void RuntimeObjectVariantsCompileBothStagesForWebGlGles3()
+        {
+            Shader shader = Shader.Find(ObjectShaderName);
+            ShaderData.Subshader subshader = ShaderUtil.GetShaderData(shader).ActiveSubshader;
+            ShaderData.Pass pass = Enumerable.Range(0, subshader.PassCount)
+                .Select(subshader.GetPass).Single(candidate => candidate.Name == "UniversalForward");
+            UberShaderVariantSpec[] runtimeRows = UberShaderVariantManifest.Rows.Where(row =>
+                row.ShaderName == ObjectShaderName && row.PassType == PassType.ScriptableRenderPipeline &&
+                (!row.Keywords.Contains("_CLUSTER_LIGHT_LOOP") || row.Keywords.Contains("_WOBBLE_ON")) &&
+                row.Keywords.Any(keyword => keyword == "_NORMALMAP" ||
+                    keyword == "_UNLIT_ON" || keyword == "_WOBBLE_ON")).ToArray();
+            Assert.That(runtimeRows.Length, Is.EqualTo(33));
+            foreach (UberShaderVariantSpec row in runtimeRows)
+            foreach (ShaderType stage in new[] { ShaderType.Vertex, ShaderType.Fragment })
+            {
+                var compiled = pass.CompileVariant(stage, row.Keywords,
+                    ShaderCompilerPlatform.GLES3x, BuildTarget.WebGL);
+                string context = stage + " " + string.Join(" ", row.Keywords);
+                Assert.That(compiled.Success, Is.True, context + ": " +
+                    string.Join(" | ", compiled.Messages.Select(message => message.message)));
+                Assert.That(compiled.Messages.Where(message =>
+                    message.severity == ShaderCompilerMessageSeverity.Error), Is.Empty, context);
+            }
+        }
+
+        private static void AssertRuntimeMaterialVariant(Material material, string context)
+        {
+            Assert.That(material.shader.name, Is.EqualTo(ObjectShaderName), context);
+            // Imported URP materials may retain stale global keywords (for example
+            // _METALLICSPECGLOSSMAP); only keywords declared by this shader form its variant.
+            string[] keywords = material.shaderKeywords
+                .Where(keyword => material.shader.keywordSpace.FindKeyword(keyword).isValid)
+                .OrderBy(keyword => keyword, StringComparer.Ordinal).ToArray();
+            var variant = new ShaderVariantCollection.ShaderVariant(material.shader,
+                PassType.ScriptableRenderPipeline, keywords);
+            Assert.That(AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(VariantPath)
+                .Contains(variant), Is.True, context + ": " + string.Join(" ", keywords));
+        }
+
+        [Test]
         public void ObjectSurfaceMapVariantsCompileForWebGlGles3()
         {
             Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(
@@ -210,10 +366,10 @@ namespace Border.Rendering.Tests
             string gui = Read(EditorDirectory + "UberShaderGUI.cs");
 
             Assert.That(Regex.Matches(shader,
-                @"#pragma\s+multi_compile_local_fragment\s+_\s+_TEXTURE_BLEND_ON").Count,
+                @"#pragma\s+shader_feature_local_fragment\s+_\s+_TEXTURE_BLEND_ON").Count,
                 Is.EqualTo(2));
             Assert.That(Regex.Matches(shader,
-                @"#pragma\s+multi_compile_local\s+_\s+_BASE_MAP_TRIPLANAR").Count,
+                @"#pragma\s+shader_feature_local\s+_\s+_BASE_MAP_TRIPLANAR").Count,
                 Is.EqualTo(6));
             StringAssert.Contains("float4 _BlendTiling;", include);
             StringAssert.Contains("float4 _BaseMap3DTiling;", include);
@@ -399,25 +555,8 @@ namespace Border.Rendering.Tests
             StringAssert.Contains("surfaceData.albedo = albedo;", include);
             StringAssert.Contains("material.SetFloat(\"_Surface\", 1.0f);", gui);
 
-            int objectVariantsStart = variants.IndexOf(
-                "guid: d03bad68e5f94df47a2c30a8822ea41c", StringComparison.Ordinal);
-            int spriteVariantsStart = variants.IndexOf(
-                "guid: 795b3814d0dfe9242829795ff0608656", StringComparison.Ordinal);
-            Assert.That(objectVariantsStart, Is.GreaterThanOrEqualTo(0));
-            Assert.That(spriteVariantsStart, Is.GreaterThan(objectVariantsStart));
-            string objectVariants = variants.Substring(objectVariantsStart,
-                spriteVariantsStart - objectVariantsStart);
-            string[] serialized = Regex.Matches(objectVariants,
-                    @"(?m)^\s*- keywords:\s*(?<value>[^\r\n]*_HOLOGRAM[^\r\n]*)\r?\n" +
-                    @"\s*passType:\s*13\s*$").Cast<Match>()
-                .Select(match => match.Groups["value"].Value.Trim()).ToArray();
-            CollectionAssert.AreEqual(new[]
-            {
-                "_GLITCH_ON _HOLOGRAM_ON",
-                "_HOLOGRAM_ON",
-                "_HOLOGRAM_ON _HOLOGRAM_SCREEN_SPACE",
-                "_HOLOGRAM_ON _HOLOGRAM_WORLD_SPACE",
-            }, serialized);
+            Assert.That(UberShaderVariantManifest.Rows.Any(row =>
+                row.ShaderName == ObjectShaderName && row.Keywords.Contains("_HOLOGRAM_ON")), Is.True);
 
             Material material = new Material(Shader.Find(ObjectShaderName));
             try
@@ -493,7 +632,7 @@ namespace Border.Rendering.Tests
                 "#pragma shader_feature_local _ _GLITCH_ON", 5).ToArray(),
                 PragmaRows(shader, "_GLITCH_ON"));
             const string spacePragma =
-                "#pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE";
+                "#pragma shader_feature_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE";
             CollectionAssert.AreEqual(Enumerable.Repeat(spacePragma, 5).ToArray(),
                 PragmaRows(shader, "_GLITCH_OBJECT_SPACE"));
             CollectionAssert.AreEqual(Enumerable.Repeat(spacePragma, 5).ToArray(),
@@ -566,16 +705,16 @@ namespace Border.Rendering.Tests
                 AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(VariantPath);
             Assert.That(collection.Contains(new UberShaderVariantSpec(ObjectShaderName,
                 PassType.ScriptableRenderPipeline, "_GLITCH_ON").ToVariant()),
-                Is.True);
+                Is.False);
             Assert.That(collection.Contains(new UberShaderVariantSpec(ObjectShaderName,
                 PassType.ScriptableRenderPipeline, "_GLITCH_ON",
-                "_HOLOGRAM_ON").ToVariant()), Is.True);
+                "_HOLOGRAM_ON").ToVariant()), Is.False);
             Assert.That(collection.Contains(new UberShaderVariantSpec(ObjectShaderName,
                 PassType.ScriptableRenderPipeline, "_GLITCH_OBJECT_SPACE",
-                "_GLITCH_ON").ToVariant()), Is.True);
+                "_GLITCH_ON").ToVariant()), Is.False);
             Assert.That(collection.Contains(new UberShaderVariantSpec(ObjectShaderName,
                 PassType.ScriptableRenderPipeline, "_GLITCH_ON",
-                "_GLITCH_WORLD_SPACE").ToVariant()), Is.True);
+                "_GLITCH_WORLD_SPACE").ToVariant()), Is.False);
 
             Material material = new Material(Shader.Find(ObjectShaderName));
             try
