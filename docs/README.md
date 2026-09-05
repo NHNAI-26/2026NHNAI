@@ -28,6 +28,11 @@
 4. [Unity 기술 구조](artemis-2026-gdd/13_기술구조_Unity.md)
 5. 구현 대상과 관련된 세부 기획 문서
 
+### 보조 기획 문서
+
+- [발사 테스트 미션 예시](launch-test-progression.md)
+- [발사 결과 이벤트 기획](launch-outcome-events.md)
+
 ### 문서 적용 기준
 
 - 수치가 충돌하면 [밸런스 데이터표](artemis-2026-gdd/12_밸런스_데이터표.md)를 우선합니다.
