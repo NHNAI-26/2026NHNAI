@@ -351,7 +351,7 @@ FOV 40 / 0.1 / 5000이고 브레인이 그 값을 카메라에 밀어넣으므�
 공유해도 서로 간섭하지 않는다. 프리팹에 물려 두는 이유는 가이드 선과 같다: `Shader.Find` 폴백은
 빌드에서 스트리핑될 수 있다.
 
-`SkyEnvironment` 가 강제로 켜는 안개(`fogDensity` 0.004 → 0)가 발사대 근처 점을 배경색 쪽으로 씻어낸다.
+`SkyEnvironment` 가 강제로 켜는 안개(`fogDensity` 0.005 → 0)가 발사대 근처 점을 배경색 쪽으로 씻어낸다.
 의도한 것은 아니지만 아래쪽이 흐리고 위쪽이 또렷해 고도감에 도움이 되므로 그대로 둔다.
 
 이 값들은 전부 **월드 유닛**이지 `SkyEnvironment` 의 연출용 km 가 아니다(`worldMetersPerUnit = 250`).
@@ -533,8 +533,24 @@ UI 쪽은 `RocketDesignUI.BuildLaunchPip()`이다. 우하단 `(-16, 16)`은 미�
 엔진 불꽃이 스톡 URP `Particles/Unlit` 을 쓰는 것과 같은 이유다.
 
 스카이박스 머티리얼은 **복사본**을 만들어 `RenderSettings.skybox` 에 넣는다. 공유 에셋을 그대로 굴리면
-Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 남는다. 안개 설정도 스크립트가 켜고 끄므로
-씬 라이팅 설정에는 디프가 남지 않는다.
+Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 남는다.
+
+#### 안개 값의 소유자는 프리팹 커브다 — 씬 라이팅 설정이 아니다
+
+`Bind()` 가 `RenderSettings.fog`/`fogMode` 를 켜고, `Update()` 가 매 프레임 `fogColor`/`fogDensity` 를
+프리팹의 그라디언트·커브로 덮어쓴다. 따라서 씬 라이팅 설정(`Window > Rendering > Lighting > Environment`)
+에서 안개 색이나 밀도를 만져도 **첫 프레임에 사라진다**. 값을 바꾸려면
+`Assets/03. Prefabs/Simulation/SkyEnvironment.prefab` 의 `fogColor`/`fogDensity` 를 고쳐야 한다.
+
+`SkyEnvironment` 에는 `[ExecuteAlways]` 가 없어서 편집 모드에서는 `Update()` 가 돌지 않는다. 그래서
+Scene/Game 뷰에는 씬 값이, Play Mode 에는 프리팹 커브 값이 보인다 — 둘이 다르면 "플레이하면 안개가
+사라진다"로 읽힌다. 실제로 그런 적이 있었다(커밋 `7801e43`). `SimulationTest.unity` 의
+`m_FogColor`/`m_FogDensity` 는 그 착시를 막으려고 프리팹의 t=0 키와 **같은 값으로 맞춰 둔 편집 모드
+미리보기 사본**이다. 한쪽을 바꾸면 다른 쪽도 같이 바꾼다.
+
+추가로 `SimulationTest` 를 `01_Main` 위에 additive 로 올리는 경로(`SimulationStageHost`)에서는
+활성 씬이 `01_Main` 이라 `SimulationTest` 의 `m_Fog` 자체가 아예 안 읽힌다. Unity 의 `RenderSettings` 는
+씬별이고 활성 씬 것만 쓰인다 — 그 경로에서 안개를 켜는 것은 오직 `Bind()` 다.
 
 앰비언트는 고도에 따라 갱신하지 않는다. Skybox 앰비언트를 따라가게 하려면 매 프레임
 `DynamicGI.UpdateEnvironment()` 가 필요하고, 그 비용이 이 연출값보다 크다.
