@@ -19,21 +19,79 @@ namespace Border.Research.Editor
                 Debug.LogError("Import engine_ui_01.psd with its seven sprite slices before applying research UI art.");
                 return;
             }
-            UpdatePrefab("EnginePresetCard", false);
-            UpdatePrefab("ResearchOperationScreen", true);
+            UpdatePrefab("EnginePresetCard", ApplyCard);
+            UpdatePrefab("ResearchOperationScreen", ApplyOperation);
+            UpdatePrefab("ResearchMiniGameScreen", ApplyMiniGame);
         }
 
-        private static void UpdatePrefab(string name, bool operation)
+        [MenuItem("Border/Research/Apply Mini Game UI Art")]
+        public static void ApplyMiniGameToPrefab()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            if (LoadSprites() == null)
+            {
+                Debug.LogError("Import engine_ui_01.psd before applying mini game UI art.");
+                return;
+            }
+            UpdatePrefab("ResearchMiniGameScreen", ApplyMiniGame);
+        }
+
+        private static void UpdatePrefab(string name, System.Action<GameObject> apply)
         {
             string path = PrefabFolder + name + ".prefab";
             GameObject root = PrefabUtility.LoadPrefabContents(path);
             try
             {
-                if (operation) ApplyOperation(root);
-                else ApplyCard(root);
+                apply(root);
                 PrefabUtility.SaveAsPrefabAsset(root, path);
             }
             finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        public static void ApplyMiniGame(GameObject root)
+        {
+            Sprite[] sprites = LoadSprites();
+            if (sprites == null) return;
+            Skin(Find(root.transform, "MiniGamePanel")?.GetComponent<Image>(), sprites[0]);
+            SkinButton(Find(root.transform, "PrimaryActionButton")?.GetComponent<Button>(), sprites[5]);
+
+            foreach (string name in new[] { "FuelGaugeFrame", "OutputGaugeFrame" })
+            {
+                Image track = Find(root.transform, name)?.GetComponent<Image>();
+                Skin(track, sprites[2]);
+                if (track != null) track.raycastTarget = false;
+            }
+            Image fuelFill = Find(root.transform, "FuelFill")?.GetComponent<Image>();
+            Skin(fuelFill, sprites[1]);
+            if (fuelFill != null) fuelFill.raycastTarget = false;
+
+            // Keep runtime-driven valve colours, ignition flashes and judgement bands unobscured.
+            foreach (Button button in root.GetComponentsInChildren<Button>(true))
+                if (button.name.StartsWith("CoolingValve_") || button.name.StartsWith("Igniter_"))
+                    AddFrame(button.transform, sprites[4]);
+            Transform hotspot = Find(root.transform, "CoolingHotspot");
+            if (hotspot != null) AddFrame(hotspot, sprites[5]);
+        }
+
+        private static void AddFrame(Transform parent, Sprite sprite)
+        {
+            Transform frame = parent.Find("UiArtFrame");
+            if (frame == null)
+            {
+                var frameObject = new GameObject("UiArtFrame", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+                frameObject.transform.SetParent(parent, false);
+                frame = frameObject.transform;
+            }
+            frame.SetAsFirstSibling();
+            var rect = (RectTransform)frame;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            Image image = frame.GetComponent<Image>();
+            Skin(image, sprite);
+            image.fillCenter = false;
+            image.raycastTarget = false;
+            frame.GetComponent<LayoutElement>().ignoreLayout = true;
         }
 
         public static void ApplyOperation(GameObject root)

@@ -489,7 +489,12 @@ namespace Simulation.Tests
             var library = Track(ScriptableObject.CreateInstance<EnginePresetLibrarySO>());
             SetField(library, "slots", new List<EngineStatsSO> { base0, base1 });
 
-            model.ExecuteEngineResearch(EnginePresetId.Engine02, EngineStatId.MaxOutput, focused: true, score: 85);
+            Assert.AreEqual(ResearchActionResult.Success, model.CreateNewEnginePreset(out EnginePresetId created));
+            Assert.AreEqual(EnginePresetId.Engine02, created);
+            int outputBefore = model.GetEnginePreset(created).MaxOutput;
+            Assert.AreEqual(ResearchActionResult.Success,
+                model.ExecuteEngineResearch(created, EngineStatId.MaxOutput, focused: true, score: 85));
+            Assert.Greater(model.GetEnginePreset(created).MaxOutput, outputBefore);
 
             EnginePresetLibrarySO runtimeLibrary = TrackRuntimeLibrary(
                 ResearchEnginePresetRuntimeBridge.BuildRuntimeLibrary(model, library));
@@ -506,6 +511,113 @@ namespace Simulation.Tests
             Assert.AreEqual(1400f, base1.MaxOutput, 0.001f, "원본 SO 값은 연구 반영으로 바뀌면 안 된다.");
         }
 
+        [TestCase(0, 0f)]
+        [TestCase(40, 40f)]
+        [TestCase(66, 66f)]
+        [TestCase(100, 100f)]
+        [TestCase(-10, 0f)]
+        [TestCase(110, 100f)]
+        public void RuntimeBridge_IgnitionUsesResearchPercent(int researchValue, float expected)
+        {
+            var state = new EnginePresetState { IgnitionReliability = researchValue };
+            foreach (float baseIgnition in new[] { 0f, 40f, 100f })
+            {
+                EngineStatsSO source = Stats(100f, 60f, 1200f, baseIgnition);
+                EngineStatsSO runtime = Track(ResearchEnginePresetRuntimeBridge.BuildRuntimePreset(0, source, state));
+                Assert.AreEqual(expected, runtime.IgnitionReliability);
+                Assert.AreEqual(baseIgnition, source.IgnitionReliability);
+            }
+            Assert.AreEqual(expected,
+                Track(ResearchEnginePresetRuntimeBridge.BuildRuntimePreset(0, null, state)).IgnitionReliability);
+        }
+
+        [TestCase(EngineStatId.FuelCapacity)]
+        [TestCase(EngineStatId.Cooling)]
+        [TestCase(EngineStatId.MaxOutput)]
+        [TestCase(EngineStatId.IgnitionReliability)]
+        public void RuntimeBridge_ResearchReachesPartAndPhysicalEffects(EngineStatId stat)
+        {
+            var model = new ResearchPrototypeModel();
+            // Isolate fuel/heat behavior from random ignition; the ignition case starts at 40%.
+            if (stat != EngineStatId.IgnitionReliability)
+                model.GetEnginePreset(EnginePresetId.Engine01).IgnitionReliability = 100;
+            EngineStatsSO source = Stats(100f, 10f, 1200f, 100f);
+            var library = Track(ScriptableObject.CreateInstance<EnginePresetLibrarySO>());
+            SetField(library, "slots", new List<EngineStatsSO> { source, source });
+            EnginePresetLibrarySO before = TrackRuntimeLibrary(
+                ResearchEnginePresetRuntimeBridge.BuildRuntimeLibrary(model, library));
+            int oldValue = model.GetEnginePreset(EnginePresetId.Engine01).GetStat(stat);
+
+            Assert.AreEqual(ResearchActionResult.Success,
+                model.ExecuteEngineResearch(EnginePresetId.Engine01, stat, focused: true, score: 100));
+            Assert.AreEqual(oldValue + 26, model.GetEnginePreset(EnginePresetId.Engine01).GetStat(stat));
+            EnginePresetLibrarySO after = TrackRuntimeLibrary(
+                ResearchEnginePresetRuntimeBridge.BuildRuntimeLibrary(model, library));
+            RocketPart original = CreateEngine(null);
+            RocketPart upgraded = CreateEngine(null);
+            original.ApplyPreset(before.Slots[0]);
+            upgraded.ApplyPreset(after.Slots[0]);
+            Assert.AreSame(after.Slots[0], upgraded.Stats);
+            Assert.AreEqual(stat == EngineStatId.FuelCapacity ? 165f : 100f, upgraded.Stats.FuelCapacity, 0.001f);
+            Assert.AreEqual(stat == EngineStatId.Cooling ? 16.5f : 10f, upgraded.Stats.Cooling, 0.001f);
+            Assert.AreEqual(stat == EngineStatId.MaxOutput ? 1980f : 1200f, upgraded.Output, 0.001f);
+            Assert.AreEqual(stat == EngineStatId.IgnitionReliability ? 66f : 100f, upgraded.Stats.IgnitionReliability);
+
+            Assert.AreEqual(100f, source.FuelCapacity);
+            Assert.AreEqual(10f, source.Cooling);
+            Assert.AreEqual(1200f, source.MaxOutput);
+            Assert.AreEqual(100f, source.IgnitionReliability);
+            Assert.AreEqual(before.Slots[1].FuelCapacity, after.Slots[1].FuelCapacity);
+            Assert.AreEqual(before.Slots[1].Cooling, after.Slots[1].Cooling);
+            Assert.AreEqual(before.Slots[1].MaxOutput, after.Slots[1].MaxOutput);
+            Assert.AreEqual(before.Slots[1].IgnitionReliability, after.Slots[1].IgnitionReliability);
+
+            var rng = new DeterministicRng();
+            rng.Reseed(5); // First roll is 46: fails at 40%, succeeds at 66%.
+            Assert.AreEqual(46, rng.Next(1, 101));
+            rng.Reseed(5);
+            original.Prepare(rng);
+            rng.Reseed(5);
+            upgraded.Prepare(rng);
+            Assert.IsTrue(upgraded.Ignited);
+            if (stat == EngineStatId.IgnitionReliability)
+            {
+                Assert.IsFalse(original.Ignited);
+                Assert.IsFalse(original.Tick(1f));
+                Assert.IsTrue(upgraded.Tick(1f));
+                return;
+            }
+
+            Assert.IsTrue(original.Tick(1f));
+            Assert.IsTrue(upgraded.Tick(1f));
+            if (stat == EngineStatId.Cooling)
+                Assert.Less(upgraded.Temperature, original.Temperature);
+            else if (stat == EngineStatId.MaxOutput)
+            {
+                Assert.Greater(upgraded.Output, original.Output);
+                Assert.Less(upgraded.Remaining, original.Remaining);
+                Assert.Greater(upgraded.Temperature, original.Temperature);
+            }
+            else
+            {
+                original.Tick(4f);
+                upgraded.Tick(4f);
+                Assert.IsFalse(original.HasFuel);
+                Assert.IsTrue(upgraded.HasFuel);
+                float originalMass = LaunchMass(original);
+                Assert.AreEqual(65f * 0.25f, LaunchMass(upgraded) - originalMass, 0.001f);
+            }
+        }
+
+        private float LaunchMass(RocketPart part)
+        {
+            var rocket = Track(new GameObject("research mass test")).AddComponent<Rocket>();
+            Invoke(rocket, "Awake");
+            rocket.Attach(part, rocket.transform.position);
+            rocket.Launch();
+            return rocket.GetComponent<Rigidbody>().mass;
+        }
+
         [Test]
         public void RuntimeBridge_BuildRuntimeLibrary_FillsMissingSlotsWithDefaults()
         {
@@ -520,7 +632,7 @@ namespace Simulation.Tests
             Assert.AreEqual(100f, runtimeLibrary.Slots[5].FuelCapacity, 0.001f);
             Assert.AreEqual(60f, runtimeLibrary.Slots[5].Cooling, 0.001f);
             Assert.AreEqual(BaselineOutput, runtimeLibrary.Slots[5].MaxOutput, 0.001f);
-            Assert.AreEqual(100f, runtimeLibrary.Slots[5].IgnitionReliability, 0.001f);
+            Assert.AreEqual(40f, runtimeLibrary.Slots[5].IgnitionReliability, 0.001f);
         }
 
         [Test]

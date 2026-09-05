@@ -1322,7 +1322,7 @@ namespace Border.Research
                 case EngineStatId.MaxOutput:
                     return "최대 출력은 고도와 목표 구역 도달 가능성을 직접 밀어 올립니다.";
                 case EngineStatId.IgnitionReliability:
-                    return "점화 신뢰도는 발사 초반 실패와 재시동 불안을 줄입니다.";
+                    return "점화 신뢰도는 발사 시작 시 엔진의 점화 성공 확률을 높입니다.";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(statId), statId, null);
             }

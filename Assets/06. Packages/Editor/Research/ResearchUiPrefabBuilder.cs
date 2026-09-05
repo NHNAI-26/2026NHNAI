@@ -254,6 +254,7 @@ namespace Border.Research.Editor
             TMP_Text state = CreateText("State", panel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
             state.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
             CreateButton("PrimaryActionButton", panel, string.Empty, 0f, 54f);
+            ResearchUiArtApplicator.ApplyMiniGame(root.gameObject);
             return root.gameObject;
         }
 

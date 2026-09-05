@@ -11,7 +11,6 @@ namespace Simulation
         private const float DefaultFuelCapacity = 100f;
         private const float DefaultCooling = 60f;
         private const float DefaultMaxOutput = 1200f;
-        private const float DefaultIgnitionReliability = 100f;
 
         [SerializeField] private RocketBuilder rocketBuilder;
         [SerializeField] private EnginePresetLibrarySO basePresetLibrary;
@@ -124,12 +123,10 @@ namespace Simulation
             float fuelScale = researchState.FuelCapacity / scaleBase;
             float coolingScale = researchState.Cooling / scaleBase;
             float outputScale = researchState.MaxOutput / scaleBase;
-            float ignitionScale = researchState.IgnitionReliability / scaleBase;
 
             float baseFuel = sourcePreset != null ? sourcePreset.FuelCapacity : DefaultFuelCapacity;
             float baseCooling = sourcePreset != null ? sourcePreset.Cooling : DefaultCooling;
             float baseOutput = sourcePreset != null ? sourcePreset.MaxOutput : DefaultMaxOutput;
-            float baseIgnition = sourcePreset != null ? sourcePreset.IgnitionReliability : DefaultIgnitionReliability;
 
             return EngineStatsSO.CreateRuntimeCopy(
                 presetIndex,
@@ -138,7 +135,7 @@ namespace Simulation
                 baseFuel * fuelScale,
                 baseCooling * coolingScale,
                 baseOutput * outputScale,
-                Mathf.Clamp(baseIgnition * ignitionScale, 0f, 100f));
+                Mathf.Clamp(researchState.IgnitionReliability, 0f, 100f));
         }
 
         private static EngineStatsSO GetSourcePreset(EnginePresetLibrarySO sourceLibrary, int presetIndex)
