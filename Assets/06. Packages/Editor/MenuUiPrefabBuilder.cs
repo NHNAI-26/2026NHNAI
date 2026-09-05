@@ -174,8 +174,9 @@ namespace Border.Editor
             GameObject root = PrefabUtility.LoadPrefabContents(path);
             try
             {
-                Button start = root.transform.Find("NewGameButton").GetComponent<Button>();
-                Transform old = root.transform.Find("SettingsButton");
+                // 버튼은 기울어진 TitleGroup 아래로 내려갔다. 이름으로 깊이 상관없이 찾는다.
+                Button start = FindDeep(root.transform, "NewGameButton").GetComponent<Button>();
+                Transform old = FindDeep(root.transform, "SettingsButton");
                 Button settings = old != null ? old.GetComponent<Button>() : Object.Instantiate(start, start.transform.parent);
                 settings.name = "SettingsButton";
                 settings.onClick = new Button.ButtonClickedEvent();
@@ -208,6 +209,19 @@ namespace Border.Editor
             {
                 PrefabUtility.UnloadPrefabContents(root);
             }
+        }
+
+        /// <summary>이름으로 자손을 찾는다. 계층이 바뀌어도 이 도구가 깨지지 않게 한다.</summary>
+        private static Transform FindDeep(Transform root, string name)
+        {
+            if (root.name == name) return root;
+            foreach (Transform child in root)
+            {
+                Transform found = FindDeep(child, name);
+                if (found != null) return found;
+            }
+
+            return null;
         }
 
         private static TMP_Dropdown ResolutionDropdown(Transform parent)

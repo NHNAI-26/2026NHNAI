@@ -117,21 +117,9 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1345977280982226428}
     m_Modifications:
-    - target: {fileID: 13282493302431409, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: playOnAwake
-      value: 1
-      objectReference: {fileID: 0}
     - target: {fileID: 481435575912420747, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: playOnAwake
       value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 5004204990563304396, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: m_IsActive
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 5742721355555629446, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: m_IsActive
-      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6252574736270996124, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: m_Name
@@ -189,29 +177,9 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 7751606616004806604, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: playOnAwake
-      value: 0
-      objectReference: {fileID: 0}
     - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: playOnAwake
       value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startSize.scalar
-      value: 0.32
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startSpeed.scalar
-      value: 10
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: EmissionModule.rateOverTime.scalar
-      value: 110
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startLifetime.scalar
-      value: 0.55
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -231,21 +199,9 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1345977280982226428}
     m_Modifications:
-    - target: {fileID: 13282493302431409, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: playOnAwake
-      value: 1
-      objectReference: {fileID: 0}
     - target: {fileID: 481435575912420747, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: playOnAwake
       value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 5004204990563304396, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: m_IsActive
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 5742721355555629446, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: m_IsActive
-      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6252574736270996124, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: m_Name
@@ -303,29 +259,9 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 7751606616004806604, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: playOnAwake
-      value: 0
-      objectReference: {fileID: 0}
     - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: playOnAwake
       value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startSize.scalar
-      value: 0.32
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startSpeed.scalar
-      value: 10
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: EmissionModule.rateOverTime.scalar
-      value: 110
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startLifetime.scalar
-      value: 0.55
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -345,21 +281,9 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1345977280982226428}
     m_Modifications:
-    - target: {fileID: 13282493302431409, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: playOnAwake
-      value: 1
-      objectReference: {fileID: 0}
     - target: {fileID: 481435575912420747, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: playOnAwake
       value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 5004204990563304396, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: m_IsActive
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 5742721355555629446, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: m_IsActive
-      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6252574736270996124, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: m_Name
@@ -417,29 +341,9 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 7751606616004806604, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: playOnAwake
-      value: 0
-      objectReference: {fileID: 0}
     - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
       propertyPath: playOnAwake
       value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startSize.scalar
-      value: 0.32
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startSpeed.scalar
-      value: 10
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: EmissionModule.rateOverTime.scalar
-      value: 110
-      objectReference: {fileID: 0}
-    - target: {fileID: 7948344617107075714, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
-      propertyPath: InitialModule.startLifetime.scalar
-      value: 0.55
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
