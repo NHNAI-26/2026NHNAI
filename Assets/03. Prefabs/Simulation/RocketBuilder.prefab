@@ -200,6 +200,7 @@ MonoBehaviour:
   rocket: {fileID: 0}
   enginePrefab: {fileID: 2911710057334661046, guid: 2d45a7bff1e610a4487f13e6d466cc68, type: 3}
   presetLibrary: {fileID: 11400000, guid: 511c3f49a9fcc4f4d8916e8e6fed5b12, type: 2}
+  attachmentSparksPrefab: {fileID: 5509171474784995253, guid: 582c876e7baf1429d843804440997394, type: 3}
   designCam: {fileID: 7334816678546237059}
   launchCam: {fileID: 2867681269896495977}
   launchBlendSeconds: 1.5
@@ -213,6 +214,8 @@ MonoBehaviour:
   trailDotSpacing: 3
   trailDotScreenSize: 0.015
   trailLayer: 8
+  shakeScreenAmplitude: 0.006
+  shakeFrequency: 14
   orbitSensitivity: 0.3
   minPitch: -20
   maxPitch: 80

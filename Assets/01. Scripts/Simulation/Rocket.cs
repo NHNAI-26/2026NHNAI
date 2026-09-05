@@ -411,7 +411,8 @@ namespace Simulation
                 UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(activeExplosion.gameObject, gameObject.scene);
                 activeExplosion.Play(true);
                 ExplosionPhotoRequested?.Invoke(true);
-                Destroy(activeExplosion.gameObject, 3f);
+                // Smoke_Explosion의 마지막 입자는 방출 0.4초 + 수명 3.2초까지 남는다.
+                Destroy(activeExplosion.gameObject, 4f);
             }
         }
 
