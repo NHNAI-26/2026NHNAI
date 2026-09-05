@@ -439,9 +439,9 @@ namespace Border.Research
         {
             return new[]
             {
-                new ResearchScoreRewardBand(0, 10),
-                new ResearchScoreRewardBand(50, 13),
-                new ResearchScoreRewardBand(80, 16),
+                new ResearchScoreRewardBand(0, 20),
+                new ResearchScoreRewardBand(50, 25),
+                new ResearchScoreRewardBand(80, 30),
             };
         }
 
@@ -449,9 +449,9 @@ namespace Border.Research
         {
             return new[]
             {
-                new ResearchScoreRewardBand(0, 16),
-                new ResearchScoreRewardBand(50, 21),
-                new ResearchScoreRewardBand(80, 26),
+                new ResearchScoreRewardBand(0, 30),
+                new ResearchScoreRewardBand(50, 40),
+                new ResearchScoreRewardBand(80, 50),
             };
         }
 

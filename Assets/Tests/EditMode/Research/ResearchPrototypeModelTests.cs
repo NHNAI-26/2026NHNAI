@@ -146,7 +146,7 @@ namespace Border.Research.Tests
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
             Assert.That(selected.Completion, Is.EqualTo(ResearchPrototypeModel.ResearchCompletionGain));
-            Assert.That(selected.Cooling, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat + 13));
+            Assert.That(selected.Cooling, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat + 25));
             Assert.That(untouched.Completion, Is.EqualTo(untouchedCompletion));
             Assert.That(untouched.Cooling, Is.EqualTo(untouchedStat));
             Assert.That(model.Funds, Is.EqualTo(fundsBeforeResearch - ResearchPrototypeModel.EngineNormalResearchCost + ResearchPrototypeModel.InitialQuarterlyFunding));
@@ -165,7 +165,7 @@ namespace Border.Research.Tests
             EnginePresetState selected = model.GetEnginePreset(EnginePresetId.Engine02);
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
             Assert.That(selected.Completion, Is.EqualTo(ResearchPrototypeModel.ResearchCompletionGain));
-            Assert.That(selected.MaxOutput, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat + 26));
+            Assert.That(selected.MaxOutput, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat + 50));
         }
 
         [Test]
