@@ -141,7 +141,8 @@ namespace Simulation
             // 설계 UI 는 SimulationTest 씬에 프리팹 인스턴스로 놓여 있다 — 씬과 함께 들어오고 나간다.
             designUI = FindFirstObjectByType<RocketDesignUI>();
 
-            // 합성 경로를 세운 뒤 화면을 밑에서 위로 밀어 올리며 브라운관을 켠다.
+            // 합성 경로를 세운 뒤 베젤을 밑에서 들어 올리고, 안착한 다음 브라운관을 켜고, 마지막에
+            // 베젤을 확대해 화면 밖으로 밀어낸다.
             if (designUI != null) crt.Begin(mainCamera, simulationCamera, designUI);
             yield return crt.PowerOnRoutine();
 
@@ -154,7 +155,7 @@ namespace Simulation
             busy = true;
             while (photoCapture != null && photoCapture.IsCapturing) yield return null;
 
-            // 브라운관을 끄고 커튼으로 덮는다. 합성 경로가 시뮬레이션 씬의 카메라와 캔버스를 물고 있어서
+            // 진입의 역순으로(베젤 축소 → 소등 → 베젤 하강) 덮는다. 합성 경로가 시뮬레이션 씬의 카메라와 캔버스를 물고 있어서
             // 씬을 내리기 전에 풀어야 한다.
             if (crt != null) yield return crt.PowerOffRoutine();
 
@@ -173,17 +174,22 @@ namespace Simulation
             if (research != null)
             {
                 research.gameObject.SetActive(true);
+                // 여기서 연구 화면의 등장 애니메이션(PlayEnter(Hub), 0.55초)이 시작된다.
                 research.ReturnFromDesignScreen();
             }
+
+            // 복귀한 화면이 한 프레임 제자리를 잡은 뒤 덮개를 걷는다. 같은 프레임에 걷으면 아직 갱신되지
+            // 않은 화면이 한 장 스치고, 슬라이드로 걷으면 등장 애니메이션이 그 검은 판 밑에서 다 소모된다.
+            // 결과 UI 는 씬을 내리기 전에 이미 닫혔으므로 결과 이벤트를 여기서 다시 발행하지 않는다.
+            yield return null;
+            if (crt != null) crt.Uncover();
+
             ResearchFlowSession.GetOrCreate().ClearPendingDesignEntry();
             mission = null;
             photoCapture = null;
 
             loaded = false;
             busy = false;
-            // 커튼은 연구 화면이 돌아온 뒤에 내린다. 결과 UI 는 씬을 내리기 전에
-            // 이미 닫혔으므로 결과 이벤트를 여기서 다시 발행하지 않는다.
-            if (crt != null) yield return crt.UncoverRoutine();
         }
 
         private bool BeginLaunch(Rocket rocket)
