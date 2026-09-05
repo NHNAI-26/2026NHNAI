@@ -34,15 +34,17 @@ namespace Border.Research
         private const float PerfectJudgementThreshold = 0.02f;
         private const float GreatJudgementThreshold = 0.08f;
         private const float GoodJudgementThreshold = 0.16f;
-        private const int FuelAttemptCount = 3;
+        private const int FuelAttemptCount = 1;
         private const float FuelOverfillSeconds = 2f;
+        private const float FuelMinimumFillSeconds = 1.8f;
+        private const float FuelMaximumFillSeconds = 4.2f;
         // Measured from gage.png around the hub at pixel (64, 85).
         public const float FuelMinimumAngle = 69f;
         public const float FuelMaximumAngle = -68f;
         public const float FuelPassStart = (69f + 39.4f) / 137f;
         public const float FuelPassEnd = (69f + 62.7f) / 137f;
-        private const float CoolingMinimumTurns = 4f;
-        private const float CoolingMaximumTurns = 6f;
+        private const float CoolingMinimumTurns = 10f;
+        private const float CoolingMaximumTurns = 12f;
         private const float OutputDurationSeconds = 5f;
         private const float ValveCenterDeadZone = 0.12f;
         private const int OutputStageCount = 3;
@@ -838,7 +840,7 @@ namespace Border.Research
             fuelGaugeValue = 0f;
             fuelHoldSeconds = 0f;
             fuelFilling = false;
-            fuelFillDuration = NextFloat(2.5f, 3.5f);
+            fuelFillDuration = NextFloat(FuelMinimumFillSeconds, FuelMaximumFillSeconds);
             SetFuelGaugeValue(0f);
             fuelJudgementText.gameObject.SetActive(false);
             UpdateFuelStatusText();

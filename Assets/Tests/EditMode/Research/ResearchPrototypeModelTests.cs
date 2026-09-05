@@ -533,10 +533,10 @@ namespace Border.Research.Tests
                 ignition.InitializeForTests(EnginePresetId.Engine01, EngineStatId.IgnitionReliability, false, 80, _ => { });
 
                 Assert.That(fuelA.GetFuelTargetForTests(), Is.InRange(ResearchMiniGameController.FuelPassStart, ResearchMiniGameController.FuelPassEnd));
-                Assert.That(fuelA.GetFuelDurationForTests(), Is.InRange(2.5f, 3.5f));
+                Assert.That(fuelA.GetFuelDurationForTests(), Is.InRange(1.8f, 4.2f));
                 Assert.That(fuelA.GetFuelDurationForTests(), Is.EqualTo(fuelB.GetFuelDurationForTests()));
                 Assert.That(fuelA.GetFuelDurationForTests(), Is.Not.EqualTo(fuelC.GetFuelDurationForTests()));
-                Assert.That(cooling.GetCoolingTargetForTests(), Is.InRange(1440f, 2160f));
+                Assert.That(cooling.GetCoolingTargetForTests(), Is.InRange(3600f, 4320f));
                 Assert.That(ignition.GetIgnitionSequenceForTests(), Has.Length.EqualTo(2));
 
                 fuelA.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, _ => { });
@@ -626,13 +626,13 @@ namespace Border.Research.Tests
 
                 Assert.That(completed, Is.False);
                 Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
-                Assert.That(controller.GetStateTextForTests(), Does.Contain("판정 1/3"));
+                Assert.That(controller.GetStateTextForTests(), Does.Contain("판정 1/1"));
 
                 controller.ForceAdvanceFuelJudgementForTests();
 
                 Assert.That(completed, Is.False);
                 Assert.That(controller.IsShowingFuelJudgementForTests, Is.False);
-                Assert.That(controller.IsShowingResult, Is.False);
+                Assert.That(controller.IsShowingResult, Is.True);
             }
             finally
             {
@@ -651,10 +651,6 @@ namespace Border.Research.Tests
                 ResearchMiniGameController controller = host.AddComponent<ResearchMiniGameController>();
                 controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, _ => completed = true);
 
-                controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
-                controller.ForceAdvanceFuelJudgementForTests();
-                controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
-                controller.ForceAdvanceFuelJudgementForTests();
                 controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
 
                 Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
@@ -739,7 +735,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void MiniGameController_FuelHoldAveragesThreeAttemptsAndRejectsLateRelease()
+        public void MiniGameController_FuelHoldCompletesOneAttemptAndRejectsLateRelease()
         {
             var host = new GameObject("Fuel Hold Test");
             ResearchMiniGameResult result = default;
@@ -756,30 +752,26 @@ namespace Border.Research.Tests
                 controller.ReleaseFuelForTests();
                 Assert.That(controller.IsShowingFuelJudgementForTests, Is.False);
                 controller.BeginFuelFillForTests();
-                controller.AdvanceTimeForTests(controller.GetFuelDurationForTests() * 0.5f);
+                controller.AdvanceTimeForTests(controller.GetFuelDurationForTests() * controller.GetFuelTargetForTests());
                 controller.ReleaseFuelForTests();
                 Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
                 controller.BeginFuelFillForTests();
                 controller.ReleaseFuelForTests();
                 controller.ForceAdvanceFuelJudgementForTests();
 
-                // A pointer-up belonging to the previous hold must not consume the next attempt.
+                // Late inputs must not create another attempt or change the final score.
                 controller.ReleaseFuelForTests();
                 Assert.That(controller.IsShowingFuelJudgementForTests, Is.False);
+                Assert.That(controller.IsShowingResult, Is.True);
                 controller.BeginFuelFillForTests();
-                controller.AdvanceTimeForTests(controller.GetFuelDurationForTests());
-                controller.ReleaseFuelForTests();
-                controller.ForceAdvanceFuelJudgementForTests();
-                Assert.That(controller.IsShowingResult, Is.False);
-
-                controller.BeginFuelFillForTests();
-                controller.AdvanceTimeForTests(controller.GetFuelDurationForTests() + 1f);
                 controller.ReleaseFuelForTests();
                 controller.ForceAdvanceFuelJudgementForTests();
                 Assert.That(controller.IsShowingResult, Is.True);
                 Assert.That(callbacks, Is.Zero);
                 controller.ForceDismissForTests();
-                Assert.That(result.Score, Is.EqualTo(14));
+                Assert.That(result.Score, Is.EqualTo(100));
+                Assert.That(callbacks, Is.EqualTo(1));
+                controller.ForceDismissForTests();
                 Assert.That(callbacks, Is.EqualTo(1));
             }
             finally
@@ -789,7 +781,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void MiniGameController_FuelOverfillAutomaticallyRecordsZeroWithoutConsumingNextAttempt()
+        public void MiniGameController_FuelOverfillAutomaticallyCompletesSingleAttempt()
         {
             var host = new GameObject("Fuel Overflow Test");
             ResearchMiniGameResult result = default;
@@ -797,17 +789,14 @@ namespace Border.Research.Tests
             {
                 var controller = host.AddComponent<ResearchMiniGameController>();
                 controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, value => result = value);
-                for (int attempt = 0; attempt < 3; attempt++)
-                {
-                    controller.BeginFuelFillForTests();
-                    controller.AdvanceTimeForTests(controller.GetFuelDurationForTests() + 2.01f);
-                    Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
-                    controller.ReleaseFuelForTests();
-                    controller.ForceAdvanceFuelJudgementForTests();
-                    controller.ReleaseFuelForTests();
-                    Assert.That(controller.IsShowingResult, Is.EqualTo(attempt == 2));
-                    Assert.That(controller.IsShowingFuelJudgementForTests, Is.False);
-                }
+                controller.BeginFuelFillForTests();
+                controller.AdvanceTimeForTests(controller.GetFuelDurationForTests() + 2.01f);
+                Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
+                controller.ReleaseFuelForTests();
+                controller.ForceAdvanceFuelJudgementForTests();
+                controller.ReleaseFuelForTests();
+                Assert.That(controller.IsShowingResult, Is.True);
+                Assert.That(controller.IsShowingFuelJudgementForTests, Is.False);
                 controller.ForceDismissForTests();
                 Assert.That(result.Score, Is.Zero);
             }
@@ -864,7 +853,7 @@ namespace Border.Research.Tests
                 });
                 controller.AdvanceTimeForTests(4.5f);
                 controller.RotateValveForTests(ValvePoint(0f), true);
-                for (int step = 1; step <= 24 && !controller.IsShowingResult; step++)
+                for (int step = 1; step <= 48 && !controller.IsShowingResult; step++)
                     controller.RotateValveForTests(ValvePoint(-90f * step));
                 Assert.That(controller.IsShowingResult, Is.True);
                 Assert.That(callbacks, Is.Zero);
@@ -1040,11 +1029,8 @@ namespace Border.Research.Tests
 
                 controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 78, _ => fuelCallbacks++);
                 Assert.That(FindButton(host.transform, "PrimaryActionButton"), Is.SameAs(button));
-                for (int attempt = 0; attempt < 3; attempt++)
-                {
-                    controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
-                    controller.ForceAdvanceFuelJudgementForTests();
-                }
+                controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
+                controller.ForceAdvanceFuelJudgementForTests();
 
                 Assert.That(controller.IsShowingResult, Is.True);
                 Assert.That(button.gameObject.activeInHierarchy, Is.True);
