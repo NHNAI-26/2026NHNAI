@@ -128,6 +128,21 @@ namespace Simulation.Tests
                 SkyEnvironment.SphereDrop(600f, 848f), "멀수록 더 내려간다.");
         }
 
+        [Test]
+        public void StarLag_IsZeroBelowSpace_AndParksTheShellAbove()
+        {
+            Assert.AreEqual(0f, SkyEnvironment.StarLagUnits(69f, 70f, 250f, 1f), 1e-4f,
+                "우주 아래에서는 별이 카메라에 붙어 있어야 한다 — 경계에서 껍질이 튀면 안 된다.");
+
+            // 정점 434 유닛 = 108.5 km, spaceKm 70 = 280 유닛. 계수 1 이면 껍질이 우주 진입점에 그대로 선다.
+            Assert.AreEqual(154f, SkyEnvironment.StarLagUnits(108.5f, 70f, 250f, 1f), 1e-2f);
+            Assert.AreEqual(77f, SkyEnvironment.StarLagUnits(108.5f, 70f, 250f, 0.5f), 1e-2f,
+                "계수는 시차를 선형으로 줄인다.");
+
+            // 껍질 반지름 400(프리팹 ShapeModule). 넘어서면 카메라가 별 바깥으로 나가 천정이 빈다.
+            Assert.Less(SkyEnvironment.StarLagUnits(108.5f, 70f, 250f, 1f), 400f);
+        }
+
         private SkyEnvironment Create(out Transform target, out GameObject root,
             float worldMetersPerUnit, Material skybox = null)
         {

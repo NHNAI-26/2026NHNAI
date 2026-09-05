@@ -166,6 +166,7 @@ namespace Simulation
 
         private Camera _pipCamera;
         private RenderTexture _pipTexture;
+        private float _designStartYaw;
         private float _launchYaw;
         private float _launchAltitude;
         private bool _launchViewSwapped;
@@ -226,6 +227,9 @@ namespace Simulation
             _distance = offset.magnitude;
             _yaw = Mathf.Atan2(-offset.x, -offset.z) * Mathf.Rad2Deg;
             _pitch = Mathf.Asin(Mathf.Clamp(offset.y / _distance, -1f, 1f)) * Mathf.Rad2Deg;
+            // 발사 뷰가 쓸 기준 방위각. 씬에 배치된 DesignCam 각도가 로켓을 제일 잘 보여주도록
+            // 잡아 둔 값이라, 플레이어가 궤도 회전으로 어디를 보고 있든 발사는 여기서 시작한다.
+            _designStartYaw = _yaw;
 
             _ring = CreateGuide("AlignmentRing", rocket.transform, RingSegments, true, guideColor);
             _axis = CreateGuide("AlignmentAxis", rocket.transform, 2, false, guideColor);
@@ -291,9 +295,10 @@ namespace Simulation
         }
 
         /// <summary>
-        /// 발사 뷰를 플레이어가 마지막으로 보고 있던 방위각에 세운다 — 반대편에서 컷하면 방향 감각이 끊긴다.
-        /// 방위각과 발사 고도를 여기서 잠근다: 발사 뒤에도 우클릭 궤도가 <c>_yaw</c> 를 계속 바꾸므로
-        /// 두 발사 뷰가 같은 기준을 보려면 발사 순간 값이 따로 있어야 한다.
+        /// 발사 뷰를 씬이 정해 둔 기준 방위각(<c>_designStartYaw</c>)에 세운다 — 플레이어가 설계 중
+        /// 어느 쪽으로 돌려놨든 발사는 로켓이 잘 보이는 각도에서 시작한다. 발사 고도도 여기서 잠근다:
+        /// 발사 뒤에도 우클릭 궤도가 <c>_yaw</c> 를 계속 바꾸므로 두 발사 뷰가 같은 기준을 보려면
+        /// 발사 순간 값이 따로 있어야 한다.
         /// </summary>
         public void RequestLaunch()
         {
@@ -307,7 +312,7 @@ namespace Simulation
 
         private void PlaceLaunchCamera()
         {
-            _launchYaw = _yaw;
+            _launchYaw = _designStartYaw;
             _launchAltitude = rocket.transform.position.y;
             _launchViewSwapped = false;
 

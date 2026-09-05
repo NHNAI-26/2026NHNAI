@@ -46,6 +46,10 @@ namespace Simulation
         [SerializeField] private AnimationCurve atmosphereThickness = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
         [SerializeField] private AnimationCurve skyExposure = AnimationCurve.EaseInOut(0f, 1.3f, 1f, 0f);
         [SerializeField] private AnimationCurve starAlpha = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+        // 우주에서 별 껍질이 카메라 Y 를 얼마나 놓아주는가. 0 이면 카메라에 못박혀 상대 운동이 0 이고,
+        // 1 이면 spaceKm 지점에 그대로 서서 진짜 시차가 난다 — 정점까지 154 유닛, 껍질 반지름 400 의 38 %
+        // 라 카메라가 별 바깥으로 나가지 않는다. 1 을 넘기면 위쪽 별이 빈다. XZ 는 그대로 따라붙는다.
+        [SerializeField, Range(0f, 1f)] private float starParallax = 1f;
         // 대기 그라디언트와 우주 큐브맵을 스카이박스 안에서 섞는 비율. 스카이박스는 far depth 에 그려져
         // 바다도 지구도 가리지 않으므로 구간과 상한을 자유롭게 그으면 된다.
         [SerializeField] private AnimationCurve spaceBlend = AnimationCurve.EaseInOut(0.4f, 0f, 1f, 1f);
@@ -180,7 +184,13 @@ namespace Simulation
 
             if (_starRenderer != null)
             {
-                stars.transform.position = cam.transform.position;
+                // 카메라에 완전히 못박으면 우주에서 화면 안 모든 것이 정지한다. XZ 만 따라가고 Y 는
+                // spaceKm 위에서 놓아줘 별이 아래로 흐르게 한다(내려올 때는 반대로 위로 흐른다).
+                Vector3 eye = cam.transform.position;
+                stars.transform.position = new Vector3(
+                    eye.x,
+                    eye.y - StarLagUnits(AltitudeKm, spaceKm, worldMetersPerUnit, starParallax),
+                    eye.z);
                 // 도메인 리로드는 _bound/_starRenderer 는 복원해도 직렬화 못 하는 이 블록은 null 로 되돌린다.
                 // Bind 는 _bound 때문에 다시 돌지 않으므로 여기서 채운다.
                 _starBlock ??= new MaterialPropertyBlock();
@@ -342,5 +352,16 @@ namespace Simulation
             float d = Mathf.Min(Mathf.Abs(horizontalDistance), radius);
             return radius - Mathf.Sqrt(radius * radius - d * d);
         }
+
+        /// <summary>
+        /// 우주 구간에서 별 껍질이 카메라보다 뒤처지는 거리(유닛). <paramref name="spaceKm"/> 아래에서는 0 이라
+        /// 경계에서 껍질이 튀지 않는다. 위에서는 껍질이 그 자리에 서고 카메라만 올라가므로 시차가 그대로 난다.
+        /// ponytail: 껍질 반지름(프리팹 400)에 대한 상한은 걸지 않는다 — 정점 434 유닛에서 이탈이 154 로
+        /// 38 % 라 여유가 있다. 비행이 470 유닛을 넘게 되면 카메라가 위쪽 껍질을 뚫어 천정이 비므로,
+        /// 그때 starParallax 를 내리거나 여기서 shape.radius 기준으로 클램프한다.
+        /// </summary>
+        public static float StarLagUnits(float altitudeKm, float spaceKm, float worldMetersPerUnit,
+            float parallax) =>
+            Mathf.Max(altitudeKm - spaceKm, 0f) * 1000f / Mathf.Max(worldMetersPerUnit, 0.001f) * parallax;
     }
 }
