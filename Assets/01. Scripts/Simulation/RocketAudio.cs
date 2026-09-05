@@ -35,6 +35,7 @@ namespace Simulation
                 Instantiate(soundManagerPrefab);
             rocket.LaunchStarted += OnLaunch;
             rocket.LiftoffStarted += OnLiftoff;
+            rocket.SplashdownStarted += OnSplashdown;
         }
 
         private void OnLaunch()
@@ -56,6 +57,12 @@ namespace Simulation
                 SoundManager.Instance.PlayBgm("Launch");
                 spark = SoundManager.Instance.PlaySfx("SparkStart");
             }
+        }
+
+        private void OnSplashdown(Vector3 impactPoint)
+        {
+            // Let the non-spatial impact finish even if the rocket sinks or unloads.
+            SoundManager.Instance?.PlaySfx("HeavyWave");
         }
 
         private void OnLiftoff()
@@ -124,6 +131,7 @@ namespace Simulation
             {
                 rocket.LaunchStarted -= OnLaunch;
                 rocket.LiftoffStarted -= OnLiftoff;
+                rocket.SplashdownStarted -= OnSplashdown;
             }
             ClearAudio();
         }

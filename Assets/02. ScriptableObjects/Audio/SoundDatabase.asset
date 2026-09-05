@@ -114,3 +114,11 @@ MonoBehaviour:
     useSpatialAudio: 0
     minDistance: 1
     maxDistance: 50
+  - id: HeavyWave
+    clip: {fileID: 8300000, guid: ae125f8da3b354dd59cc07b0e32c4f71, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 10
+    maxDistance: 500

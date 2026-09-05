@@ -180,13 +180,52 @@ ID와 파일의 대응은 아래 표와 같으며, 볼륨과 피치는 1, 공간
 `Assets/04. Audios/SFX/gear.mp3`를 `gear` ID로 등록했다. 볼륨 0.65, 피치 1,
 반복·2D 재생이며, Decompress On Load와 Preload Audio Data를 사용한다.
 `RocketBuilder`는 로켓에 부착된 선택 엔진의 실제 로컬 회전이 바뀌는 프레임에만
-루프를 유지한다. 핸들을 잡은 채 멈추거나 스냅으로 각도가 고정되면 즉시 정지한다.
+루프를 시작한다. 입력 샘플링·스냅으로 각도가 바뀌지 않는 짧은 프레임은 최대 0.12초까지
+같은 음원으로 이어 재생한다. 그 이상 멈추면 정지하며, 마우스를 놓으면 즉시 정지한다.
+원본 gear 클립 앞에 약 0.067초 무음이 있어 매 프레임 정지·재시작하면 소리가 나기 전에 끊기는 문제를 방지한다.
 같은 루프를 매 프레임 다시 시작하지 않으며, 이동·카메라 회전에는 재생하지 않는다.
 모드 변경, 선택 변경·삭제, 화면 비활성화, 포커스 상실과 파괴 시에도 해당 루프를 정지한다.
 
-`RocketBuilderGearAudioTests` Play Mode 테스트 2개로 단일 루프 유지, 즉시 정지·재시작,
+`RocketBuilderGearAudioTests` Play Mode 테스트 3개로 단일 루프 유지, 짧은 입력 공백 유지,
+0.12초 정지와 마우스 해제 즉시 정지·재시작,
 다른 효과음 유지, 비활성화·포커스 상실 정지를 확인했다. Unity 컴파일을 통과했다.
 실제 마우스로 회전 핸들을 드래그하는 전체 조작은 이번 테스트에 포함하지 않았다.
+
+### 바다 충돌 효과음
+
+`Heavy_water_impact_2.wav`를 `HeavyWave` ID로 등록했다. 비루프, 볼륨 1,
+Steam Audio 공간화를 사용하지 않는 2D 효과음이다. 모노로 가져오고
+Decompress On Load와 Preload Audio Data를 사용한다.
+
+바다에는 콜라이더가 없으므로 기존 `Rocket.TickWater`의 최초 수면 진입 판정에서
+`SplashdownStarted`를 한 번 발행한다. 재생 위치는 당시 로켓의 X/Z와 `waterLevel` 높이다.
+`RocketAudio`가 `PlaySfx`으로 재생하며 `spatialize = false`, `spatialBlend = 0`을 사용한다.
+거리·방향에 따른 공간화 없이 재생하고, 로켓이 침강하거나 씬에서 제거되어도 자연스럽게 끝난다. 비행 초기화 후에는 다음 입수 효과음을 다시 재생할 수 있다.
+
+`RocketSplashAudioTests` Play Mode 테스트 2개로 1회 재생·Steam Audio 미사용·2D 설정,
+침강 후 재생 유지, 초기화 후 재생과 재활성화 시 중복 구독 방지를 확인했다.
+Unity 컴파일을 통과했으며, 실제 비행부터 입수까지의 전체 플레이는 재실행하지 않았다.
+
+### 바다 충돌 파티클
+
+Break Shoot (`NexonGame20251`) 비치볼의 `Assets/Effects/Wave` 텍스처 4장을
+`Assets/05. Arts/VFX/RocketSplash/`로 가져왔다. 원본 VFX Graph의 바깥 파도와 안쪽 거품을
+`RocketSplash.prefab`의 일반 Particle System 4개로 재구성했다. 원본 텍스처의 밝기를
+알파로 가져와 검은 사각형이 보이지 않게 하고 URP Particles/Unlit 재질로 렌더링한다.
+
+수평 파티클은 시작 지연과 페이드인 없이 즉시 나타나 최대 지름 18 월드 유닛까지 빠르게 커지며
+약 1.35초 동안 사라진다. 추가한 `Water Droplets` Particle System은 물방울 메시 72개를
+원뿔 형태로 위로 방출하고 중력으로 떨어뜨린다. 수명 0.55~1.1초, 초기 속도 5~11로
+파도와 동시에 물보라를 만들며 별도 텍스처 없이 푸른 물방울 재질을 사용한다.
+`RocketBody.prefab`의 `RocketSplashVfx`가 `SplashdownStarted`를 구독해 수면보다 0.15유닛
+위에서 한 번 재생한다. 로켓에 부모로 붙이지 않아 침강을 따라가지 않고, Particle System의
+Stop Action으로 스스로 제거된다. 씬이 먼저 종료되면 해당 시뮬레이션 씬과 함께 제거된다.
+바다 충돌음의 기존 일반 2D 재생은 유지한다.
+
+0.22초 시점의 카메라 렌더로 즉시 퍼지는 파도·거품과 위로 튀는 물방울을 확인했다.
+`RocketSplashVfxTests` 1개와 기존 입수 오디오 테스트 2개를 통과했으며,
+생성 위치·1회 생성·로켓과 독립된 위치·재입수·자동 제거를 확인했다.
+실제 비행부터 바다 진입까지 전체 플레이는 이번 검증에 포함하지 않았다.
 
 ### 운영 화면
 

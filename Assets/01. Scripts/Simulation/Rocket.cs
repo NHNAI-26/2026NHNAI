@@ -106,6 +106,8 @@ namespace Simulation
         /// <summary>수면 아래로 내려갔는지. 추력은 여기서 끝난다.</summary>
         public bool Splashed { get; private set; }
 
+        public event System.Action<Vector3> SplashdownStarted;
+
         /// <summary>
         /// 점화 후 <paramref name="elapsedSeconds"/> 시점의 추력 배율. 램프 시계는 로켓에 하나뿐이다 —
         /// 엔진은 전부 같은 순간에 점화하므로 부품마다 두면 시계만 엔진 수만큼 늘어난다. 그리고
@@ -361,6 +363,9 @@ namespace Simulation
             if (!Splashed)
             {
                 Splashed = true;
+                Vector3 impactPoint = transform.position;
+                impactPoint.y = waterLevel;
+                SplashdownStarted?.Invoke(impactPoint);
                 _body.linearDamping = waterDamping;
                 _body.angularDamping = waterDamping;
                 Log.D($"Splashdown at y={y:0.#}", this);

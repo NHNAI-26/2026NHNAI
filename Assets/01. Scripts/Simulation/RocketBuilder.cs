@@ -251,17 +251,27 @@ namespace Simulation
         }
 
         private SoundHandle _gearSound;
+        private float _lastRotationMotion = float.NegativeInfinity;
+        private const float RotationSoundIdleSeconds = 0.12f;
 
         private void Update()
         {
             RocketPart part = _selected;
             Quaternion before = part != null ? part.transform.localRotation : Quaternion.identity;
             UpdateInput();
-            bool rotating = part != null && part == _selected && _mode == EditMode.Rotate
+            bool dragging = part != null && part == _selected && _mode == EditMode.Rotate
                 && _grabAxis >= 0 && rocket != null && !rocket.Launched
                 && part.transform.IsChildOf(rocket.transform)
-                && Quaternion.Angle(before, part.transform.localRotation) > 0.01f;
-            UpdateRotationSound(rotating);
+                && Mouse.current != null && Mouse.current.leftButton.isPressed;
+            bool moved = dragging && Quaternion.Angle(before, part.transform.localRotation) > 0.01f;
+            UpdateRotationSoundForMotion(dragging, moved, Time.unscaledTime);
+        }
+
+        private void UpdateRotationSoundForMotion(bool dragging, bool moved, float now)
+        {
+            if (dragging && moved) _lastRotationMotion = now;
+            // Input sampling and angle snapping leave short gaps even during a continuous drag.
+            UpdateRotationSound(dragging && now - _lastRotationMotion < RotationSoundIdleSeconds);
         }
 
         private void UpdateRotationSound(bool rotating)
@@ -270,6 +280,7 @@ namespace Simulation
             {
                 _gearSound.Stop();
                 _gearSound = SoundHandle.Invalid;
+                _lastRotationMotion = float.NegativeInfinity;
                 return;
             }
             if (!_gearSound.IsValid && SoundManager.Instance != null)
