@@ -37,27 +37,93 @@ namespace Border.Research.Tests
             ResearchFlowSession.ResetForTests();
         }
 
-        [TestCaseSource(nameof(AllLaunchOutcomeEvents))]
-        public void ResultReport_ShowsOutcomeEventAndHidesProbabilityRollAndRiskAdvice(LaunchOutcomeEventResult outcomeEvent)
+        [Test]
+        public void LaunchNewspaperArticle_UsesApprovedOutcomeHeadlines()
         {
-            ResearchResultReportController report = CreateReport();
-            ResearchLaunchResultData result = CreateResult(outcomeEvent);
+            var expected = new Dictionary<LaunchOutcomeEventId, string>
+            {
+                { LaunchOutcomeEventId.SponsorBoost, "로켓이 뜨자, 예산도 떴다" },
+                { LaunchOutcomeEventId.CleanTelemetry, "비행은 끝났고, 연구는 앞당겨졌다" },
+                { LaunchOutcomeEventId.PublicPressure, "성공 확인, 다음 발사는 언제?" },
+                { LaunchOutcomeEventId.NearMissInspection, "땅에 남긴 흔적, 설계에 남길 교훈" },
+                { LaunchOutcomeEventId.RecoveredPayload, "못 뜬 로켓, 버리지 않은 장비" },
+                { LaunchOutcomeEventId.PadDamage, "발사는 끝났고, 수리비가 남았다" },
+                { LaunchOutcomeEventId.QuietLessons, "실패는 비공개, 교훈은 연구실로" },
+                { LaunchOutcomeEventId.MediaBacklash, "로켓은 멈추고, 여론은 들끓었다" },
+                { LaunchOutcomeEventId.FinalProof, "적게 태우고, 끝내 증명했다" },
+            };
 
-            report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
+            foreach (LaunchOutcomeEventResult outcomeEvent in AllLaunchOutcomeEvents())
+            {
+                LaunchNewspaperArticle article = LaunchNewspaperArticle.Create(CreateResult(outcomeEvent), "저고도 안정화");
+                Assert.That(article.Heading, Is.EqualTo(expected[outcomeEvent.Id]));
+            }
+        }
 
-            string body = FindText(report.gameObject, "Body").text;
-            Assert.That(body, Does.Contain(outcomeEvent.Name));
-            Assert.That(body, Does.Contain(outcomeEvent.Description));
-            Assert.That(body, Does.Contain(outcomeEvent.EffectsText));
-            Assert.That(body, Does.Not.Contain("성공 80%"));
-            Assert.That(body, Does.Not.Contain("부분 10%"));
-            Assert.That(body, Does.Not.Contain("실패 10%"));
-            Assert.That(body, Does.Not.Contain("굴림"));
-            Assert.That(body, Does.Not.Contain("안내:"));
+        [Test]
+        public void LaunchNewspaperArticle_UsesDatedPrivateAndFinalEditions()
+        {
+            LaunchNewspaperArticle privateArticle = LaunchNewspaperArticle.Create(
+                CreateResult(null, visibility: TestVisibility.Private), "저고도 안정화");
+            LaunchNewspaperArticle finalArticle = LaunchNewspaperArticle.Create(
+                CreateResult(new LaunchOutcomeEventResult(
+                    LaunchOutcomeEventId.FinalProof,
+                    "최종 검증 인정",
+                    "저전력 검증을 통과했습니다. 아르테미스 발사 체계가 최종 인정됐습니다.",
+                    "효율 검증 통과 · 최종 미션 성공"),
+                    missionId: LaunchMissionId.LowPowerZoneHold,
+                    visibility: TestVisibility.FinalMission,
+                    finalMissionWon: true), "저전력 구역 체류");
+
+            Assert.That(privateArticle.Edition, Is.EqualTo("2024년 2분기 연구소 내부 회보"));
+            Assert.That(finalArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
         }
 
         [TestCaseSource(nameof(AllLaunchOutcomeEvents))]
-        public void ResultReport_BodyDoesNotTruncateLongestOutcomeEventText(LaunchOutcomeEventResult outcomeEvent)
+        public void ResultReport_PopulatesNewspaperArticleAndEffects(LaunchOutcomeEventResult outcomeEvent)
+        {
+            ResearchResultReportController report = CreateReport();
+            ResearchLaunchResultData result = CreateResult(outcomeEvent);
+            string missionName = ResearchFlowSession.GetOrCreate().Model
+                .GetConfiguredMissionConfig(result.MissionId).DisplayName;
+
+            report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
+
+            string headline = FindText(report.gameObject, "Headline").text;
+            string body = FindText(report.gameObject, "Body").text;
+            string effects = FindText(report.gameObject, "Effects").text;
+            Assert.That(headline, Is.Not.Empty);
+            Assert.That(body, Does.Contain($"{missionName} 시험이 성공했다."));
+            Assert.That(body, Does.Contain(outcomeEvent.Description));
+            Assert.That(body, Does.Not.Contain("미션:"));
+            Assert.That(body, Does.Not.Contain("판정:"));
+            Assert.That(body, Does.Not.Contain("종료 사유:"));
+            Assert.That(effects, Does.Contain("기본 보상: 즉시 지원금 +600 / 분기 연구비 +75"));
+            Assert.That(effects, Does.Contain(outcomeEvent.EffectsText));
+            Assert.That(effects, Does.Not.Contain("성공 80%"));
+            Assert.That(effects, Does.Not.Contain("부분 10%"));
+            Assert.That(effects, Does.Not.Contain("실패 10%"));
+            Assert.That(effects, Does.Not.Contain("굴림"));
+            Assert.That(effects, Does.Not.Contain("안내:"));
+        }
+
+        [Test]
+        public void ResultReport_NullOutcomeUsesFallbackHeadlineAndPhotoLabel()
+        {
+            ResearchResultReportController report = CreateReport();
+
+            report.Initialize(ResearchFlowSession.GetOrCreate(), CreateResult(null), null);
+
+            string headline = FindText(report.gameObject, "Headline").text;
+            string body = FindText(report.gameObject, "Body").text;
+            TMP_Text fallback = FindText(report.gameObject, "PhotoFallback");
+            Assert.That(headline, Is.EqualTo("발사 성공 확인"));
+            Assert.That(body, Does.Contain("추가 사건은 기록되지 않았다."));
+            Assert.That(fallback.gameObject.activeSelf, Is.True);
+        }
+
+        [Test]
+        public void ResultReport_NewspaperTextsDoNotTruncateOnSavedPrefab()
         {
             ResearchResultReportController report = CreateReport();
             ResearchLaunchResultData result = CreateResult(new LaunchOutcomeEventResult(
@@ -68,26 +134,10 @@ namespace Border.Research.Tests
 
             report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
             Canvas.ForceUpdateCanvases();
-            TMP_Text body = FindText(report.gameObject, "Body");
-            body.ForceMeshUpdate();
 
-            Assert.That(body.isTextTruncated, Is.False);
-        }
-
-        [Test]
-        public void ResultReport_NullOutcomeEventShowsNoneAndStillHidesProbabilityRollAndRiskAdvice()
-        {
-            ResearchResultReportController report = CreateReport();
-
-            report.Initialize(ResearchFlowSession.GetOrCreate(), CreateResult(null), null);
-
-            string body = FindText(report.gameObject, "Body").text;
-            Assert.That(body, Does.Contain("발생 이벤트: 없음"));
-            Assert.That(body, Does.Not.Contain("성공 80%"));
-            Assert.That(body, Does.Not.Contain("부분 10%"));
-            Assert.That(body, Does.Not.Contain("실패 10%"));
-            Assert.That(body, Does.Not.Contain("굴림"));
-            Assert.That(body, Does.Not.Contain("안내:"));
+            AssertTextNotTruncated(report.gameObject, "Headline");
+            AssertTextNotTruncated(report.gameObject, "Body");
+            AssertTextNotTruncated(report.gameObject, "Effects");
         }
 
         [Test]
@@ -149,16 +199,20 @@ namespace Border.Research.Tests
             return host.GetComponent<ResearchResultReportController>();
         }
 
-        private static ResearchLaunchResultData CreateResult(LaunchOutcomeEventResult outcomeEvent)
+        private static ResearchLaunchResultData CreateResult(
+            LaunchOutcomeEventResult outcomeEvent,
+            LaunchMissionId missionId = LaunchMissionId.LowAltitude,
+            TestVisibility visibility = TestVisibility.Public,
+            bool finalMissionWon = false)
         {
             return new ResearchLaunchResultData(
-                LaunchMissionId.LowAltitude,
+                missionId,
                 EnginePresetId.Engine01,
                 2024,
                 2,
                 800,
                 350,
-                TestVisibility.Public,
+                visibility,
                 50,
                 80,
                 70,
@@ -169,7 +223,7 @@ namespace Border.Research.Tests
                 ResearchGrade.B,
                 600,
                 75,
-                false,
+                finalMissionWon,
                 false,
                 outcomeEvent,
                 LaunchTerminationReason.Succeeded);
@@ -283,6 +337,13 @@ namespace Border.Research.Tests
         {
             Button button = root.GetComponentsInChildren<Button>(true).Single(item => item.name == buttonName);
             return button.GetComponentInChildren<TMP_Text>(true);
+        }
+
+        private static void AssertTextNotTruncated(GameObject root, string name)
+        {
+            TMP_Text text = FindText(root, name);
+            text.ForceMeshUpdate();
+            Assert.That(text.isTextTruncated, Is.False, $"{name} text must fit in the saved prefab.");
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)

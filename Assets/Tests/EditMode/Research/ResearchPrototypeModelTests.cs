@@ -2,6 +2,7 @@ using System.Reflection;
 using NUnit.Framework;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnityEditor;
 
@@ -432,48 +433,70 @@ namespace Border.Research.Tests
         [Test]
         public void MiniGameScoring_ClampsAllScoresToValidRange()
         {
-            Assert.That(ResearchMiniGameController.CalculateFuelCapacityScore(2f, -2f), Is.InRange(0, 100));
-            Assert.That(ResearchMiniGameController.CalculateCoolingScore(10, 10, -1f), Is.InRange(0, 100));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(2f, -2f), Is.InRange(0, 100));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(-2f, 10f), Is.Zero);
+            Assert.That(ResearchMiniGameController.CalculateCoolingScore(-1f, true), Is.InRange(0, 100));
             Assert.That(ResearchMiniGameController.CalculateMaxOutputScore(2f, -2f), Is.InRange(0, 100));
             Assert.That(ResearchMiniGameController.CalculateIgnitionReliabilityScore(20, 4, -1f), Is.InRange(0, 100));
         }
 
-        [Test]
-        public void MiniGameScoring_FuelCapacity_RewardAccuracy()
+        [TestCase(0f, 0f, 0)]
+        [TestCase(0.5f, 0f, 0)]
+        [TestCase(1f, 0f, 41)]
+        [TestCase(1f, 1f, 0)]
+        [TestCase(1f, 2f, 0)]
+        [TestCase(1f, 3f, 0)]
+        public void MiniGameScoring_FuelCapacity_RewardsFullChargeAndPenalizesOverflow(float fill, float overflow, int expected)
         {
-            int accurate = ResearchMiniGameController.CalculateFuelCapacityScore(0.01f, 0.02f, 0.01f);
-            int inaccurate = ResearchMiniGameController.CalculateFuelCapacityScore(0.35f, 0.4f, 0.3f);
-
-            Assert.That(accurate, Is.GreaterThan(inaccurate));
-            Assert.That(accurate, Is.GreaterThanOrEqualTo(80));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(fill, overflow), Is.EqualTo(expected));
         }
 
         [Test]
-        public void MiniGameScoring_Cooling_RewardsCorrectFastInput()
+        public void MiniGameFuel_UsesPrintedTicksAndSkyBluePassBand()
         {
-            int good = ResearchMiniGameController.CalculateCoolingScore(4, 0, 0.25f);
-            int poor = ResearchMiniGameController.CalculateCoolingScore(1, 3, 1.5f);
-
-            Assert.That(good, Is.GreaterThan(poor));
-            Assert.That(good, Is.GreaterThanOrEqualTo(80));
+            float start = ResearchMiniGameController.FuelPassStart;
+            float end = ResearchMiniGameController.FuelPassEnd;
+            Assert.That(ResearchMiniGameController.GetFuelNeedleAngle(0f), Is.EqualTo(69f));
+            Assert.That(ResearchMiniGameController.GetFuelNeedleAngle(1f), Is.EqualTo(-68f));
+            Assert.That(ResearchMiniGameController.GetFuelNeedleAngle(start), Is.EqualTo(-39.4f).Within(0.001f));
+            Assert.That(ResearchMiniGameController.GetFuelNeedleAngle(end), Is.EqualTo(-62.7f).Within(0.001f));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(start, 0f), Is.EqualTo(80));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(end, 0f), Is.EqualTo(80));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore((start + end) * 0.5f, 0f), Is.EqualTo(100));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(start - 0.001f, 0f), Is.LessThan(50));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(end + 0.001f, 0f), Is.LessThan(50));
         }
 
-        [Test]
-        public void MiniGameScoring_Cooling_SlowCorrectInputCannotReceiveTopReward()
+        [TestCase(0f, true, 100)]
+        [TestCase(4.5f, true, 90)]
+        [TestCase(8.9f, true, 80)]
+        [TestCase(9f, true, 0)]
+        [TestCase(10f, true, 0)]
+        [TestCase(0f, false, 0)]
+        public void MiniGameScoring_Cooling_RewardsCompletionBeforeOverheat(float elapsed, bool reached, int expected)
         {
-            Assert.That(ResearchMiniGameController.CalculateCoolingScore(4, 0, 0.35f), Is.EqualTo(100));
-            Assert.That(ResearchMiniGameController.CalculateCoolingScore(4, 0, 0.9f), Is.EqualTo(60));
-            Assert.That(ResearchMiniGameController.CalculateCoolingScore(0, 0, 0f), Is.Zero);
+            Assert.That(ResearchMiniGameController.CalculateCoolingScore(elapsed, reached), Is.EqualTo(expected));
+        }
+
+        [TestCase(0f, 100)]
+        [TestCase(0.02f, 100)]
+        [TestCase(0.0201f, 80)]
+        [TestCase(0.08f, 80)]
+        [TestCase(0.0801f, 0)]
+        [TestCase(-0.02f, 100)]
+        [TestCase(-0.08f, 80)]
+        public void MiniGameScoring_MaxOutput_QuantizesBothSidesOfTarget(float error, int expected)
+        {
+            Assert.That(ResearchMiniGameController.CalculateMaxOutputScore(error), Is.EqualTo(expected));
+            Assert.That(ResearchMiniGameController.CalculateOutputAttemptScore(error, 0f), Is.EqualTo(expected));
         }
 
         [Test]
         public void MiniGameScoring_MaxOutput_RewardsSafeZoneCenter()
         {
-            int centered = ResearchMiniGameController.CalculateMaxOutputScoreFromFills(0.35f, 0.6f, 0.85f);
-            int outside = ResearchMiniGameController.CalculateMaxOutputScoreFromFills(0.05f, 0.95f, 0.2f);
-
-            Assert.That(centered, Is.GreaterThan(outside));
-            Assert.That(centered, Is.GreaterThanOrEqualTo(80));
+            Assert.That(ResearchMiniGameController.CalculateOutputAttemptScore(0.73f, 0.73f), Is.EqualTo(100));
+            Assert.That(ResearchMiniGameController.CalculateOutputAttemptScore(0.2f, 0.73f), Is.Zero);
+            Assert.That(ResearchMiniGameController.CalculateMaxOutputScore(0f, 0.05f, 0.3f), Is.EqualTo(60));
         }
 
         [Test]
@@ -487,7 +510,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void MiniGameTargets_UseSeededRandomExceptMaxOutput()
+        public void MiniGameTargets_RandomizeFuelDurationCoolingRotationAndOutputPosition()
         {
             var fuelHostA = new GameObject("Fuel Mini Game Test Host A");
             var fuelHostB = new GameObject("Fuel Mini Game Test Host B");
@@ -509,12 +532,19 @@ namespace Border.Research.Tests
                 cooling.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 79, _ => { });
                 ignition.InitializeForTests(EnginePresetId.Engine01, EngineStatId.IgnitionReliability, false, 80, _ => { });
 
-                Assert.That(fuelA.GetFuelTargetForTests(), Is.InRange(0.38f, 0.84f));
-                Assert.That(fuelA.GetFuelTargetForTests(), Is.EqualTo(fuelB.GetFuelTargetForTests()));
-                Assert.That(fuelA.GetFuelTargetForTests(), Is.Not.EqualTo(fuelC.GetFuelTargetForTests()));
-                Assert.That(cooling.GetActiveValveIndexForTests(), Is.InRange(0, 3));
+                Assert.That(fuelA.GetFuelTargetForTests(), Is.InRange(ResearchMiniGameController.FuelPassStart, ResearchMiniGameController.FuelPassEnd));
+                Assert.That(fuelA.GetFuelDurationForTests(), Is.InRange(2.5f, 3.5f));
+                Assert.That(fuelA.GetFuelDurationForTests(), Is.EqualTo(fuelB.GetFuelDurationForTests()));
+                Assert.That(fuelA.GetFuelDurationForTests(), Is.Not.EqualTo(fuelC.GetFuelDurationForTests()));
+                Assert.That(cooling.GetCoolingTargetForTests(), Is.InRange(1440f, 2160f));
                 Assert.That(ignition.GetIgnitionSequenceForTests(), Has.Length.EqualTo(2));
-                Assert.That(ResearchMiniGameController.CalculateMaxOutputScoreFromFills(0.35f, 0.6f, 0.85f), Is.GreaterThanOrEqualTo(80));
+
+                fuelA.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, _ => { });
+                fuelB.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, _ => { });
+                fuelC.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 78, _ => { });
+                Assert.That(fuelA.GetOutputTargetForTests(), Is.InRange(0.08f, 0.92f));
+                Assert.That(fuelA.GetOutputTargetForTests(), Is.EqualTo(fuelB.GetOutputTargetForTests()));
+                Assert.That(fuelA.GetOutputTargetForTests(), Is.Not.EqualTo(fuelC.GetOutputTargetForTests()));
             }
             finally
             {
@@ -567,17 +597,17 @@ namespace Border.Research.Tests
             Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.02f), Is.EqualTo("Perfect!"));
             Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.03f), Is.EqualTo("Great"));
             Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.08f), Is.EqualTo("Great"));
-            Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.16f), Is.EqualTo("Good"));
-            Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.17f), Is.EqualTo("Miss"));
+            Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.2f), Is.EqualTo("Great"));
+            Assert.That(ResearchMiniGameController.GetFuelJudgementText(0.21f), Is.EqualTo("Miss"));
         }
 
         [Test]
         public void MiniGameScoring_OutputJudgement_UsesAccuracyBands()
         {
-            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.02f), Is.EqualTo("Perfect!"));
+            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.02f), Is.EqualTo("Perfect"));
             Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.03f), Is.EqualTo("Great"));
             Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.08f), Is.EqualTo("Great"));
-            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.16f), Is.EqualTo("Good"));
+            Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.0801f), Is.EqualTo("Miss"));
             Assert.That(ResearchMiniGameController.GetOutputJudgementText(0.17f), Is.EqualTo("Miss"));
         }
 
@@ -628,7 +658,7 @@ namespace Border.Research.Tests
                 controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
 
                 Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
-                Assert.DoesNotThrow(() => controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests()));
+                Assert.DoesNotThrow(() => controller.ReleaseFuelForTests());
 
                 controller.ForceAdvanceFuelJudgementForTests();
 
@@ -652,7 +682,7 @@ namespace Border.Research.Tests
                 ResearchMiniGameController controller = host.AddComponent<ResearchMiniGameController>();
                 controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, _ => completed = true);
 
-                controller.RecordOutputStageForTests(0.35f);
+                controller.RecordOutputStageForTests(controller.GetOutputTargetForTests());
 
                 Assert.That(completed, Is.False);
                 Assert.That(controller.IsShowingOutputJudgementForTests, Is.True);
@@ -699,18 +729,372 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void MiniGameStateText_AppendsExampleLineWhenRequested()
+        public void MiniGameStateText_DoesNotAccumulateExampleInstructions()
         {
-            string firstFrame = ResearchMiniGameController.FormatStateText("밸브 1/4", true);
-            string nextFrame = ResearchMiniGameController.FormatStateText("밸브 1/4", true);
+            string firstFrame = ResearchMiniGameController.FormatStateText("순서 보기", true);
+            string nextFrame = ResearchMiniGameController.FormatStateText(firstFrame, true);
 
             Assert.That(firstFrame, Is.EqualTo(nextFrame));
-            Assert.That(firstFrame, Does.Contain("밸브 1/4"));
-            Assert.That(firstFrame, Does.Contain("예시"));
+            Assert.That(firstFrame, Is.EqualTo("순서 보기"));
         }
 
         [Test]
-        public void MiniGameTimer_OnlyCoolingShowsNineSecondLimitAndStartsImmediately()
+        public void MiniGameController_FuelHoldAveragesThreeAttemptsAndRejectsLateRelease()
+        {
+            var host = new GameObject("Fuel Hold Test");
+            ResearchMiniGameResult result = default;
+            int callbacks = 0;
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, value =>
+                {
+                    result = value;
+                    callbacks++;
+                });
+
+                controller.ReleaseFuelForTests();
+                Assert.That(controller.IsShowingFuelJudgementForTests, Is.False);
+                controller.BeginFuelFillForTests();
+                controller.AdvanceTimeForTests(controller.GetFuelDurationForTests() * 0.5f);
+                controller.ReleaseFuelForTests();
+                Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
+                controller.BeginFuelFillForTests();
+                controller.ReleaseFuelForTests();
+                controller.ForceAdvanceFuelJudgementForTests();
+
+                // A pointer-up belonging to the previous hold must not consume the next attempt.
+                controller.ReleaseFuelForTests();
+                Assert.That(controller.IsShowingFuelJudgementForTests, Is.False);
+                controller.BeginFuelFillForTests();
+                controller.AdvanceTimeForTests(controller.GetFuelDurationForTests());
+                controller.ReleaseFuelForTests();
+                controller.ForceAdvanceFuelJudgementForTests();
+                Assert.That(controller.IsShowingResult, Is.False);
+
+                controller.BeginFuelFillForTests();
+                controller.AdvanceTimeForTests(controller.GetFuelDurationForTests() + 1f);
+                controller.ReleaseFuelForTests();
+                controller.ForceAdvanceFuelJudgementForTests();
+                Assert.That(controller.IsShowingResult, Is.True);
+                Assert.That(callbacks, Is.Zero);
+                controller.ForceDismissForTests();
+                Assert.That(result.Score, Is.EqualTo(14));
+                Assert.That(callbacks, Is.EqualTo(1));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_FuelOverfillAutomaticallyRecordsZeroWithoutConsumingNextAttempt()
+        {
+            var host = new GameObject("Fuel Overflow Test");
+            ResearchMiniGameResult result = default;
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, value => result = value);
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    controller.BeginFuelFillForTests();
+                    controller.AdvanceTimeForTests(controller.GetFuelDurationForTests() + 2.01f);
+                    Assert.That(controller.IsShowingFuelJudgementForTests, Is.True);
+                    controller.ReleaseFuelForTests();
+                    controller.ForceAdvanceFuelJudgementForTests();
+                    controller.ReleaseFuelForTests();
+                    Assert.That(controller.IsShowingResult, Is.EqualTo(attempt == 2));
+                    Assert.That(controller.IsShowingFuelJudgementForTests, Is.False);
+                }
+                controller.ForceDismissForTests();
+                Assert.That(result.Score, Is.Zero);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_CoolingHandlesAngleWrapReverseDeadzoneAndRedrag()
+        {
+            var host = new GameObject("Cooling Drag Test");
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 79, _ => { });
+                controller.RotateValveForTests(ValvePoint(-170f), true);
+                controller.RotateValveForTests(ValvePoint(170f));
+                Assert.That(controller.GetCoolingDegreesForTests(), Is.EqualTo(20f).Within(0.01f));
+                controller.RotateValveForTests(ValvePoint(-150f));
+                Assert.That(controller.GetCoolingDegreesForTests(), Is.Zero);
+                controller.RotateValveForTests(ValvePoint(120f));
+                Assert.That(controller.GetCoolingDegreesForTests(), Is.EqualTo(90f).Within(0.01f));
+                controller.RotateValveForTests(Vector2.zero);
+                controller.RotateValveForTests(ValvePoint(-60f));
+                Assert.That(controller.GetCoolingDegreesForTests(), Is.EqualTo(90f).Within(0.01f));
+                controller.ReleaseValveForTests();
+                controller.RotateValveForTests(ValvePoint(-150f));
+                Assert.That(controller.GetCoolingDegreesForTests(), Is.EqualTo(90f).Within(0.01f));
+                controller.RotateValveForTests(ValvePoint(60f), true);
+                controller.RotateValveForTests(ValvePoint(-30f));
+                Assert.That(controller.GetCoolingDegreesForTests(), Is.EqualTo(180f).Within(0.01f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_CoolingGoalCompletesWithTimeBonus()
+        {
+            var host = new GameObject("Cooling Goal Test");
+            ResearchMiniGameResult result = default;
+            int callbacks = 0;
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 79, value =>
+                {
+                    result = value;
+                    callbacks++;
+                });
+                controller.AdvanceTimeForTests(4.5f);
+                controller.RotateValveForTests(ValvePoint(0f), true);
+                for (int step = 1; step <= 24 && !controller.IsShowingResult; step++)
+                    controller.RotateValveForTests(ValvePoint(-90f * step));
+                Assert.That(controller.IsShowingResult, Is.True);
+                Assert.That(callbacks, Is.Zero);
+                controller.ForceDismissForTests();
+                Assert.That(result.Score, Is.EqualTo(90));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameCooling_RequiresMoreThanTwoTurnsAndHeatsOnlyPipe()
+        {
+            var host = new GameObject("Cooling Pipe Heat Test");
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 79, _ => { });
+                controller.AdvanceTimeForTests(4.5f);
+                controller.RotateValveForTests(ValvePoint(0f), true);
+                for (int step = 1; step <= 8; step++) controller.RotateValveForTests(ValvePoint(-90f * step));
+                Assert.That(controller.IsCompleted, Is.False);
+                Assert.That(controller.GetCoolingDegreesForTests(), Is.EqualTo(720f).Within(0.01f));
+                foreach (Image image in host.GetComponentsInChildren<Image>(true))
+                {
+                    if (image.name == "CoolingPipe") Assert.That(image.material.GetFloat("_Heat"), Is.EqualTo(0.5f));
+                    if (image.name == "CoolingValve") Assert.That(image.material.GetFloat("_Heat"), Is.Zero);
+                }
+            }
+            finally { Object.DestroyImmediate(host); }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void MiniGameController_CoolingOverheatAppliesZeroScoreRewardOnce(bool automaticDismiss)
+        {
+            var host = new GameObject("Cooling Overheat Test");
+            var model = new ResearchPrototypeModel();
+            int callbacks = 0;
+            int turns = model.RemainingTurns;
+            int initialCooling = model.GetEnginePreset(EnginePresetId.Engine01).Cooling;
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 79, result =>
+                {
+                    callbacks++;
+                    Assert.That(result.Score, Is.Zero);
+                    Assert.That(model.ExecuteEngineResearch(result.PresetId, result.StatId, result.Focused, result.Score),
+                        Is.EqualTo(ResearchActionResult.Success));
+                });
+                controller.AdvanceTimeForTests(9f);
+                Assert.That(controller.IsShowingResult, Is.True);
+                Assert.That(callbacks, Is.Zero);
+                if (automaticDismiss)
+                    controller.AdvanceTimeForTests(2.01f);
+                else
+                    controller.ForceDismissForTests();
+                controller.ForceDismissForTests();
+                controller.AdvanceTimeForTests(3f);
+                Assert.That(callbacks, Is.EqualTo(1));
+                Assert.That(model.RemainingTurns, Is.EqualTo(turns - 1));
+                Assert.That(model.GetEnginePreset(EnginePresetId.Engine01).Cooling, Is.EqualTo(initialCooling + 10));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_OutputPingPongsAndUsesOneInputPerRandomizedStage()
+        {
+            var host = new GameObject("Output Motion Test");
+            ResearchMiniGameResult result = default;
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, value => result = value);
+                float[] traverseTimes = { 0.9f, 0.75f, 0.6f };
+                float previousTarget = -1f;
+                for (int stage = 0; stage < 3; stage++)
+                {
+                    float target = controller.GetOutputTargetForTests();
+                    Assert.That(target, Is.InRange(0.08f, 0.92f));
+                    Assert.That(target, Is.Not.EqualTo(previousTarget));
+                    previousTarget = target;
+                    controller.AdvanceTimeForTests(traverseTimes[stage]);
+                    Assert.That(controller.GetOutputCursorForTests(), Is.EqualTo(1f).Within(0.001f));
+                    controller.AdvanceTimeForTests(traverseTimes[stage] * 0.5f);
+                    Assert.That(controller.GetOutputCursorForTests(), Is.EqualTo(0.5f).Within(0.001f));
+                    Assert.That(controller.GetOutputTargetForTests(), Is.EqualTo(target));
+                    float cursor = stage == 0 ? target : stage == 1 ? target + 0.05f : (target < 0.5f ? 1f : 0f);
+                    controller.RecordOutputStageForTests(cursor);
+                    controller.RecordOutputStageForTests(target);
+                    Assert.That(controller.IsShowingOutputJudgementForTests, Is.True);
+                    controller.ForceAdvanceOutputJudgementForTests();
+                    Assert.That(controller.IsShowingResult, Is.EqualTo(stage == 2));
+                }
+                controller.ForceDismissForTests();
+                Assert.That(result.Score, Is.EqualTo(60));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_OutputTimeoutRecordsZeroForEveryStage()
+        {
+            var host = new GameObject("Output Timeout Test");
+            ResearchMiniGameResult result = default;
+            int callbacks = 0;
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, value =>
+                {
+                    result = value;
+                    callbacks++;
+                });
+                for (int stage = 0; stage < 3; stage++)
+                {
+                    controller.AdvanceTimeForTests(4.99f);
+                    Assert.That(controller.IsShowingOutputJudgementForTests, Is.False);
+                    controller.AdvanceTimeForTests(0.02f);
+                    Assert.That(controller.IsShowingOutputJudgementForTests, Is.True);
+                    controller.RecordOutputStageForTests(controller.GetOutputTargetForTests());
+                    controller.ForceAdvanceOutputJudgementForTests();
+                    Assert.That(controller.IsShowingResult, Is.EqualTo(stage == 2));
+                }
+                Assert.That(callbacks, Is.Zero);
+                controller.ForceDismissForTests();
+                Assert.That(result.Score, Is.Zero);
+                Assert.That(callbacks, Is.EqualTo(1));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_ResultButtonAcceptsPointerClickAfterOutputAndFuelReuseOnlyOnce()
+        {
+            var host = new GameObject("Mini Game Result Pointer Test");
+            int outputCallbacks = 0;
+            int fuelCallbacks = 0;
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, _ => outputCallbacks++);
+                Button button = FindButton(host.transform, "PrimaryActionButton");
+                for (int stage = 0; stage < 3; stage++)
+                {
+                    controller.RecordOutputStageForTests(controller.GetOutputTargetForTests());
+                    controller.ForceAdvanceOutputJudgementForTests();
+                }
+
+                Assert.That(controller.IsShowingResult, Is.True);
+                Assert.That(button.gameObject.activeInHierarchy, Is.True);
+                Assert.That(button.interactable, Is.True);
+                var pointer = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
+                ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                Assert.That(outputCallbacks, Is.EqualTo(1));
+                Assert.That(controller.IsShowingResult, Is.False);
+                ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                controller.AdvanceTimeForTests(3f);
+                Assert.That(outputCallbacks, Is.EqualTo(1));
+
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 78, _ => fuelCallbacks++);
+                Assert.That(FindButton(host.transform, "PrimaryActionButton"), Is.SameAs(button));
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
+                    controller.ForceAdvanceFuelJudgementForTests();
+                }
+
+                Assert.That(controller.IsShowingResult, Is.True);
+                Assert.That(button.gameObject.activeInHierarchy, Is.True);
+                Assert.That(button.interactable, Is.True);
+                ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                Assert.That(fuelCallbacks, Is.EqualTo(1));
+                Assert.That(controller.IsShowingResult, Is.False);
+                ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                controller.AdvanceTimeForTests(3f);
+                Assert.That(fuelCallbacks, Is.EqualTo(1));
+                Assert.That(outputCallbacks, Is.EqualTo(1));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void MiniGameController_FuelPerfectJudgementUsesBlueGreenTextInsteadOfMissRed()
+        {
+            var host = new GameObject("Fuel Perfect Color Test");
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, _ => { });
+                controller.RecordFuelAttemptForTests(controller.GetFuelTargetForTests());
+                TMP_Text judgement = (TMP_Text)FindText(host.transform, "FuelJudgementText");
+
+                Assert.That(judgement.gameObject.activeInHierarchy, Is.True);
+                Assert.That(judgement.text, Is.EqualTo("Perfect!"));
+                Assert.That(judgement.color.g, Is.GreaterThan(judgement.color.r));
+                Assert.That(judgement.color.b, Is.GreaterThan(judgement.color.r));
+                Assert.That(judgement.color.g, Is.GreaterThan(0.8f));
+                Assert.That(judgement.color.b, Is.GreaterThan(0.8f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        private static Vector2 ValvePoint(float degrees)
+        {
+            float radians = degrees * Mathf.Deg2Rad;
+            return new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * 100f;
+        }
+
+        [Test]
+        public void MiniGameTimer_CoolingStartsImmediatelyWithoutExample()
         {
             var fuelHost = new GameObject("Fuel Mini Game Test Host");
             var coolingHost = new GameObject("Cooling Mini Game Test Host");
@@ -725,8 +1109,8 @@ namespace Border.Research.Tests
 
                 Assert.That(fuel.GetTimerTextForTests(), Is.Empty);
                 Assert.That(cooling.GetTimerTextForTests(), Is.EqualTo("남은 시간 9초"));
-                Assert.That(cooling.GetStateTextForTests(), Does.Contain("밸브 1/4"));
-                Assert.That(cooling.GetStateTextForTests(), Does.Contain("예시"));
+                Assert.That(cooling.GetCoolingDegreesForTests(), Is.Zero);
+                Assert.That(cooling.GetStateTextForTests(), Does.Not.Contain("예시"));
             }
             finally
             {
@@ -1027,7 +1411,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void ResultReportController_CloseButtonInvokesCallback()
+        public void ResultReportController_NewspaperResponseInvokesCallback()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
             session.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, out _);
@@ -1040,7 +1424,8 @@ namespace Border.Research.Tests
                 ResearchResultReportController controller = host.GetComponent<ResearchResultReportController>();
                 controller.Initialize(session, launchResult, () => closed = true);
 
-                FindButton(host.transform, "CloseButton").onClick.Invoke();
+                typeof(ResearchResultReportController).GetMethod("Respond", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(controller, null);
 
                 Assert.That(closed, Is.True);
             }

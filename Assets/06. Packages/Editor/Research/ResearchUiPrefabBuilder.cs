@@ -84,6 +84,41 @@ namespace Border.Research.Editor
             }
         }
 
+        [MenuItem("Border/Research/Rebuild Mini Game UI Prefab")]
+        public static void RebuildMiniGamePrefab()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            EnsureFolder(ResourceFolder);
+            ResearchUiArtApplicator.PrepareMiniGameArt();
+            string path = $"{ResourceFolder}/ResearchMiniGameScreen.prefab";
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(path) == null)
+            {
+                SavePrefab(CreateMiniGameScreen(), "ResearchMiniGameScreen");
+            }
+            else
+            {
+                GameObject contents = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    RectTransform playArea = FindChild(contents.transform, "PlayArea") as RectTransform;
+                    if (playArea == null) throw new System.InvalidOperationException("Mini game prefab has no PlayArea.");
+                    foreach (string name in new[] { "FuelGame", "CoolingGame", "OutputGame" })
+                    {
+                        Transform previous = FindChild(playArea, name);
+                        if (previous != null) Object.DestroyImmediate(previous.gameObject);
+                    }
+                    CreateFuelGame(playArea);
+                    CreateCoolingGame(playArea);
+                    CreateOutputGame(playArea);
+                    RectTransform panel = FindChild(contents.transform, "MiniGamePanel") as RectTransform;
+                    if (panel != null) Anchor(panel, new Vector2(0.06f, 0.04f), new Vector2(0.94f, 0.96f));
+                    ResearchUiArtApplicator.ApplyEngineMiniGameArt(contents);
+                    PrefabUtility.SaveAsPrefabAsset(contents, path);
+                }
+                finally { PrefabUtility.UnloadPrefabContents(contents); }
+            }
+        }
+
         [MenuItem("Border/Research/Rebuild Operation UI Prefab")]
         public static void RebuildOperationUiPrefab()
         {
@@ -109,8 +144,6 @@ namespace Border.Research.Editor
                 && FindChild(operationScreen.transform, "EnginePreviewReservedArea") != null
                 && FindChild(operationScreen.transform, "HubActionBar") != null
                 && FindChild(operationScreen.transform, "StatusPanel") == null
-                && FindChild(miniGameScreen.transform, "FuelOuterBand") != null
-                && FindChild(miniGameScreen.transform, "FuelPerfectBand") != null
                 && FindChild(miniGameScreen.transform, "OutputJudgementText") != null;
         }
 
@@ -345,7 +378,7 @@ namespace Border.Research.Editor
             Stretch(background, 0f);
 
             RectTransform panel = CreatePanel("MiniGamePanel", root, new Color(0.13f, 0.16f, 0.2f, 0.98f));
-            Center(panel, new Vector2(1040f, 560f));
+            Anchor(panel, new Vector2(0.06f, 0.04f), new Vector2(0.94f, 0.96f));
             AddVerticalLayout(panel, 20f, 20f, 18f, 10f);
 
             RectTransform topRow = CreateGroup("TopRow", panel);
@@ -379,25 +412,19 @@ namespace Border.Research.Editor
             RectTransform group = CreateGroup("FuelGame", parent);
             Stretch(group, 0f);
             TMP_Text status = CreateText("FuelStatusText", group, 18, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-            Anchor(status.rectTransform, new Vector2(0.08f, 0.68f), new Vector2(0.92f, 0.84f));
-
-            RectTransform gaugeFrame = CreatePanel("FuelGaugeFrame", group, new Color(0.14f, 0.18f, 0.23f, 1f));
-            Anchor(gaugeFrame, new Vector2(0.08f, 0.28f), new Vector2(0.92f, 0.62f));
-            Image outerBand = CreatePanel("FuelOuterBand", gaugeFrame, new Color(0.28f, 0.78f, 0.42f, 0.38f)).GetComponent<Image>();
-            Anchor(outerBand.rectTransform, new Vector2(0.34f, 0f), new Vector2(0.66f, 1f));
-            Image perfectBand = CreatePanel("FuelPerfectBand", gaugeFrame, new Color(1f, 0.9f, 0.26f, 0.86f)).GetComponent<Image>();
-            Anchor(perfectBand.rectTransform, new Vector2(0.48f, 0f), new Vector2(0.52f, 1f));
-            Image fill = CreatePanel("FuelFill", gaugeFrame, new Color(0.26f, 0.74f, 0.88f, 1f)).GetComponent<Image>();
-            Anchor(fill.rectTransform, Vector2.zero, new Vector2(0f, 1f));
-            Image currentMarker = CreatePanel("FuelCurrentMarker", gaugeFrame, new Color(0.92f, 0.98f, 1f, 1f)).GetComponent<Image>();
-            currentMarker.rectTransform.sizeDelta = new Vector2(4f, 0f);
-            Image targetMarker = CreatePanel("FuelTarget", gaugeFrame, new Color(1f, 0.88f, 0.24f, 1f)).GetComponent<Image>();
-            targetMarker.rectTransform.sizeDelta = new Vector2(7f, 0f);
-
-            TMP_Text label = CreateText("FuelGaugeLabel", gaugeFrame, 15, FontStyles.Bold, TextAlignmentOptions.Center, "목표선");
-            label.color = new Color(1f, 0.94f, 0.42f, 1f);
-            TMP_Text judgement = CreateText("FuelJudgementText", group, 38, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-            Anchor(judgement.rectTransform, new Vector2(0.25f, 0.08f), new Vector2(0.75f, 0.25f));
+            Anchor(status.rectTransform, new Vector2(0.08f, 0.11f), new Vector2(0.92f, 0.20f));
+            RectTransform area = CreateGroup("FuelDialArea", group);
+            Anchor(area, new Vector2(0.05f, 0.23f), new Vector2(0.95f, 0.98f));
+            RectTransform dial = CreateArtSurface("FuelDial", area, Vector2.zero, Vector2.one, true);
+            FitAspect(dial, 1f);
+            CreateArtSurface("FuelFill", dial, new Vector2(0.16f, 0.328125f), new Vector2(0.84f, 0.668125f));
+            RectTransform needle = CreateArtSurface("FuelNeedle", dial, new Vector2(0.467f, 0.328125f), new Vector2(0.533f, 0.63f));
+            needle.pivot = new Vector2(0.5f, 0f);
+            needle.localRotation = Quaternion.Euler(0f, 0f, ResearchMiniGameController.FuelMinimumAngle);
+            CreateArtSurface("FuelHub", dial, new Vector2(0.43f, 0.258125f), new Vector2(0.57f, 0.398125f));
+            CreateArtSurface("FuelReadout", dial, Vector2.zero, Vector2.one);
+            TMP_Text judgement = CreateText("FuelJudgementText", group, 28, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(judgement.rectTransform, new Vector2(0.08f, 0f), new Vector2(0.92f, 0.10f));
             group.gameObject.SetActive(false);
         }
 
@@ -405,37 +432,60 @@ namespace Border.Research.Editor
         {
             RectTransform group = CreateGroup("CoolingGame", parent);
             Stretch(group, 0f);
-            RectTransform hotspot = CreatePanel("CoolingHotspot", group, new Color(0.88f, 0.36f, 0.24f, 1f));
-            Anchor(hotspot, new Vector2(0.34f, 0.70f), new Vector2(0.66f, 0.90f));
-            TMP_Text hotspotLabel = CreateText("CoolingHotspotLabel", hotspot, 16, FontStyles.Bold, TextAlignmentOptions.Center, "뜨거운 엔진 위치");
-            Stretch(hotspotLabel.rectTransform, 6f);
-
-            RectTransform valveGrid = CreateGroup("CoolingValveGrid", group);
-            Anchor(valveGrid, new Vector2(0.20f, 0.06f), new Vector2(0.80f, 0.55f));
-            AddGrid(valveGrid, 2, 16f, 170f, 64f);
-            for (int i = 0; i < 4; i++)
-            {
-                CreateButton($"CoolingValve_{i}", valveGrid, string.Empty, 0f, 0f);
-            }
-
+            RectTransform pipeArea = CreateGroup("CoolingPipeArea", group);
+            Anchor(pipeArea, new Vector2(0.06f, 0.27f), new Vector2(0.94f, 0.83f));
+            RectTransform pipe = CreateArtSurface("CoolingPipe", pipeArea, Vector2.zero, Vector2.one);
+            FitAspect(pipe, 6.4f);
+            RectTransform valveArea = CreateGroup("CoolingValveArea", group);
+            Anchor(valveArea, new Vector2(0.28f, 0.22f), new Vector2(0.72f, 0.88f));
+            RectTransform valve = CreateArtSurface("CoolingValve", valveArea, Vector2.zero, Vector2.one, true);
+            FitAspect(valve, 1f);
+            TMP_Text progress = CreateText("CoolingProgressText", group, 22, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(progress.rectTransform, new Vector2(0.08f, 0.04f), new Vector2(0.92f, 0.16f));
             group.gameObject.SetActive(false);
         }
 
         private static void CreateOutputGame(RectTransform parent)
         {
-            RectTransform group = CreateGroup("OutputGame", parent);
+            // The runtime pointer handler lives on this group, including the space outside the track.
+            RectTransform group = CreatePanel("OutputGame", parent, Color.clear);
+            group.GetComponent<Image>().raycastTarget = true;
             Stretch(group, 0f);
+            RectTransform background = CreateArtSurface("OutputBackground", group, new Vector2(0.035f, 0.04f), new Vector2(0.965f, 0.96f));
+            background.GetComponent<Image>().color = new Color(0.12f, 0.16f, 0.18f, 1f);
             TMP_Text label = CreateText("OutputLabel", group, 18, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-            Anchor(label.rectTransform, new Vector2(0.08f, 0.70f), new Vector2(0.92f, 0.86f));
-            RectTransform gaugeFrame = CreatePanel("OutputGaugeFrame", group, new Color(0.14f, 0.18f, 0.23f, 1f));
-            Anchor(gaugeFrame, new Vector2(0.08f, 0.34f), new Vector2(0.92f, 0.58f));
-            RectTransform safeZone = CreatePanel("SafeZone", gaugeFrame, new Color(0.22f, 0.72f, 0.38f, 0.82f));
-            Anchor(safeZone, new Vector2(0.27f, 0f), new Vector2(0.43f, 1f));
-            RectTransform fill = CreatePanel("OutputFill", gaugeFrame, new Color(0.88f, 0.5f, 0.2f, 0.92f));
-            Anchor(fill, Vector2.zero, new Vector2(0f, 1f));
-            TMP_Text judgement = CreateText("OutputJudgementText", group, 38, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
-            Anchor(judgement.rectTransform, new Vector2(0.25f, 0.10f), new Vector2(0.75f, 0.28f));
+            Anchor(label.rectTransform, new Vector2(0.08f, 0.74f), new Vector2(0.92f, 0.87f));
+            RectTransform trackArea = CreateGroup("OutputTrackArea", group);
+            Anchor(trackArea, new Vector2(0.09f, 0.37f), new Vector2(0.91f, 0.66f));
+            RectTransform track = CreateArtSurface("OutputTrack", trackArea, Vector2.zero, Vector2.one, true);
+            FitAspect(track, 128f / 18f);
+            CreateArtSurface("SafeZone", track, new Vector2(0.42f, 0.11f), new Vector2(0.58f, 0.89f));
+            RectTransform safeZone = (RectTransform)FindChild(track, "SafeZone");
+            RectTransform perfect = CreateArtSurface("PerfectZone", safeZone, new Vector2(0.375f, 0f), new Vector2(0.625f, 1f));
+            perfect.GetComponent<Image>().color = new Color(1f, 0.9f, 0.15f, 1f);
+            RectTransform cursor = CreateArtSurface("OutputCursor", track, new Vector2(0f, 0.05f), new Vector2(0f, 0.95f));
+            cursor.sizeDelta = new Vector2(18f, 0f);
+            AspectRatioFitter cursorAspect = cursor.gameObject.AddComponent<AspectRatioFitter>();
+            cursorAspect.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
+            cursorAspect.aspectRatio = 7f / 16f;
+            TMP_Text judgement = CreateText("OutputJudgementText", group, 32, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            Anchor(judgement.rectTransform, new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.29f));
             group.gameObject.SetActive(false);
+        }
+
+        private static RectTransform CreateArtSurface(string name, Transform parent, Vector2 min, Vector2 max, bool raycast = false)
+        {
+            RectTransform rect = CreatePanel(name, parent, Color.white);
+            Anchor(rect, min, max);
+            rect.GetComponent<Image>().raycastTarget = raycast;
+            return rect;
+        }
+
+        private static void FitAspect(RectTransform rect, float ratio)
+        {
+            AspectRatioFitter aspect = rect.gameObject.AddComponent<AspectRatioFitter>();
+            aspect.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            aspect.aspectRatio = ratio;
         }
 
         private static void CreateIgnitionGame(RectTransform parent)

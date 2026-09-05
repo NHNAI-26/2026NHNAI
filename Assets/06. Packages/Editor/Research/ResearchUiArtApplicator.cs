@@ -9,6 +9,7 @@ namespace Border.Research.Editor
     {
         private const string SheetPath = "Assets/05. Arts/UI/Resources/engine_ui_01.psd";
         private const string PrefabFolder = "Assets/03. Prefabs/UI/Resources/ResearchUI/";
+        private const string MiniGameArtFolder = "Assets/05. Arts/UI/MiniGame/";
 
         [MenuItem("Border/Research/Apply Engine UI Art")]
         public static void ApplyToPrefabAssets()
@@ -28,11 +29,7 @@ namespace Border.Research.Editor
         public static void ApplyMiniGameToPrefab()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-            if (LoadSprites() == null)
-            {
-                Debug.LogError("Import engine_ui_01.psd before applying mini game UI art.");
-                return;
-            }
+            PrepareMiniGameArt();
             UpdatePrefab("ResearchMiniGameScreen", ApplyMiniGame);
         }
 
@@ -51,6 +48,7 @@ namespace Border.Research.Editor
         public static void ApplyMiniGame(GameObject root)
         {
             ApplyIgnitionArt(root);
+            ApplyEngineMiniGameArt(root);
             Sprite[] sprites = LoadSprites();
             if (sprites == null) return;
             LayoutElement topRow = Find(root.transform, "TopRow")?.GetComponent<LayoutElement>();
@@ -62,30 +60,219 @@ namespace Border.Research.Editor
             Skin(Find(root.transform, "MiniGamePanel")?.GetComponent<Image>(), sprites[0]);
             SkinButton(Find(root.transform, "PrimaryActionButton")?.GetComponent<Button>(), sprites[5]);
 
-            foreach (string name in new[] { "FuelGaugeFrame", "OutputGaugeFrame" })
-            {
-                Image track = Find(root.transform, name)?.GetComponent<Image>();
-                Skin(track, sprites[2]);
-                if (track != null) track.raycastTarget = false;
-            }
-            Image fuelFill = Find(root.transform, "FuelFill")?.GetComponent<Image>();
-            Skin(fuelFill, sprites[1]);
-            if (fuelFill != null) fuelFill.raycastTarget = false;
-
-            // Keep runtime-driven valve colours, ignition flashes and judgement bands unobscured.
-            foreach (Button button in root.GetComponentsInChildren<Button>(true))
-                if (button.name.StartsWith("CoolingValve_"))
-                    AddFrame(button.transform, sprites[4]);
-            Transform hotspot = Find(root.transform, "CoolingHotspot");
-            if (hotspot != null) AddFrame(hotspot, sprites[5]);
             foreach (string name in new[] { "FuelJudgementText", "OutputJudgementText", "ResultDetailText" })
             {
                 TMP_Text text = Find(root.transform, name)?.GetComponent<TMP_Text>();
                 if (text == null) continue;
                 text.enableAutoSizing = true;
                 text.fontSizeMin = name == "ResultDetailText" ? 14f : 24f;
-                text.fontSizeMax = name == "ResultDetailText" ? 21f : 38f;
+                text.fontSizeMax = name == "ResultDetailText" ? 21f : 28f;
             }
+        }
+
+        public static void PrepareMiniGameArt()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            foreach (string file in new[] { "Cold_Velve/pipe-64xpipe.png", "Cold_Velve/Velve.png",
+                "Fuel_Gage/gage.png", "Fuel_Gage/gage_stick.png", "Fuel_Gage/gauge-hub-32x32.png",
+                "Power/Power_Back.png", "Power/Power_Gage.png", "Power/Power_Target.png", "Power/Power_Cursor.png" })
+                PrepareCroppedSprite(MiniGameArtFolder + file);
+            foreach (string file in new[] { "Cold_Velve/pipeEmissionMask.png", "Fuel_Gage/gageTintMask.png" })
+            {
+                var importer = AssetImporter.GetAtPath(MiniGameArtFolder + file) as TextureImporter;
+                if (importer == null) throw new System.InvalidOperationException("Missing mini game mask: " + file);
+                if (importer.textureType == TextureImporterType.Default && !importer.sRGBTexture
+                    && !importer.mipmapEnabled && importer.textureCompression == TextureImporterCompression.Uncompressed) continue;
+                importer.textureType = TextureImporterType.Default;
+                importer.sRGBTexture = false;
+                importer.mipmapEnabled = false;
+                importer.textureCompression = TextureImporterCompression.Uncompressed;
+                importer.wrapMode = TextureWrapMode.Clamp;
+                importer.SaveAndReimport();
+            }
+            CreateFuelArcSprite();
+            Material pipe = PrepareMaterial("CoolingPipeHeat", "Border/UI/ResearchHeat");
+            pipe.SetTexture("_EmissionMask", AssetDatabase.LoadAssetAtPath<Texture2D>(MiniGameArtFolder + "Cold_Velve/pipeEmissionMask.png"));
+            pipe.SetVector("_MaskUVRect", new Vector4(0f, 0f, 1f, 1f));
+            pipe.SetFloat("_RadialMask", 0f);
+            ConfigureHeat(pipe);
+            Material valve = PrepareMaterial("CoolingValveHeat", "Border/UI/ResearchHeat");
+            valve.SetTexture("_EmissionMask", Texture2D.whiteTexture);
+            Sprite valveSprite = LoadMiniGameSprite("Cold_Velve/Velve.png");
+            Rect bounds = valveSprite.rect;
+            valve.SetVector("_MaskUVRect", new Vector4(bounds.x / valveSprite.texture.width, bounds.y / valveSprite.texture.height,
+                bounds.width / valveSprite.texture.width, bounds.height / valveSprite.texture.height));
+            valve.SetFloat("_RadialMask", 1f);
+            ConfigureHeat(valve);
+            Material readout = PrepareMaterial("FuelReadout", "Border/UI/ResearchReadout");
+            readout.SetTexture("_TintMask", AssetDatabase.LoadAssetAtPath<Texture2D>(MiniGameArtFolder + "Fuel_Gage/gageTintMask.png"));
+            EditorUtility.SetDirty(readout);
+            AssetDatabase.SaveAssetIfDirty(pipe);
+            AssetDatabase.SaveAssetIfDirty(valve);
+            AssetDatabase.SaveAssetIfDirty(readout);
+        }
+
+        private static void ConfigureHeat(Material material)
+        {
+            material.SetFloat("_Heat", 0f);
+            material.SetColor("_HeatColor", new Color(1f, 0.06f, 0.01f, 1f));
+            material.SetFloat("_EmissionStrength", 1.8f);
+            EditorUtility.SetDirty(material);
+        }
+
+        private static Material PrepareMaterial(string name, string shaderName)
+        {
+            Shader shader = Shader.Find(shaderName);
+            if (shader == null) throw new System.InvalidOperationException("Import shader before rebuilding mini game: " + shaderName);
+            string path = PrefabFolder + name + ".mat";
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            material.shader = shader;
+            return material;
+        }
+
+        private static void PrepareCroppedSprite(string path)
+        {
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer == null) throw new System.InvalidOperationException("Missing mini game art: " + path);
+            // Decode a temporary copy to inspect alpha without making source textures readable or rewriting PNGs.
+            var source = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            Rect bounds;
+            try
+            {
+                if (!ImageConversion.LoadImage(source, System.IO.File.ReadAllBytes(path)))
+                    throw new System.InvalidOperationException("Cannot decode mini game art: " + path);
+                Color32[] pixels = source.GetPixels32();
+                int minX = source.width, minY = source.height, maxX = -1, maxY = -1;
+                for (int y = 0; y < source.height; y++)
+                    for (int x = 0; x < source.width; x++)
+                    {
+                        if (pixels[y * source.width + x].a <= 16) continue;
+                        minX = Mathf.Min(minX, x); minY = Mathf.Min(minY, y);
+                        maxX = Mathf.Max(maxX, x); maxY = Mathf.Max(maxY, y);
+                    }
+                if (maxX < minX) throw new System.InvalidOperationException("Empty mini game art: " + path);
+                bounds = new Rect(minX, minY, maxX - minX + 1, maxY - minY + 1);
+            }
+            finally { Object.DestroyImmediate(source); }
+
+            // TextureImporter keeps this compatible with the existing editor assembly, without a Sprite Editor dependency.
+#pragma warning disable CS0618
+            SpriteMetaData[] slices = importer.spritesheet;
+            string name = slices.Length > 0 ? slices[0].name : System.IO.Path.GetFileNameWithoutExtension(path);
+            if (importer.textureType == TextureImporterType.Sprite && importer.spriteImportMode == SpriteImportMode.Multiple
+                && slices.Length == 1 && slices[0].rect == bounds && !importer.mipmapEnabled
+                && importer.textureCompression == TextureImporterCompression.Uncompressed
+                && importer.npotScale == TextureImporterNPOTScale.None) return;
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Multiple;
+            importer.spritePixelsPerUnit = 100f;
+            importer.mipmapEnabled = false;
+            importer.alphaIsTransparency = true;
+            importer.npotScale = TextureImporterNPOTScale.None;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.filterMode = path.EndsWith("gage_stick.png") ? FilterMode.Bilinear : FilterMode.Point;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            var settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+            settings.spriteMeshType = SpriteMeshType.FullRect;
+            importer.SetTextureSettings(settings);
+            importer.spritesheet = new[] { new SpriteMetaData { name = name, rect = bounds,
+                alignment = (int)SpriteAlignment.Center, pivot = new Vector2(0.5f, 0.5f), border = Vector4.zero } };
+#pragma warning restore CS0618
+            importer.SaveAndReimport();
+        }
+
+        private static void CreateFuelArcSprite()
+        {
+            string path = PrefabFolder + "FuelArc.asset";
+            const int width = 256, height = 128;
+            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            bool createAsset = texture == null;
+            if (createAsset) texture = new Texture2D(width, height, TextureFormat.RGBA32, false) { name = "FuelArc", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color[width * height];
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    Vector2 point = new Vector2((x + 0.5f) / height - 1f, (y + 0.5f) / height);
+                    float radius = point.magnitude;
+                    float angle = -Mathf.Atan2(point.x, point.y) * Mathf.Rad2Deg;
+                    // Stay inside the printed ticks so the sky-blue target remains visible.
+                    float alpha = Mathf.Clamp01((0.64f - radius) * height) * Mathf.Clamp01((radius - 0.52f) * height);
+                    if (angle > ResearchMiniGameController.FuelMinimumAngle || angle < ResearchMiniGameController.FuelMaximumAngle) alpha = 0f;
+                    pixels[y * width + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            texture.SetPixels(pixels);
+            texture.Apply();
+            if (createAsset)
+            {
+                AssetDatabase.CreateAsset(texture, path);
+                Sprite sprite = Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0f), 100f, 0, SpriteMeshType.FullRect);
+                sprite.name = "FuelArc";
+                AssetDatabase.AddObjectToAsset(sprite, texture);
+            }
+            EditorUtility.SetDirty(texture);
+            AssetDatabase.SaveAssetIfDirty(texture);
+        }
+
+        private static Sprite LoadMiniGameSprite(string file)
+        {
+            foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(MiniGameArtFolder + file))
+                if (asset is Sprite sprite) return sprite;
+            return null;
+        }
+
+        public static void ApplyEngineMiniGameArt(GameObject root)
+        {
+            ApplyGameSprite(root, "FuelDial", "Fuel_Gage/gage.png", true);
+            Image needle = ApplyGameSprite(root, "FuelNeedle", "Fuel_Gage/gage_stick.png");
+            if (needle != null) needle.rectTransform.localRotation = Quaternion.Euler(0f, 0f, ResearchMiniGameController.FuelMinimumAngle);
+            ApplyGameSprite(root, "FuelHub", "Fuel_Gage/gauge-hub-32x32.png");
+            Image readout = ApplyGameSprite(root, "FuelReadout", "Fuel_Gage/gage.png");
+            if (readout != null)
+            {
+                readout.material = AssetDatabase.LoadAssetAtPath<Material>(PrefabFolder + "FuelReadout.mat");
+                readout.color = new Color(0.25f, 0.9f, 0.48f, 1f);
+            }
+            Image fill = Find(root.transform, "FuelFill")?.GetComponent<Image>();
+            if (fill != null)
+            {
+                foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(PrefabFolder + "FuelArc.asset"))
+                    if (asset is Sprite sprite) fill.sprite = sprite;
+                fill.type = Image.Type.Filled;
+                fill.fillMethod = Image.FillMethod.Radial180;
+                fill.fillOrigin = (int)Image.Origin180.Bottom;
+                fill.fillClockwise = true;
+                fill.fillAmount = 0f;
+                fill.color = new Color(0.22f, 0.9f, 0.52f, 0.95f);
+                fill.raycastTarget = false;
+            }
+            Image pipe = ApplyGameSprite(root, "CoolingPipe", "Cold_Velve/pipe-64xpipe.png");
+            if (pipe != null) pipe.material = AssetDatabase.LoadAssetAtPath<Material>(PrefabFolder + "CoolingPipeHeat.mat");
+            Image valve = ApplyGameSprite(root, "CoolingValve", "Cold_Velve/Velve.png", true);
+            if (valve != null) valve.material = AssetDatabase.LoadAssetAtPath<Material>(PrefabFolder + "CoolingValveHeat.mat");
+            Image background = ApplyGameSprite(root, "OutputBackground", "Power/Power_Back.png");
+            if (background != null) background.color = new Color(0.12f, 0.16f, 0.18f, 1f);
+            Image track = ApplyGameSprite(root, "OutputTrack", "Power/Power_Gage.png", true);
+            if (track != null) track.color = new Color(0.45f, 0.52f, 0.55f, 1f);
+            ApplyGameSprite(root, "SafeZone", "Power/Power_Target.png");
+            ApplyGameSprite(root, "OutputCursor", "Power/Power_Cursor.png");
+        }
+
+        private static Image ApplyGameSprite(GameObject root, string name, string file, bool raycast = false)
+        {
+            Image image = Find(root.transform, name)?.GetComponent<Image>();
+            if (image == null) return null;
+            image.sprite = LoadMiniGameSprite(file);
+            image.color = Color.white;
+            image.type = Image.Type.Simple;
+            image.preserveAspect = false;
+            image.raycastTarget = raycast;
+            return image;
         }
 
         [MenuItem("Border/Research/Apply Ignition UI Art")]
