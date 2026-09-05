@@ -88,7 +88,7 @@ namespace Border.Research
 
         private void OnDisable()
         {
-            KillActiveSequence();
+            FinishActiveSequence();
         }
 
         private Sequence CreateSequence(
@@ -100,7 +100,7 @@ namespace Border.Research
             bool blocksRaycasts,
             Action onComplete)
         {
-            Sequence sequence = DOTween.Sequence().SetTarget(this);
+            Sequence sequence = DOTween.Sequence().SetUpdate(true).SetTarget(this);
             ForEach(group, motion => AddPanelTween(sequence, motion, duration, ease, useStartPosition, targetAlpha, blocksRaycasts));
             // DOTween replaces the completion callback instead of chaining it, so the caller's callback has
             // to be folded in here — a second OnComplete on the returned sequence would drop the raycast restore.
