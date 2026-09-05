@@ -268,7 +268,7 @@ namespace Border.Research
 
         public float GetFuelTargetForTests()
         {
-            return (FuelPassStart + FuelPassEnd) * 0.5f;
+            return FuelPassEnd;
         }
 
         public int[] GetIgnitionSequenceForTests()
@@ -287,12 +287,11 @@ namespace Border.Research
         public static int CalculateFuelAttemptScore(float fill, float overflowSeconds)
         {
             float value = Mathf.Clamp01(fill);
-            float center = (FuelPassStart + FuelPassEnd) * 0.5f;
-            float halfWidth = (FuelPassEnd - FuelPassStart) * 0.5f;
-            float distance = Mathf.Abs(value - center);
             float score = value >= FuelPassStart && value <= FuelPassEnd
-                ? Mathf.Lerp(100f, 80f, Mathf.Clamp01(distance / halfWidth))
-                : Mathf.Clamp(49f * (1f - (distance - halfWidth) / 0.25f), 0f, 49f);
+                ? Mathf.Lerp(80f, 100f, Mathf.InverseLerp(FuelPassStart, FuelPassEnd, value))
+                : Mathf.Clamp(49f * (1f - Mathf.Min(
+                    Mathf.Abs(value - FuelPassStart),
+                    Mathf.Abs(value - FuelPassEnd)) / 0.25f), 0f, 49f);
             return Mathf.Clamp(Mathf.RoundToInt(score - 100f * Mathf.Max(0f, overflowSeconds) / FuelOverfillSeconds), 0, 100);
         }
 
@@ -641,7 +640,7 @@ namespace Border.Research
             switch (statId)
             {
                 case EngineStatId.FuelCapacity:
-                    instructionText.text = "계기판을 누르고 있다가 바늘이 하늘색 구간에 들어오면 놓으세요.";
+                    instructionText.text = "계기판을 누르고 있다가 바늘이 하늘색 구간의 가장 오른쪽 흰색 선에 닿으면 놓으세요.";
                     BuildFuelGame();
                     break;
                 case EngineStatId.Cooling:
@@ -1294,7 +1293,7 @@ namespace Border.Research
         {
             int current = Mathf.RoundToInt(fuelGaugeValue * 100f);
             fuelStatusText.text = fuelHoldSeconds > fuelFillDuration ? $"과충전 {fuelHoldSeconds - fuelFillDuration:0.0}초"
-                : $"눈금 {current}% · 하늘색 구간에서 놓기";
+                : $"눈금 {current}% · 오른쪽 흰색 선에서 놓기";
             if (!fuelJudgementShowing) SetStateText($"시도 {fuelAttemptIndex + 1}/{FuelAttemptCount}", false);
         }
 

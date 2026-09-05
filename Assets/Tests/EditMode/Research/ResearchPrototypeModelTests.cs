@@ -452,7 +452,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void MiniGameFuel_UsesPrintedTicksAndSkyBluePassBand()
+        public void MiniGameFuel_PeaksAtRightmostWhiteLineOfSkyBluePassBand()
         {
             float start = ResearchMiniGameController.FuelPassStart;
             float end = ResearchMiniGameController.FuelPassEnd;
@@ -461,8 +461,8 @@ namespace Border.Research.Tests
             Assert.That(ResearchMiniGameController.GetFuelNeedleAngle(start), Is.EqualTo(-39.4f).Within(0.001f));
             Assert.That(ResearchMiniGameController.GetFuelNeedleAngle(end), Is.EqualTo(-62.7f).Within(0.001f));
             Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(start, 0f), Is.EqualTo(80));
-            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(end, 0f), Is.EqualTo(80));
-            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore((start + end) * 0.5f, 0f), Is.EqualTo(100));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore((start + end) * 0.5f, 0f), Is.EqualTo(90));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(end, 0f), Is.EqualTo(100));
             Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(start - 0.001f, 0f), Is.LessThan(50));
             Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(end + 0.001f, 0f), Is.LessThan(50));
         }
@@ -532,7 +532,7 @@ namespace Border.Research.Tests
                 cooling.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 79, _ => { });
                 ignition.InitializeForTests(EnginePresetId.Engine01, EngineStatId.IgnitionReliability, false, 80, _ => { });
 
-                Assert.That(fuelA.GetFuelTargetForTests(), Is.InRange(ResearchMiniGameController.FuelPassStart, ResearchMiniGameController.FuelPassEnd));
+                Assert.That(fuelA.GetFuelTargetForTests(), Is.EqualTo(ResearchMiniGameController.FuelPassEnd));
                 Assert.That(fuelA.GetFuelDurationForTests(), Is.InRange(1.8f, 4.2f));
                 Assert.That(fuelA.GetFuelDurationForTests(), Is.EqualTo(fuelB.GetFuelDurationForTests()));
                 Assert.That(fuelA.GetFuelDurationForTests(), Is.Not.EqualTo(fuelC.GetFuelDurationForTests()));
