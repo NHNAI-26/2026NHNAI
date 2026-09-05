@@ -53,7 +53,9 @@ namespace Simulation
         private const int BoxSprite = 4;    // 작은 상자(스탯 툴팁)
         private const int ButtonSprite = 5; // 버튼
         private const int CardSprite = 6;   // 목록 카드(프리셋 한 줄)
+        private const string ArtMaterialName = "UI_general";
         private static Sprite[] artSprites;
+        private static Material artMaterial;
 
         // 아트를 입힌 그래픽은 색이 아니라 틴트로 상태를 알린다 — 스프라이트에 어두운 색을 곱하면 그림이 죽는다.
         private static readonly Color TintIdle = Color.white;
@@ -1048,6 +1050,10 @@ namespace Simulation
         {
             Sprite sprite = Art(spriteIndex);
             image.color = TintIdle;
+            // 프리팹 쪽 UI 는 인스펙터에서 같은 머티리얼을 물린다 — 이 화면만 기본 UI 머티리얼로
+            // 남으면 껍데기가 다르게 보인다. 못 읽어도 스프라이트는 그대로 입힌다.
+            artMaterial ??= Resources.Load<Material>(ArtMaterialName);
+            if (artMaterial != null) image.material = artMaterial;
             if (sprite == null) return; // 시트를 못 읽으면 흰 사각형으로 남는다 — 화면이 사라지는 것보다 낫다
 
             image.sprite = sprite;
