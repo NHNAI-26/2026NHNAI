@@ -56,6 +56,7 @@ namespace Border.Research
         private ResearchMiniGameResult pendingResult;
         private System.Random random = new System.Random(Guid.NewGuid().GetHashCode());
         private bool initialized;
+        private bool interfaceBuilt;
         private bool gameCompleted;
         private bool resultShowing;
         private bool resultDismissed;
@@ -110,6 +111,7 @@ namespace Border.Research
         private Button primaryButton;
         private TMP_Text resultScoreText;
         private TMP_Text resultDetailText;
+        private GameObject interfaceRoot;
         private Camera fallbackRenderingCamera;
 
         public EngineStatId StatId => statId;
@@ -129,23 +131,37 @@ namespace Border.Research
 
         public void Initialize(EnginePresetId nextPresetId, EngineStatId nextStatId, bool nextFocused, Action<ResearchMiniGameResult> onCompleted)
         {
-            if (initialized)
-            {
-                return;
-            }
-
             presetId = nextPresetId;
             statId = nextStatId;
             focused = nextFocused;
             completedCallback = onCompleted;
 
-            if (!BuildInterface())
+            if (!interfaceBuilt && !BuildInterface())
             {
                 return;
             }
 
+            ResetRunState();
+            if (interfaceRoot != null)
+            {
+                interfaceRoot.SetActive(true);
+            }
+
             StartStatGame();
             initialized = true;
+        }
+
+        public void HideForReuse()
+        {
+            feedbackTween?.Kill();
+            feedbackTween = null;
+            completedCallback = null;
+            if (interfaceRoot != null)
+            {
+                interfaceRoot.SetActive(false);
+            }
+
+            gameObject.SetActive(false);
         }
 
         private void OnDestroy()
@@ -411,8 +427,27 @@ namespace Border.Research
                 return false;
             }
 
-            GameObject instance = Instantiate(prefab, transform);
-            instance.name = "ResearchMiniGameCanvas";
+            GameObject instance;
+            bool createdInstance = false;
+            Transform existingCanvas = transform.Find("ResearchMiniGameCanvas");
+            if (existingCanvas != null)
+            {
+                instance = existingCanvas.gameObject;
+            }
+            else if (CanCreateRuntimeUiFallback())
+            {
+                instance = Instantiate(prefab, transform);
+                instance.name = "ResearchMiniGameCanvas";
+                createdInstance = true;
+            }
+            else
+            {
+                Debug.LogError("Research mini game UI must be preplaced in 01_Main.", this);
+                return false;
+            }
+
+            interfaceRoot = instance;
+            interfaceRoot.SetActive(true);
             RectTransform canvasTransform = instance.GetComponent<RectTransform>();
             if (canvasTransform == null)
             {
@@ -488,7 +523,11 @@ namespace Border.Research
                 || resultScoreText == null
                 || resultDetailText == null)
             {
-                DestroyUnityObject(instance);
+                if (createdInstance)
+                {
+                    DestroyUnityObject(instance);
+                }
+
                 Debug.LogError("Research mini game UI prefab is invalid. Check required child names in ResearchMiniGameScreen.");
                 return false;
             }
@@ -498,7 +537,11 @@ namespace Border.Research
                 coolingButtons[i] = FindRequiredButton(canvasTransform, $"CoolingValve_{i}");
                 if (coolingButtons[i] == null)
                 {
-                    DestroyUnityObject(instance);
+                    if (createdInstance)
+                    {
+                        DestroyUnityObject(instance);
+                    }
+
                     Debug.LogError($"Research mini game UI prefab is invalid. Missing CoolingValve_{i}.");
                     return false;
                 }
@@ -509,14 +552,55 @@ namespace Border.Research
                 ignitionButtons[i] = FindRequiredButton(canvasTransform, $"Igniter_{i}");
                 if (ignitionButtons[i] == null)
                 {
-                    DestroyUnityObject(instance);
+                    if (createdInstance)
+                    {
+                        DestroyUnityObject(instance);
+                    }
+
                     Debug.LogError($"Research mini game UI prefab is invalid. Missing Igniter_{i}.");
                     return false;
                 }
             }
 
             SetActiveGameGroup(null);
+            interfaceBuilt = true;
             return true;
+        }
+
+        private void ResetRunState()
+        {
+            feedbackTween?.Kill();
+            feedbackTween = null;
+            gameCompleted = false;
+            resultShowing = false;
+            resultDismissed = false;
+            fuelJudgementShowing = false;
+            outputJudgementShowing = false;
+            elapsedSeconds = 0f;
+            roundElapsedSeconds = 0f;
+            resultElapsedSeconds = 0f;
+            fuelJudgementElapsedSeconds = 0f;
+            outputJudgementElapsedSeconds = 0f;
+            roundIndex = 0;
+            activeValveIndex = -1;
+            fuelAttemptIndex = 0;
+            outputStageIndex = 0;
+            ignitionInputIndex = 0;
+            coolingCorrectCount = 0;
+            coolingWrongCount = 0;
+            ignitionCorrectInputs = 0;
+            ignitionTotalInputs = 0;
+            coolingReactionTotal = 0f;
+            ignitionReactionTotal = 0f;
+            fuelGaugeValue = 0f;
+            fuelTargetValue = 0f;
+            outputGaugeValue = 0f;
+            fuelFilling = false;
+            ignitionShowingSequence = false;
+            Array.Clear(fuelErrors, 0, fuelErrors.Length);
+            Array.Clear(outputErrors, 0, outputErrors.Length);
+            Array.Clear(ignitionSequence, 0, ignitionSequence.Length);
+            SetActiveGameGroup(null);
         }
 
         private void StartStatGame()
@@ -1437,6 +1521,11 @@ namespace Border.Research
             }
 
             return null;
+        }
+
+        private bool CanCreateRuntimeUiFallback()
+        {
+            return !Application.isPlaying || gameObject.scene.name != ResearchFlowSession.MainSceneName;
         }
 
 #if UNITY_EDITOR

@@ -33,6 +33,8 @@ namespace Simulation
         private RocketDesignUI designUI;
         private bool loaded;
         private bool busy;
+        private LaunchMissionController mission;
+        public string LaunchMessage { get; private set; }
 
         public static bool OpenDesignStage()
         {
@@ -118,6 +120,14 @@ namespace Simulation
                 if (simulationCamera.TryGetComponent(out AudioListener listener)) listener.enabled = false;
             }
 
+            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
+            Rocket rocket = FindFirstObjectByType<Rocket>();
+            if (rocket != null)
+            {
+                mission = rocket.gameObject.AddComponent<LaunchMissionController>();
+                mission.Initialize(session.HasPendingDesignEntry ? session.PendingDesignEntry.MissionId : session.Model.GetCurrentMission(),
+                    () => BeginLaunch(rocket), CompleteLaunch);
+            }
             designUI = RocketDesignUI.Spawn(true);
 
             loaded = true;
@@ -140,10 +150,62 @@ namespace Simulation
                 mainCamera.cullingMask = mainCameraCullingMask;
                 mainCamera.clearFlags = mainCameraClearFlags;
             }
-            if (research != null) research.gameObject.SetActive(true);
+            if (research != null)
+            {
+                research.gameObject.SetActive(true);
+                research.ReturnFromDesignScreen();
+            }
+            ResearchFlowSession.GetOrCreate().ClearPendingDesignEntry();
+            mission = null;
 
             loaded = false;
             busy = false;
+        }
+
+        private bool BeginLaunch(Rocket rocket)
+        {
+            var session = ResearchFlowSession.GetOrCreate();
+            if (!session.HasPendingDesignEntry)
+            {
+                LaunchMessage = "연구 화면에서 설계에 진입해주세요.";
+                return false;
+            }
+            var builder = FindFirstObjectByType<RocketBuilder>();
+            var counts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
+            var parts = rocket.GetComponentsInChildren<RocketPart>();
+            if (parts.Length == 0)
+            {
+                LaunchMessage = "엔진을 1개 이상 설치해주세요.";
+                return false;
+            }
+            foreach (RocketPart part in parts)
+            {
+                int slot = -1;
+                if (part.Stats != null && builder.PresetLibrary != null)
+                    for (int i = 0; i < builder.PresetLibrary.Slots.Count && i < counts.Length; i++)
+                        if (builder.PresetLibrary.Slots[i] == part.Stats) { slot = i; break; }
+                if (slot < 0)
+                {
+                    LaunchMessage = "연구 프리셋으로 엔진을 설치해주세요.";
+                    return false;
+                }
+                counts[slot]++;
+            }
+            var entry = session.PendingDesignEntry;
+            session.UpdatePendingDesignEntry(session.Model.CreateDesignEntry(entry.MissionId, entry.SelectedEnginePresetId,
+                counts, entry.DesignFit, entry.Visibility, entry.LaunchCostPaid));
+            ResearchActionResult result = session.TryBeginPendingDesignLaunch();
+            LaunchMessage = session.Model.LastMessage;
+            return result == ResearchActionResult.Success;
+        }
+
+        private void CompleteLaunch(bool succeeded)
+        {
+            var session = ResearchFlowSession.GetOrCreate();
+            if (session.CompleteActiveLaunch(succeeded, out _) != ResearchActionResult.Success) return;
+            // Physical missions return directly to research; keep the result available in its status panel.
+            session.AcknowledgeLaunchResult();
+            StartCoroutine(UnloadRoutine());
         }
 
         private static Camera FindSceneCamera(Scene scene)

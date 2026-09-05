@@ -24,11 +24,7 @@ namespace Border.Research.Editor
                 return;
             }
 
-            RemoveObsoleteOperationDetails();
-            if (!DefaultPrefabsAreCurrent())
-            {
-                RebuildUiPrefabs();
-            }
+            EnsureDefaultPrefabsCurrent();
         }
 
         private static void UpdatePrefabsAfterPlayMode(PlayModeStateChange state)
@@ -79,6 +75,15 @@ namespace Border.Research.Editor
             AssetDatabase.Refresh();
         }
 
+        public static void EnsureDefaultPrefabsCurrent()
+        {
+            RemoveObsoleteOperationDetails();
+            if (!DefaultPrefabsAreCurrent())
+            {
+                RebuildUiPrefabs();
+            }
+        }
+
         [MenuItem("Border/Research/Rebuild Operation UI Prefab")]
         public static void RebuildOperationUiPrefab()
         {
@@ -92,12 +97,15 @@ namespace Border.Research.Editor
         {
             GameObject operationScreen = AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchOperationScreen.prefab");
             GameObject miniGameScreen = AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchMiniGameScreen.prefab");
+            GameObject designScreen = AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchDesignScreen.prefab");
             return operationScreen != null
-                && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/ResearchDesignScreen.prefab") != null
+                && designScreen != null
                 && miniGameScreen != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/EnginePresetCard.prefab") != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/DesignEnginePresetButton.prefab") != null
                 && FindChild(operationScreen.transform, "Background") == null
+                && FindChild(operationScreen.transform, "EngineCard_Engine01") != null
+                && FindChild(designScreen.transform, "DesignPresetButton_Engine01") != null
                 && FindChild(operationScreen.transform, "EnginePreviewReservedArea") != null
                 && FindChild(miniGameScreen.transform, "FuelOuterBand") != null
                 && FindChild(miniGameScreen.transform, "FuelPerfectBand") != null
@@ -165,6 +173,13 @@ namespace Border.Research.Editor
             RectTransform engineCards = CreateGroup("EnginePresetCards", engineColumn);
             AddVerticalLayout(engineCards, 0f, 0f, 0f, 6f);
             engineCards.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
+            {
+                GameObject card = CreateEnginePresetCard();
+                card.name = $"EngineCard_{config.Id}";
+                card.transform.SetParent(engineCards, false);
+            }
+
             CreateButton("CreateEnginePresetButton", engineColumn, string.Empty, 0f, 42f);
 
             RectTransform detailColumn = CreatePanel("DetailColumn", root, new Color(0.12f, 0.15f, 0.19f, 0.94f));
@@ -402,6 +417,10 @@ namespace Border.Research.Editor
             RectTransform presetRow = CreateGroup("PresetButtons", infoPanel);
             AddHorizontalLayout(presetRow, 0f, 0f, 0f, 5f);
             presetRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 34f;
+            for (int i = 0; i < ResearchPrototypeModel.MaxEnginePresetCount; i++)
+            {
+                CreateButton($"DesignPresetButton_{(EnginePresetId)i}", presetRow, (i + 1).ToString("00"), 0f, 34f);
+            }
 
             RectTransform designRow = CreateGroup("DesignControls", infoPanel);
             AddHorizontalLayout(designRow, 0f, 0f, 0f, 6f);

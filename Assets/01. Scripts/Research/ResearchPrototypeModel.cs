@@ -5,8 +5,8 @@ namespace Border.Research
 {
     public enum LaunchMissionId
     {
-        StaticFire,
-        LowAltitude,
+        StaticFire = 0, // Retained only for serialized data compatibility; no active mission.
+        LowAltitude = 1,
         HighAltitude,
         TargetZone,
         ZoneHold,
@@ -61,7 +61,9 @@ namespace Border.Research
         NoPendingDesignEntry,
         EngineCompletionMaxed,
         EnginePresetLocked,
-        EnginePresetLimitReached
+        EnginePresetLimitReached,
+        GameEnded,
+        LaunchInProgress
     }
 
     public enum EngineRiskKind
@@ -419,10 +421,14 @@ namespace Border.Research
 
             var copy = new LaunchMissionConfig[defaults.Length];
             Array.Copy(defaults, copy, defaults.Length);
-            int length = Math.Min(copy.Length, source.Count);
-            for (int i = 0; i < length; i++)
+            for (int i = 0; i < source.Count; i++)
             {
-                copy[(int)source[i].Id] = source[i];
+                int index = (int)source[i].Id - (int)LaunchMissionId.LowAltitude;
+                if (index >= 0 && index < copy.Length)
+                {
+                    LaunchMissionConfig entry = source[i];
+                    copy[index] = new LaunchMissionConfig(entry.Id, entry.DisplayName, entry.LaunchCost, defaults[index].RequirementText, entry.EngineWeight);
+                }
             }
 
             return copy;
@@ -695,6 +701,8 @@ namespace Border.Research
 
         private readonly ResearchBalanceConfig balanceConfig;
         private readonly LaunchMissionConfig[] missionConfigs;
+        private ResearchDesignEntryData activeLaunch;
+        public bool HasActiveLaunch { get; private set; }
 
         public ResearchPrototypeModel(int seed = 20260904, ResearchBalanceConfig balanceConfig = null)
         {
@@ -716,6 +724,8 @@ namespace Border.Research
         public bool DeadlineReached => RemainingTurns <= 0;
         public bool HasGameEnded { get; private set; }
         public bool GameWon { get; private set; }
+        public int FinalYear { get; private set; }
+        public int FinalQuarter { get; private set; }
         public int TotalLaunches { get; private set; }
         public int FailedLaunches { get; private set; }
         public int HighestQuarterlyFunding { get; private set; }
@@ -739,10 +749,14 @@ namespace Border.Research
             QuarterlyFunding = balanceConfig.InitialQuarterlyFunding;
             HighestQuarterlyFunding = QuarterlyFunding;
             TotalLaunches = 0;
+            HasActiveLaunch = false;
+            activeLaunch = default;
             FailedLaunches = 0;
             TotalSpentFunds = 0;
             HasGameEnded = false;
             GameWon = false;
+            FinalYear = 0;
+            FinalQuarter = 0;
             ActiveEnginePresetCount = 1;
             LastMessage = "2018 Q1. 첫 엔진 프리셋 연구 판단을 시작합니다.";
 
@@ -755,7 +769,7 @@ namespace Border.Research
                     AttemptCount = 0,
                     BestGrade = ResearchGrade.F,
                     HasBestGrade = false,
-                    Unlocked = config.Id == LaunchMissionId.StaticFire
+                    Unlocked = config.Id == LaunchMissionId.LowAltitude
                 };
             }
 
@@ -782,12 +796,11 @@ namespace Border.Research
         {
             return new[]
             {
-                new LaunchMissionConfig(LaunchMissionId.StaticFire, "정적 연소 시험", 600, "기본 해금", 0d),
-                new LaunchMissionConfig(LaunchMissionId.LowAltitude, "낮은 고도 도달", 800, "정적 연소 시험 C 이상", 0.55d),
-                new LaunchMissionConfig(LaunchMissionId.HighAltitude, "높은 고도 도달", 900, "낮은 고도 도달 C 이상", 0.50d),
-                new LaunchMissionConfig(LaunchMissionId.TargetZone, "목표 구역 도달", 1100, "높은 고도 도달 C 이상", 0.45d),
-                new LaunchMissionConfig(LaunchMissionId.ZoneHold, "목표 구역 체류", 1300, "목표 구역 도달 C 이상", 0.42d),
-                new LaunchMissionConfig(LaunchMissionId.LowPowerZoneHold, "저전력 검증", 1500, "목표 구역 체류 C 이상", 0.40d),
+                new LaunchMissionConfig(LaunchMissionId.LowAltitude, "낮은 고도 도달", 800, "기본 해금", 0.55d),
+                new LaunchMissionConfig(LaunchMissionId.HighAltitude, "높은 고도 도달", 900, "낮은 고도 도달 성공", 0.50d),
+                new LaunchMissionConfig(LaunchMissionId.TargetZone, "목표 구역 도달", 1100, "높은 고도 도달 성공", 0.45d),
+                new LaunchMissionConfig(LaunchMissionId.ZoneHold, "목표 구역 체류", 1300, "목표 구역 도달 성공", 0.42d),
+                new LaunchMissionConfig(LaunchMissionId.LowPowerZoneHold, "저전력 검증", 1500, "목표 구역 체류 성공", 0.40d),
             };
         }
 
@@ -801,14 +814,21 @@ namespace Border.Research
             return DefaultEnginePresetConfigs;
         }
 
+        private static int GetMissionIndex(LaunchMissionId missionId)
+        {
+            int index = (int)missionId - (int)LaunchMissionId.LowAltitude;
+            if (index < 0 || index >= 5) throw new ArgumentOutOfRangeException(nameof(missionId));
+            return index;
+        }
+
         public static LaunchMissionConfig GetMissionConfig(LaunchMissionId missionId)
         {
-            return CreateDefaultMissionConfigs()[(int)missionId];
+            return CreateDefaultMissionConfigs()[GetMissionIndex(missionId)];
         }
 
         public LaunchMissionConfig GetConfiguredMissionConfig(LaunchMissionId missionId)
         {
-            return missionConfigs[(int)missionId];
+            return missionConfigs[GetMissionIndex(missionId)];
         }
 
         public static EnginePresetConfig GetEnginePresetConfig(EnginePresetId presetId)
@@ -818,7 +838,7 @@ namespace Border.Research
 
         public LaunchMissionState GetMission(LaunchMissionId missionId)
         {
-            return Missions[(int)missionId];
+            return Missions[GetMissionIndex(missionId)];
         }
 
         public LaunchMissionId GetCurrentMission()
@@ -831,7 +851,7 @@ namespace Border.Research
                 }
             }
 
-            return LaunchMissionId.StaticFire;
+            return LaunchMissionId.LowAltitude;
         }
 
         public EnginePresetState GetEnginePreset(EnginePresetId presetId)
@@ -851,6 +871,8 @@ namespace Border.Research
         public ResearchActionResult CreateNewEnginePreset(out EnginePresetId presetId)
         {
             presetId = default;
+            if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
+            if (HasGameEnded) return EndedActionResult;
             if (DeadlineReached)
             {
                 LastMessage = "마감 도달. 새 엔진을 개발할 수 없습니다.";
@@ -896,7 +918,7 @@ namespace Border.Research
             preset.MaxOutput = Math.Max(preset.MaxOutput, 65);
             preset.IgnitionReliability = Math.Max(preset.IgnitionReliability, 65);
 
-            for (int i = 0; i <= (int)missionId; i++)
+            for (int i = 0; i <= GetMissionIndex(missionId); i++)
             {
                 Missions[i].Unlocked = true;
             }
@@ -908,6 +930,8 @@ namespace Border.Research
 
         public ResearchActionResult ExecuteEngineResearch(EnginePresetId presetId, EngineStatId statId, bool focused, int score)
         {
+            if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
+            if (HasGameEnded) return EndedActionResult;
             if (DeadlineReached)
             {
                 LastMessage = "마감 도달. 더 이상 연구할 수 없습니다.";
@@ -952,6 +976,8 @@ namespace Border.Research
 
         public ResearchActionResult WaitQuarter()
         {
+            if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
+            if (HasGameEnded || DeadlineReached) return EndedActionResult;
             AdvanceQuarter();
             LastMessage = "한 분기 대기. 정기 예산을 받았습니다.";
             return DeadlineReached ? ResearchActionResult.DeadlineReached : ResearchActionResult.Success;
@@ -965,6 +991,8 @@ namespace Border.Research
         public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, out ResearchDesignEntryData data)
         {
             data = default;
+            if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
+            if (HasGameEnded) return EndedActionResult;
             LaunchMissionState mission = GetMission(missionId);
             LaunchMissionConfig config = GetConfiguredMissionConfig(missionId);
             if (!IsEnginePresetUnlocked(presetId))
@@ -1014,15 +1042,8 @@ namespace Border.Research
             int[] counts = CopyAndNormalizeEngineCounts(installedEngineCounts);
             ClearLockedEngineCounts(counts);
 
-            if (missionId == LaunchMissionId.StaticFire)
-            {
-                Array.Clear(counts, 0, counts.Length);
-            }
-
-            int reservedInstallCost = missionId == LaunchMissionId.StaticFire ? 0 : CalculateReservedInstallCost(counts);
-            int installedScore = missionId == LaunchMissionId.StaticFire
-                ? CalculateEnginePerformanceScore(presetId)
-                : CalculateInstalledEngineScore(counts);
+            int reservedInstallCost = CalculateReservedInstallCost(counts);
+            int installedScore = CalculateInstalledEngineScore(counts);
 
             return new ResearchDesignEntryData(
                 missionId,
@@ -1044,9 +1065,10 @@ namespace Border.Research
                 launchCostPaid);
         }
 
-        public ResearchActionResult CommitLaunch(ResearchDesignEntryData designEntry, out ResearchLaunchResultData result)
+        public ResearchActionResult BeginLaunch(ResearchDesignEntryData designEntry)
         {
-            result = default;
+            if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
+            if (HasGameEnded) return EndedActionResult;
             LaunchMissionConfig config = GetConfiguredMissionConfig(designEntry.MissionId);
             LaunchMissionState mission = GetMission(designEntry.MissionId);
 
@@ -1076,29 +1098,44 @@ namespace Border.Research
                 return ResearchActionResult.NotEnoughFunds;
             }
 
-            int successChance = CalculateSuccessChance(designEntry);
-            int partialChance = Math.Min(15, 95 - successChance);
-            int failureChance = 100 - successChance - partialChance;
-            int roll = CreateLaunchRoll(designEntry, mission.AttemptCount);
-            ResearchGrade grade = DetermineGrade(successChance, roll);
-            GetVisibilityAdjustedReward(grade, designEntry.Visibility, out int immediateFunding, out int quarterlyFundingDelta);
-
             Funds -= remainingCost;
             TotalSpentFunds += remainingCost;
             TotalLaunches++;
-            if (grade == ResearchGrade.F)
-            {
-                FailedLaunches++;
-            }
-
             mission.AttemptCount++;
+            activeLaunch = designEntry;
+            HasActiveLaunch = true;
+            return ResearchActionResult.Success;
+        }
+
+        public ResearchActionResult CommitLaunch(ResearchDesignEntryData designEntry, out ResearchLaunchResultData result)
+        {
+            result = default;
+            ResearchActionResult action = BeginLaunch(designEntry);
+            if (action != ResearchActionResult.Success) return action;
+            int chance = CalculateSuccessChance(designEntry);
+            int roll = CreateLaunchRoll(designEntry, GetMission(designEntry.MissionId).AttemptCount - 1);
+            return FinishLaunch(DetermineGrade(chance, roll), chance, Math.Min(15, 95 - chance), roll, out result);
+        }
+
+        public ResearchActionResult CompleteLaunch(bool succeeded, out ResearchLaunchResultData result)
+        {
+            return FinishLaunch(succeeded ? ResearchGrade.B : ResearchGrade.F,
+                succeeded ? 100 : 0, 0, 0, out result);
+        }
+
+        private ResearchActionResult FinishLaunch(ResearchGrade grade, int successChance, int partialChance, int roll, out ResearchLaunchResultData result)
+        {
+            result = default;
+            if (!HasActiveLaunch) return ResearchActionResult.NoPendingDesignEntry;
+            ResearchDesignEntryData designEntry = activeLaunch;
+            HasActiveLaunch = false;
+            activeLaunch = default;
+            LaunchMissionConfig config = GetConfiguredMissionConfig(designEntry.MissionId);
+            LaunchMissionState mission = GetMission(designEntry.MissionId);
+            int failureChance = 100 - successChance - partialChance;
+            GetVisibilityAdjustedReward(grade, designEntry.Visibility, out int immediateFunding, out int quarterlyFundingDelta);
+            if (grade == ResearchGrade.F) FailedLaunches++;
             ApplyBestGrade(mission, grade);
-            if (designEntry.MissionId == LaunchMissionId.StaticFire)
-            {
-                EnginePresetState preset = GetEnginePreset(designEntry.SelectedEnginePresetId);
-                preset.AttemptCount++;
-                ApplyBestGrade(preset, grade);
-            }
 
             Funds += immediateFunding;
             QuarterlyFunding = ClampInt(QuarterlyFunding + quarterlyFundingDelta, balanceConfig.MinQuarterlyFunding, balanceConfig.MaxQuarterlyFunding);
@@ -1106,10 +1143,8 @@ namespace Border.Research
             AdvanceQuarter();
             CheckUnlocks();
 
-            bool finalMissionWon = designEntry.MissionId == LaunchMissionId.LowPowerZoneHold && grade <= ResearchGrade.B;
-            bool deadlineMissed = DeadlineReached && !finalMissionWon;
-            HasGameEnded = finalMissionWon || deadlineMissed;
-            GameWon = finalMissionWon;
+            bool finalMissionWon = GameWon;
+            bool deadlineMissed = HasGameEnded && !GameWon;
 
             result = new ResearchLaunchResultData(
                 designEntry.MissionId,
@@ -1156,25 +1191,12 @@ namespace Border.Research
         {
             int designFitModifier = CalculateDesignFitModifier(designEntry.DesignFit);
             int visibilityModifier = balanceConfig.GetVisibilitySuccessModifier(designEntry.Visibility);
-            double raw;
-
-            if (designEntry.MissionId == LaunchMissionId.StaticFire)
-            {
-                raw = 20
-                    + designEntry.SelectedEngineScore * 0.8d
-                    + designEntry.ExperienceBonus
-                    + designFitModifier
-                    + visibilityModifier;
-            }
-            else
-            {
-                raw = 20
-                    + designEntry.InstalledEngineScore * GetMissionEngineWeight(designEntry.MissionId)
-                    + designEntry.PreviousCertificationBonus
-                    + designEntry.ExperienceBonus
-                    + designFitModifier
-                    + visibilityModifier;
-            }
+            double raw = 20
+                + designEntry.InstalledEngineScore * GetMissionEngineWeight(designEntry.MissionId)
+                + designEntry.PreviousCertificationBonus
+                + designEntry.ExperienceBonus
+                + designFitModifier
+                + visibilityModifier;
 
             return ClampInt((int)Math.Round(raw, MidpointRounding.AwayFromZero), 10, 90);
         }
@@ -1359,7 +1381,6 @@ namespace Border.Research
 
         private void CheckUnlocks()
         {
-            UnlockIfReady(LaunchMissionId.StaticFire, LaunchMissionId.LowAltitude);
             UnlockIfReady(LaunchMissionId.LowAltitude, LaunchMissionId.HighAltitude);
             UnlockIfReady(LaunchMissionId.HighAltitude, LaunchMissionId.TargetZone);
             UnlockIfReady(LaunchMissionId.TargetZone, LaunchMissionId.ZoneHold);
@@ -1377,11 +1398,13 @@ namespace Border.Research
 
         private void AdvanceQuarter()
         {
-            if (RemainingTurns <= 0)
+            if (HasGameEnded || RemainingTurns <= 0)
             {
                 return;
             }
 
+            int consumedYear = Year;
+            int consumedQuarter = Quarter;
             RemainingTurns--;
             Funds += QuarterlyFunding;
 
@@ -1394,17 +1417,31 @@ namespace Border.Research
             {
                 Quarter++;
             }
+
+            EvaluateGameEnd(consumedYear, consumedQuarter);
+        }
+
+        private ResearchActionResult EndedActionResult => DeadlineReached
+            ? ResearchActionResult.DeadlineReached : ResearchActionResult.GameEnded;
+
+        private void EvaluateGameEnd(int consumedYear, int consumedQuarter)
+        {
+            if (HasGameEnded) return;
+            LaunchMissionState finalMission = GetMission(LaunchMissionId.LowPowerZoneHold);
+            bool won = finalMission.HasBestGrade && finalMission.BestGrade <= ResearchGrade.B;
+            if (!won && !DeadlineReached) return;
+            HasGameEnded = true;
+            GameWon = won;
+            FinalYear = consumedYear;
+            FinalQuarter = consumedQuarter;
         }
 
         private int GetPreviousCertificationBonus(LaunchMissionId missionId, EnginePresetId presetId)
         {
             switch (missionId)
             {
-                case LaunchMissionId.StaticFire:
-                    return 0;
                 case LaunchMissionId.LowAltitude:
-                    EnginePresetState preset = GetEnginePreset(presetId);
-                    return GetGradeBonus(preset.BestGrade, preset.HasBestGrade);
+                    return 0;
                 case LaunchMissionId.HighAltitude:
                     return GetGradeBonus(GetMission(LaunchMissionId.LowAltitude));
                 case LaunchMissionId.TargetZone:
@@ -1471,10 +1508,7 @@ namespace Border.Research
         private int[] CreateDefaultInstalledEngineCounts(LaunchMissionId missionId, EnginePresetId presetId)
         {
             var counts = new int[MaxEnginePresetCount];
-            if (missionId != LaunchMissionId.StaticFire)
-            {
-                counts[(int)presetId] = 1;
-            }
+            counts[(int)presetId] = 1;
 
             return counts;
         }

@@ -48,6 +48,12 @@ namespace Simulation
         public bool HasFuel => _remaining > 0f;
         public bool Overheated => _temperature >= EngineStatsSO.CriticalTemperature;
 
+        public void Shutdown()
+        {
+            _ignited = false;
+            SetFlame(false);
+        }
+
         /// <summary>
         /// 발사 시점에 연료를 채우고 온도를 0으로 되돌린 뒤 점화 신뢰도로 점화를 판정한다.
         /// 점화에 실패한 엔진은 이번 발사 내내 추력을 내지 않는다.

@@ -8,11 +8,11 @@
 | Field | Value |
 | --- | --- |
 | Working language | Korean |
-| Current revision | 5 |
+| Current revision | 6 |
 | Last updated | 2026-09-05 |
 | Project root | `C:\Users\angel\OneDrive\문서\GitHub\2026NHNAI` |
 | Source of truth | `docs/artemis-2026-gdd/` |
-| Status | updated after completion, design-entry budget, and no-timer minigame changes |
+| Status | research reset, terminal-state routing, balance binding, and outcome prefabs implemented |
 
 ## 1. 핵심 변경
 
@@ -22,11 +22,21 @@
 
 엔진 레벨 시스템은 사용하지 않는다. 각 엔진 프리셋은 네 스탯이 공유하는 `완성도`를 가진다. 완성도는 연구 미니게임의 성공 정도와 무관하게 연구 행동 1회마다 `+10` 증가한다. 완성도 100에 도달한 엔진 프리셋은 연료량, 냉각, 최대 출력, 점화 신뢰도 중 어느 스탯도 더 개발할 수 없다.
 
-정식 발사 미션은 `StaticFire`, `LowAltitude`, `HighAltitude`, `TargetZone`, `ZoneHold`, `LowPowerZoneHold` 여섯 개다.
+현재 발사 구현의 미션은 `LowAltitude`, `HighAltitude`, `TargetZone`, `ZoneHold`, `LowPowerZoneHold` 다섯 개다. 정적 연소 슬롯은 기존 데이터 호환용 식별자만 남으며 첫 미션은 낮은 고도 도달이다.
 
 날씨, 환경 예보, 발사창 보정은 만들지 않는다.
 
 정식 UI는 동적 생성이 아니라 프리팹 기반으로 만든다. 코드 생성기는 에디터 재생성 도구로만 둔다. 설정창은 `SettingsMenu.prefab`, 일시정지창은 `PauseMenu.prefab`이며 타이틀/메인 씬에 미리 연결한다. 런타임에는 기존 오브젝트를 표시하거나 숨긴다.
+
+결과 보고서와 엔딩도 `ResearchResultReport.prefab`, `ResearchEnding.prefab`을 `01_Main`의 독립된 비활성 인스턴스로 배치한다. 연구 컨트롤러는 직렬화된 화면 참조를 사용하며 런타임에 UI 오브젝트를 조립하지 않는다. 프리팹 재생성은 `Border/Research/Rebuild Result and Ending Prefabs`, 씬 연결은 `Border/Research/Install Session and Result Screens` 에디터 명령으로 수행한다.
+
+`ResearchFlowSession`은 메인 씬의 독립 오브젝트로 두고 `ResearchBalanceConfig.asset`을 연결한다. 최초 세션 생성과 `ResetResearch()`에서 SO를 읽어 새 모델을 만든다. 실행 중 SO를 바꿔도 진행 중 모델에는 자동 반영하지 않는다. 타이틀의 게임 시작은 `PrepareNewGame()`으로 기존 세션만 초기화하고, 세션이 없으면 메인 씬이 생성하도록 둔다. 다시 시작은 날짜, 자금, 엔진, 미션, 발사 상태와 이전 결과를 지우고 엔진 01/연료 스탯을 선택한다.
+
+연구 완료, 대기, 발사 확정은 같은 종료 판정을 거친다. 마지막 미션 B 이상이면 승리하며 마지막 분기 승리도 패배보다 우선한다. 그 외 남은 분기가 0이면 패배다. `FinalYear`/`FinalQuarter`는 마지막으로 소비한 분기를 저장한다. 종료 뒤에는 추가 행동과 중복 보상을 허용하지 않는다.
+
+연구는 미니게임 결과 확인 후, 대기는 즉시 엔딩으로 이동한다. 발사는 `HasUnacknowledgedLaunchResult`가 켜진 동안 보고서를 먼저 표시하고, 확인 시 `AcknowledgeLaunchResult()`로 소비한 뒤 연구 또는 엔딩으로 이동한다. 실제 발사 씬에서 돌아오는 경로도 같은 규칙을 사용한다. 보고서 확인과 다시 시작 콜백은 표시 1회당 한 번만 실행된다.
+
+마무리 검증 상태: 전체 솔루션과 연구 EditMode 테스트 어셈블리는 컴파일 오류 없이 빌드했다. 회귀 테스트 코드는 추가했으나 실제 Unity 테스트 실행 및 1280x720/1920x1080 Game View 검증은 사용자 요청으로 보류했다. 씬의 SO/결과 화면 참조는 저장돼 있다. 다음 검증 시 `ResearchCompletionFlowTests`와 기존 연구 테스트부터 실행한다.
 
 냉각 밸브 미니게임은 네 번의 정답에 60점, 반응 속도에 최대 40점을 배분한다. 평균 반응 0.35초 이하는 반응 만점, 0.9초 이상은 반응 가점이 없고 오답마다 18점을 감점한다. 기존 전체 제한 시간 9초는 유지한다. 연료/출력 판정 연출은 TMP 알파와 크기를 DOTween으로 조정하며 CanvasGroup을 요구하지 않는다.
 

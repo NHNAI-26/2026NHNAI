@@ -1,6 +1,7 @@
 using Border.Settings;
 using Border.Title;
 using Border.UI;
+using Border.Research;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -19,6 +20,34 @@ namespace Border.Editor
             Save(CreateSettings(), "SettingsMenu");
             Save(CreatePause(), "PauseMenu");
             InstallTitleSettings();
+        }
+
+        [MenuItem("Border/Research/Rebuild Result and Ending Prefabs")]
+        public static void RebuildResearchOutcomePrefabs()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            Save(CreateResearchOutcome(true), "ResearchResultReport");
+            Save(CreateResearchOutcome(false), "ResearchEnding");
+        }
+
+        private static GameObject CreateResearchOutcome(bool report)
+        {
+            var root = new GameObject(report ? "ResearchResultReport" : "ResearchEnding");
+            root.SetActive(false);
+            Component controller = report ? (Component)root.AddComponent<ResearchResultReportController>()
+                : root.AddComponent<ResearchEndingController>();
+            RectTransform canvas = CanvasRoot(root.transform, report ? "ResearchResultReportCanvas" : "ResearchEndingCanvas", report ? 30 : 40);
+            RectTransform panel = Panel(canvas, report ? "ReportPanel" : "EndingPanel", new Vector2(800, 550));
+            panel.GetComponent<Image>().color = new Color(0.08f, 0.09f, 0.1f, 1f);
+            TMP_Text title = Text(panel, "Title", report ? "결과 보고서" : "MISSION COMPLETE", new Vector2(736, 64), new Vector2(0, 211), 28);
+            TMP_Text body = Text(panel, "Body", string.Empty, new Vector2(736, 344), Vector2.zero, 20);
+            body.alignment = TextAlignmentOptions.TopLeft;
+            body.textWrappingMode = TextWrappingModes.Normal;
+            Button button = Button(panel, report ? "CloseButton" : "RestartButton", report ? "확인" : "다시 시작", new Vector2(240, 48), new Vector2(0, -219));
+            Bind(controller, "titleText", title);
+            Bind(controller, "bodyText", body);
+            Bind(controller, report ? "closeButton" : "restartButton", button);
+            return root;
         }
 
         private static GameObject CreateSettings()

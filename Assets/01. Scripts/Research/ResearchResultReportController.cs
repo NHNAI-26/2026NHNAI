@@ -1,55 +1,39 @@
 using System;
-using Border.UI;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Border.Research
 {
     public sealed class ResearchResultReportController : MonoBehaviour
     {
+        [SerializeField] private TMP_Text titleText;
+        [SerializeField] private TMP_Text bodyText;
+        [SerializeField] private Button closeButton;
+
         private ResearchFlowSession session;
         private ResearchLaunchResultData result;
-        private Action closeCallback;
-        private Button closeButton;
+        private Action responseCallback;
+        private bool awaitingResponse;
 
         public void Initialize(ResearchFlowSession activeSession, ResearchLaunchResultData launchResult, Action onClose)
         {
+            Hide();
+            if (titleText == null || bodyText == null || closeButton == null)
+            {
+                Debug.LogError("ResearchResultReportController prefab has missing UI references.", this);
+                return;
+            }
             session = activeSession ?? ResearchFlowSession.GetOrCreate();
             result = launchResult;
-            closeCallback = onClose;
-            BuildInterface();
-        }
-
-        private void BuildInterface()
-        {
-            EnsureEventSystem();
-
-            GameObject canvasObject = new GameObject("ResearchResultReportCanvas");
-            canvasObject.transform.SetParent(transform, false);
-            Canvas canvas = canvasObject.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 30;
-            canvasObject.AddComponent<GraphicRaycaster>();
-            CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1280f, 720f);
-            scaler.matchWidthOrHeight = 0.5f;
-
-            RectTransform panel = CreatePanel(canvasObject.transform, "ReportPanel", new Vector2(620f, 420f));
-            TMP_Text title = CreateText(panel, "Title", new Vector2(560f, 52f), 28, FontStyles.Bold, TextAlignmentOptions.Center);
-            TMP_Text body = CreateText(panel, "Body", new Vector2(560f, 270f), 18, FontStyles.Normal, TextAlignmentOptions.TopLeft);
-            closeButton = CreateButton(panel, "CloseButton", "확인", new Vector2(220f, 48f));
-
-            title.rectTransform.anchoredPosition = new Vector2(0f, 160f);
-            body.rectTransform.anchoredPosition = new Vector2(0f, 10f);
-            closeButton.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, -160f);
-
             LaunchMissionConfig missionConfig = session.Model.GetConfiguredMissionConfig(result.MissionId);
-            title.text = $"{missionConfig.DisplayName} 결과 보고서";
-            body.text = BuildBody(missionConfig);
-            closeButton.onClick.AddListener(Close);
+            titleText.text = $"{missionConfig.DisplayName} 결과 보고서";
+            bodyText.text = BuildBody(missionConfig);
+            responseCallback = onClose;
+            awaitingResponse = true;
+            closeButton.interactable = true;
+            closeButton.onClick.AddListener(Respond);
+            gameObject.SetActive(true);
         }
 
         private string BuildBody(LaunchMissionConfig missionConfig)
@@ -84,57 +68,28 @@ namespace Border.Research
             return result.Grade <= ResearchGrade.C ? $"{nextConfig.DisplayName} 해금" : $"{nextConfig.DisplayName} 조건 미충족";
         }
 
-        private void Close()
+
+        private void Respond()
         {
-            closeButton.onClick.RemoveListener(Close);
-            closeCallback?.Invoke();
+            if (!awaitingResponse) return;
+            Action callback = responseCallback;
+            Hide();
+            callback?.Invoke();
         }
 
-        private static RectTransform CreatePanel(Transform parent, string name, Vector2 size)
+        public void Hide()
         {
-            GameObject panelObject = new GameObject(name);
-            panelObject.transform.SetParent(parent, false);
-            RectTransform rect = panelObject.AddComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = size;
-            Image image = panelObject.AddComponent<Image>();
-            image.color = new Color(0.08f, 0.1f, 0.12f, 0.94f);
-            return rect;
+            awaitingResponse = false;
+            responseCallback = null;
+            if (closeButton != null) closeButton.onClick.RemoveListener(Respond);
+            gameObject.SetActive(false);
         }
 
-        private static TMP_Text CreateText(Transform parent, string name, Vector2 size, int fontSize, FontStyles style, TextAlignmentOptions alignment)
+        private void OnDisable()
         {
-            GameObject textObject = new GameObject(name);
-            textObject.transform.SetParent(parent, false);
-            RectTransform rect = textObject.AddComponent<RectTransform>();
-            rect.sizeDelta = size;
-            TMP_Text text = textObject.AddComponent<TextMeshProUGUI>();
-            text.fontSize = fontSize;
-            text.fontStyle = style;
-            text.alignment = alignment;
-            text.color = Color.white;
-            text.textWrappingMode = TextWrappingModes.Normal;
-            return text;
-        }
-
-        private static Button CreateButton(Transform parent, string name, string label, Vector2 size)
-        {
-            GameObject buttonObject = new GameObject(name);
-            buttonObject.transform.SetParent(parent, false);
-            RectTransform rect = buttonObject.AddComponent<RectTransform>();
-            rect.sizeDelta = size;
-            Image image = buttonObject.AddComponent<Image>();
-            image.color = new Color(0.22f, 0.32f, 0.42f, 1f);
-            Button button = buttonObject.AddComponent<Button>();
-            TMP_Text text = CreateText(buttonObject.transform, "Label", size, 20, FontStyles.Bold, TextAlignmentOptions.Center);
-            text.text = label;
-            return button;
-        }
-
-        private static void EnsureEventSystem()
-        {
-            UiEventSystemUtility.Ensure();
+            awaitingResponse = false;
+            responseCallback = null;
+            if (closeButton != null) closeButton.onClick.RemoveListener(Respond);
         }
     }
 }

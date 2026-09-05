@@ -225,14 +225,9 @@ namespace Simulation
             {
                 if (keyboard.spaceKey.wasPressedThisFrame && !rocket.Launched)
                 {
-                    rocket.Launch();
+                    RequestLaunch();
                     // 발사한 뒤에는 편집 상태가 남으면 안 된다 — 기즈모가 날아가는 부품을 계속 따라다니고
                     // 이동·회전 버튼도 켜진 채로 남는다. 선택이 없을 때도 UI 가 갱신되도록 직접 알린다.
-                    Select(null);
-                    // 카메라를 Changed 보다 먼저 세운다 — 발사 프레임에 UI 가 작은 화면을 켤 때
-                    // 텍스처가 이미 있어야 첫 프레임부터 그림이 나온다.
-                    PlaceLaunchCamera();
-                    Changed?.Invoke();
                 }
                 if (keyboard.escapeKey.wasPressedThisFrame) SetMode(EditMode.None);
                 if (keyboard.deleteKey.wasPressedThisFrame || keyboard.backspaceKey.wasPressedThisFrame)
@@ -284,6 +279,16 @@ namespace Simulation
         /// 방위각과 발사 고도를 여기서 잠근다: 발사 뒤에도 우클릭 궤도가 <c>_yaw</c> 를 계속 바꾸므로
         /// 두 발사 뷰가 같은 기준을 보려면 발사 순간 값이 따로 있어야 한다.
         /// </summary>
+        public void RequestLaunch()
+        {
+            if (rocket.Launched) return;
+            rocket.Launch();
+            if (!rocket.Launched) return;
+            Select(null);
+            PlaceLaunchCamera();
+            Changed?.Invoke();
+        }
+
         private void PlaceLaunchCamera()
         {
             _launchYaw = _yaw;

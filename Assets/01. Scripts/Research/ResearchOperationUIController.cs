@@ -20,7 +20,11 @@ namespace Border.Research
 
         [SerializeField] private GameObject operationScreenPrefab;
         [SerializeField] private Button enginePresetCardPrefab;
+        [SerializeField] private ResearchResultReportController resultReport;
+        [SerializeField] private ResearchEndingController endingScreen;
         [SerializeField] private ResearchEnginePreviewController enginePreview;
+        [SerializeField] private ResearchMiniGameController miniGameController;
+        [SerializeField] private ResearchDesignScreenController designScreenController;
         [SerializeField] private Transform researchLabRoot;
         [SerializeField] private Transform researchCameraTransform;
         [SerializeField, Min(0f)] private float cameraPitchDriftDegrees = 0.35f;
@@ -32,7 +36,7 @@ namespace Border.Research
         private ResearchPrototypeModel model;
         private EnginePresetId selectedEnginePreset = EnginePresetId.Engine01;
         private EngineStatId selectedStat = EngineStatId.FuelCapacity;
-        private LaunchMissionId selectedMission = LaunchMissionId.StaticFire;
+        private LaunchMissionId selectedMission = LaunchMissionId.LowAltitude;
         private bool initialized;
         private RectTransform canvasTransform;
         private ResearchOperationTransitionAnimator operationTransitionAnimator;
@@ -71,13 +75,12 @@ namespace Border.Research
         private static void SpawnInMainScene()
         {
             Scene activeScene = SceneManager.GetActiveScene();
-            if (activeScene.name != ResearchFlowSession.MainSceneName || FindFirstObjectByType<ResearchOperationUIController>() != null)
+            if (activeScene.name != ResearchFlowSession.MainSceneName || FindSceneObject<ResearchOperationUIController>() != null)
             {
                 return;
             }
 
-            var host = new GameObject("Research Operation UI Controller");
-            host.AddComponent<ResearchOperationUIController>();
+            Debug.LogError("01_Main has no preplaced ResearchOperationUIController.");
         }
 
         private void Awake()
@@ -191,15 +194,22 @@ namespace Border.Research
             }
 
             GameObject instance;
+            bool createdInstance = false;
             Transform existingCanvas = transform.Find("ResearchOperationCanvas");
             if (existingCanvas != null)
             {
                 instance = existingCanvas.gameObject;
             }
-            else
+            else if (CanCreateRuntimeUiFallback())
             {
                 instance = Instantiate(prefab, transform);
                 instance.name = "ResearchOperationCanvas";
+                createdInstance = true;
+            }
+            else
+            {
+                Debug.LogError("Research operation UI must be preplaced in 01_Main.", this);
+                return false;
             }
 
             canvasTransform = instance.GetComponent<RectTransform>();
@@ -263,7 +273,11 @@ namespace Border.Research
                 || maxOutputButton == null
                 || ignitionReliabilityButton == null)
             {
-                DestroyUnityObject(instance);
+                if (createdInstance)
+                {
+                    DestroyUnityObject(instance);
+                }
+
                 return false;
             }
 
@@ -284,9 +298,7 @@ namespace Border.Research
             waitButton.onClick.AddListener(WaitQuarter);
             resetButton.onClick.AddListener(() =>
             {
-                session.ResetResearch();
-                selectedEnginePreset = EnginePresetId.Engine01;
-                selectedMission = model.GetCurrentMission();
+                ResetResearchState();
                 Refresh();
             });
             fuelCapacityButton.onClick.AddListener(() => SelectStat(EngineStatId.FuelCapacity));
@@ -312,9 +324,27 @@ namespace Border.Research
 
         private EngineCardView CreateEngineCard(RectTransform parent, EnginePresetConfig config)
         {
-            Button button = CreateCardButton(enginePresetCardPrefab, $"EngineCard_{config.Id}", parent, 46f, out TMP_Text title, out TMP_Text detail);
+            string cardName = $"EngineCard_{config.Id}";
+            Button button = FindRequiredButton(parent, cardName);
+            if (button == null)
+            {
+                button = CreateCardButton(enginePresetCardPrefab, cardName, parent, 46f, out TMP_Text title, out TMP_Text detail);
+                if (button == null)
+                {
+                    return new EngineCardView(null, null, null);
+                }
 
-            EnginePresetId presetId = config.Id;
+                button.onClick.RemoveAllListeners();
+                return BindEngineCardButton(button, title, detail, config.Id);
+            }
+
+            ConfigureCardButton(button, 46f, out TMP_Text existingTitle, out TMP_Text existingDetail);
+            button.onClick.RemoveAllListeners();
+            return BindEngineCardButton(button, existingTitle, existingDetail, config.Id);
+        }
+
+        private EngineCardView BindEngineCardButton(Button button, TMP_Text title, TMP_Text detail, EnginePresetId presetId)
+        {
             button.onClick.AddListener(() =>
             {
                 if (isTransitioningToDesign)
@@ -343,7 +373,7 @@ namespace Border.Research
 
         private void StartEngineResearch(bool focused)
         {
-            if (isTransitioningToDesign)
+            if (isTransitioningToDesign || model.HasGameEnded)
             {
                 return;
             }
@@ -379,9 +409,18 @@ namespace Border.Research
             KillResearchCameraDrift(resetRotation: true);
             HideEnginePreview();
             HideResearchLab();
-            var host = new GameObject("Research Mini Game Controller");
-            host.transform.SetParent(transform, false);
-            activeMiniGameController = host.AddComponent<ResearchMiniGameController>();
+            activeMiniGameController = ResolveMiniGameController();
+            if (activeMiniGameController == null)
+            {
+                Debug.LogError("Research mini game controller must be preplaced in 01_Main.", this);
+                canvasTransform.gameObject.SetActive(true);
+                ShowResearchLab();
+                Refresh();
+                return;
+            }
+
+            activeMiniGameController.gameObject.SetActive(true);
+            activeMiniGameController.enabled = true;
             activeMiniGameController.Initialize(selectedEnginePreset, selectedStat, focused, CompleteMiniGame);
         }
 
@@ -389,12 +428,17 @@ namespace Border.Research
         {
             if (activeMiniGameController != null)
             {
-                DestroyUnityObject(activeMiniGameController.gameObject);
+                activeMiniGameController.HideForReuse();
                 activeMiniGameController = null;
             }
 
             model.ExecuteEngineResearch(result.PresetId, result.StatId, result.Focused, result.Score);
             session.ClearPendingDesignEntry();
+            if (model.HasGameEnded)
+            {
+                ShowEndingScreen();
+                return;
+            }
             canvasTransform.gameObject.SetActive(true);
             ShowResearchLab();
             PlayResearchCameraDrift();
@@ -433,6 +477,17 @@ namespace Border.Research
 
         private void Refresh()
         {
+            if (resultReport != null && resultReport.gameObject.activeSelf) return;
+            if (session.HasUnacknowledgedLaunchResult)
+            {
+                ShowResultReport(session.LastLaunchResult);
+                return;
+            }
+            if (model.HasGameEnded)
+            {
+                ShowEndingScreen();
+                return;
+            }
             EnsureSelectedEnginePresetUnlocked();
             selectedMission = model.GetCurrentMission();
             ShowResearchLab();
@@ -454,7 +509,7 @@ namespace Border.Research
             LaunchMissionState selectedMissionState = model.GetMission(selectedMission);
 
             selectedEngineText.text = $"{selectedEngineConfig.DisplayName}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
-                + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {selectedEngineConfig.InstallCost}\n"
+                + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {model.ConfiguredEngineInstallCost}\n"
                 + $"연료량 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 최대 출력 {selectedEngine.MaxOutput} / 점화 신뢰도 {selectedEngine.IgnitionReliability}\n"
                 + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
             normalResearchButtonText.text = $"일반 연구\n{model.ConfiguredEngineNormalResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
@@ -556,7 +611,7 @@ namespace Border.Research
 
             if (activeDesignController != null)
             {
-                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController.HideForReuse();
                 activeDesignController = null;
             }
 
@@ -565,18 +620,36 @@ namespace Border.Research
                 return;
             }
 
-            var host = new GameObject("Research Design Screen Controller");
-            host.transform.SetParent(transform, false);
-            activeDesignController = host.AddComponent<ResearchDesignScreenController>();
+            activeDesignController = ResolveDesignScreenController();
+            if (activeDesignController == null)
+            {
+                Debug.LogError("Research design screen controller must be preplaced in 01_Main.", this);
+                ReturnFromDesignScreen();
+                return;
+            }
+
+            activeDesignController.gameObject.SetActive(true);
+            activeDesignController.enabled = true;
             activeDesignController.Initialize(session, ReturnFromDesignScreen, ShowResultReport);
         }
 
-        private void ReturnFromDesignScreen()
+        public void ReturnFromDesignScreen()
         {
             if (activeDesignController != null)
             {
-                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController.HideForReuse();
                 activeDesignController = null;
+            }
+
+            if (session.HasUnacknowledgedLaunchResult)
+            {
+                ShowResultReport(session.LastLaunchResult);
+                return;
+            }
+            if (model.HasGameEnded)
+            {
+                ShowEndingScreen();
+                return;
             }
 
             RequestedScreenName = ResearchFlowSession.ResearchScreenName;
@@ -596,18 +669,26 @@ namespace Border.Research
 
         private void ShowResultReport(ResearchLaunchResultData result)
         {
+            if (resultReport == null)
+            {
+                Debug.LogError("Research result report prefab must be assigned in the scene.", this);
+                return;
+            }
+            if (resultReport.gameObject.activeSelf) return;
             if (activeDesignController != null)
             {
-                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController.HideForReuse();
                 activeDesignController = null;
             }
 
-            var host = new GameObject("Research Result Report Controller");
-            host.transform.SetParent(transform, false);
-            ResearchResultReportController report = host.AddComponent<ResearchResultReportController>();
-            report.Initialize(session, result, () =>
+            RequestedScreenName = "ResultReport";
+            if (canvasTransform != null) canvasTransform.gameObject.SetActive(false);
+            HideEnginePreview();
+            HideResearchLab();
+            KillResearchCameraDrift(resetRotation: true);
+            resultReport.Initialize(session, result, () =>
             {
-                DestroyUnityObject(host);
+                session.AcknowledgeLaunchResult();
                 if (model.HasGameEnded)
                 {
                     ShowEndingScreen();
@@ -620,6 +701,12 @@ namespace Border.Research
 
         private void ShowEndingScreen()
         {
+            if (endingScreen == null)
+            {
+                Debug.LogError("Research ending prefab must be assigned in the scene.", this);
+                return;
+            }
+            if (endingScreen.gameObject.activeSelf) return;
             RequestedScreenName = "Ending";
             if (canvasTransform != null)
             {
@@ -628,17 +715,25 @@ namespace Border.Research
 
             HideEnginePreview();
             HideResearchLab();
-            var host = new GameObject("Research Ending Controller");
-            host.transform.SetParent(transform, false);
-            ResearchEndingController ending = host.AddComponent<ResearchEndingController>();
-            ending.Initialize(session, () =>
+            KillResearchCameraDrift(resetRotation: true);
+            endingScreen.Initialize(session, () =>
             {
-                DestroyUnityObject(host);
-                session.ResetResearch();
-                selectedEnginePreset = EnginePresetId.Engine01;
-                selectedMission = model.GetCurrentMission();
+                ResetResearchState();
                 ReturnFromDesignScreen();
             });
+        }
+
+        private void ResetResearchState()
+        {
+            KillDesignTransition();
+            isTransitioningToDesign = false;
+            resultReport?.Hide();
+            endingScreen?.Hide();
+            session.ResetResearch();
+            model = session.Model;
+            selectedEnginePreset = EnginePresetId.Engine01;
+            selectedStat = EngineStatId.FuelCapacity;
+            selectedMission = model.GetCurrentMission();
         }
 
         public ResearchDesignScreenController GetActiveDesignControllerForTests()
@@ -660,9 +755,7 @@ namespace Border.Research
         public void EnterDesignDebugForEditor()
         {
             Initialize();
-            session.ResetResearch();
-            selectedEnginePreset = EnginePresetId.Engine01;
-            selectedMission = model.GetCurrentMission();
+            ResetResearchState();
             model.PrepareDebugDesignEntryState(selectedMission, selectedEnginePreset);
 
             if (session.TryEnterDesign(selectedMission, selectedEnginePreset, out _) == ResearchActionResult.Success)
@@ -966,6 +1059,72 @@ namespace Border.Research
             }
         }
 
+        private ResearchMiniGameController ResolveMiniGameController()
+        {
+            if (miniGameController != null)
+            {
+                return miniGameController;
+            }
+
+            miniGameController = GetComponentInChildren<ResearchMiniGameController>(true);
+            if (miniGameController != null)
+            {
+                return miniGameController;
+            }
+
+            miniGameController = FindSceneObject<ResearchMiniGameController>();
+            if (miniGameController != null || !CanCreateRuntimeUiFallback())
+            {
+                return miniGameController;
+            }
+
+            var host = new GameObject("Research Mini Game Controller");
+            host.transform.SetParent(transform, false);
+            miniGameController = host.AddComponent<ResearchMiniGameController>();
+            return miniGameController;
+        }
+
+        private ResearchDesignScreenController ResolveDesignScreenController()
+        {
+            if (designScreenController != null)
+            {
+                return designScreenController;
+            }
+
+            designScreenController = GetComponentInChildren<ResearchDesignScreenController>(true);
+            if (designScreenController != null)
+            {
+                return designScreenController;
+            }
+
+            designScreenController = FindSceneObject<ResearchDesignScreenController>();
+            if (designScreenController != null || !CanCreateRuntimeUiFallback())
+            {
+                return designScreenController;
+            }
+
+            var host = new GameObject("Research Design Screen Controller");
+            host.transform.SetParent(transform, false);
+            designScreenController = host.AddComponent<ResearchDesignScreenController>();
+            return designScreenController;
+        }
+
+        private bool CanCreateRuntimeUiFallback()
+        {
+            return !Application.isPlaying || gameObject.scene.name != ResearchFlowSession.MainSceneName;
+        }
+
+        private static T FindSceneObject<T>()
+            where T : Component
+        {
+            foreach (T component in FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                return component;
+            }
+
+            return null;
+        }
+
         private void EnsureResearchCameraRuntime()
         {
             ResolveResearchCameraTransform();
@@ -1070,7 +1229,12 @@ namespace Border.Research
 
             Button button = Instantiate(prefab, parent);
             button.name = name;
+            ConfigureCardButton(button, preferredHeight, out title, out detail);
+            return button;
+        }
 
+        private static void ConfigureCardButton(Button button, float preferredHeight, out TMP_Text title, out TMP_Text detail)
+        {
             LayoutElement layout = button.GetComponent<LayoutElement>();
             if (layout == null)
             {
@@ -1082,12 +1246,6 @@ namespace Border.Research
 
             title = FindChildText(button.transform, "Title");
             detail = FindChildText(button.transform, "Detail");
-            if (title != null && detail != null)
-            {
-                return button;
-            }
-
-            return button;
         }
 
         private static TMP_Text FindChildText(Transform root, string name)

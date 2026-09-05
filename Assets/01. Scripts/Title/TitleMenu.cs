@@ -1,4 +1,5 @@
 using Border.Settings;
+using Border.Research;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -32,6 +33,7 @@ namespace Border.Title
         {
             if (loading) return;
             loading = true;
+            ResearchFlowSession.PrepareNewGame();
             SceneManager.LoadScene(mainSceneName);
         }
 
