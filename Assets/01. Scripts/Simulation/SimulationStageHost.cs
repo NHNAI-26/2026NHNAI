@@ -37,6 +37,7 @@ namespace Simulation
         private bool busy;
         private LaunchMissionController mission;
         private LaunchPhotoCapture photoCapture;
+        private SimulationCrtScreen crt;
         public string LaunchMessage { get; private set; }
 
         public static bool OpenDesignStage()
@@ -90,6 +91,11 @@ namespace Simulation
         {
             busy = true;
 
+            // 화면부터 덮는다 — 연구 화면이 꺼지고 시뮬레이션 씬이 올라오는 사이가 그대로 보이면
+            // CRT 가 켜지기도 전에 화면이 한 번 튄다.
+            if (crt == null) crt = gameObject.AddComponent<SimulationCrtScreen>();
+            crt.Cover();
+
             research = FindFirstObjectByType<ResearchOperationUIController>();
             // 캔버스가 아니라 루트를 끈다 — 미니게임·설계 화면 컨트롤러가 캔버스의 형제로 붙어 있어서
             // 캔버스만 끄면 그것들이 시뮬레이션 위에 남는다.
@@ -135,6 +141,10 @@ namespace Simulation
             // 설계 UI 는 SimulationTest 씬에 프리팹 인스턴스로 놓여 있다 — 씬과 함께 들어오고 나간다.
             designUI = FindFirstObjectByType<RocketDesignUI>();
 
+            // 합성 경로를 세운 뒤 화면을 밑에서 위로 밀어 올리며 브라운관을 켠다.
+            if (designUI != null) crt.Begin(mainCamera, simulationCamera, designUI);
+            yield return crt.PowerOnRoutine();
+
             loaded = true;
             busy = false;
         }
@@ -143,6 +153,10 @@ namespace Simulation
         {
             busy = true;
             while (photoCapture != null && photoCapture.IsCapturing) yield return null;
+
+            // 브라운관을 끄고 커튼으로 덮는다. 합성 경로가 시뮬레이션 씬의 카메라와 캔버스를 물고 있어서
+            // 씬을 내리기 전에 풀어야 한다.
+            if (crt != null) yield return crt.PowerOffRoutine();
 
             // 씬을 내리면 UI 도 같이 사라진다 — 따로 파괴하지 않는다.
             designUI = null;
@@ -167,6 +181,9 @@ namespace Simulation
 
             loaded = false;
             busy = false;
+            // 커튼은 연구 화면이 돌아온 뒤에 내린다. 결과 UI 는 씬을 내리기 전에
+            // 이미 닫혔으므로 결과 이벤트를 여기서 다시 발행하지 않는다.
+            if (crt != null) yield return crt.UncoverRoutine();
         }
 
         private bool BeginLaunch(Rocket rocket)

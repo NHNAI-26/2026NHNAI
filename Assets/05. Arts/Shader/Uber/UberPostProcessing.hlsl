@@ -354,15 +354,18 @@ inline float3 UberPostCRT(float2 uv, float2 pixelPosition, float3 sourceColor)
     float rawTime = _Time.y * speed;
     float finiteTime = rawTime == rawTime && abs(rawTime) < 1.0e20 ? rawTime : 0.0;
     float time = fmod(finiteTime, 3600.0);
+    // Overall Strength scales every knob that moves pixels off their original position
+    // (jitter, curvature, aberration). Fading the filter without fading the warp leaves
+    // the frame displaced at low strength, which reads as a second, sharper copy.
     float jitterStrength = _CRTHorizontalJitter == _CRTHorizontalJitter
-        ? clamp(abs(_CRTHorizontalJitter), 0.0, 4.0) : 0.0;
+        ? clamp(abs(_CRTHorizontalJitter), 0.0, 4.0) * strength : 0.0;
     float jitterLine = floor(saturate(powerUV.y) * height * 0.25);
     float jitterFrame = floor(time * 60.0);
     float jitter = (UberPostHash21(float2(jitterLine, jitterFrame)) * 2.0 - 1.0) *
         jitterStrength * texelSize.x;
 
     float curvature = _CRTCurvature == _CRTCurvature
-        ? clamp(abs(_CRTCurvature), 0.0, 0.5) : 0.0;
+        ? clamp(abs(_CRTCurvature), 0.0, 0.5) * strength : 0.0;
     float2 centered = powerUV * 2.0 - 1.0;
     float2 axisSquared = centered * centered;
     centered *= 1.0 + curvature * axisSquared.yx;
@@ -374,12 +377,13 @@ inline float3 UberPostCRT(float2 uv, float2 pixelPosition, float3 sourceColor)
     float insideMask = boundary.x * boundary.y;
 
     float chromatic = _CRTChromaticAberration == _CRTChromaticAberration
-        ? clamp(abs(_CRTChromaticAberration), 0.0, 8.0) : 0.0;
+        ? clamp(abs(_CRTChromaticAberration), 0.0, 8.0) * strength : 0.0;
     float2 chromaticDirection = centered / max(length(centered), 0.0001);
     float2 chromaticOffset = chromaticDirection * texelSize * chromatic;
+    float3 warpedSource = UberPostSampleLinear(warpedUV).rgb;
     float3 color = float3(
         UberPostSampleLinear(warpedUV + chromaticOffset).r,
-        UberPostSampleLinear(warpedUV).g,
+        warpedSource.g,
         UberPostSampleLinear(warpedUV - chromaticOffset).b);
 
     float density = _CRTScanlineDensity == _CRTScanlineDensity
@@ -431,9 +435,14 @@ inline float3 UberPostCRT(float2 uv, float2 pixelPosition, float3 sourceColor)
     float powerBloomIntensity = _CRTPowerBloomIntensity == _CRTPowerBloomIntensity
         ? clamp(abs(_CRTPowerBloomIntensity), 0.0, 8.0) : 0.0;
     float powerBloom = powerTransition * powerBloomIntensity;
-    float3 poweredColor = (saturate(color + powerFlash) + powerBloom) * insideMask *
+    // Fade the filter against the *warped* frame, never against the untouched source:
+    // the two geometries differ, so blending them double-images every edge. The power
+    // collapse and its masks stay at full weight — the screen must reach black at any
+    // strength, or the power-off animation stops short of turning the display off.
+    float3 filtered = lerp(warpedSource, color, strength);
+    float3 poweredColor = (saturate(filtered + powerFlash) + powerBloom) * insideMask *
         powerMask * powerVisibility;
-    return lerp(sourceColor, poweredColor, strength);
+    return poweredColor;
 }
 
 float4 UberPostFragment(Varyings input) : SV_Target

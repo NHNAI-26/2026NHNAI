@@ -92,6 +92,10 @@ namespace Simulation
 
         private RocketBuilder builder;
         private Canvas canvas;
+
+        /// <summary><see cref="SimulationCrtScreen"/> 이 렌더 모드를 잠시 바꿔 쓴다.</summary>
+        internal Canvas Canvas => canvas;
+
         private RectTransform canvasRect;
         private RectTransform presetPanel;
 
@@ -380,9 +384,10 @@ namespace Simulation
         }
 
         /// <summary>
-        /// 뷰포트 RectTransform 을 카메라의 정규화 사각형으로 옮긴다. 오버레이 캔버스의
-        /// <see cref="RectTransform.GetWorldCorners"/> 는 화면 픽셀이라(StatBox 도 같은 가정) 화면 크기로
-        /// 나누기만 하면 된다. 창 크기나 화면 비율이 바뀌어도 한 프레임 뒤에 따라온다.
+        /// 뷰포트 RectTransform 을 카메라의 정규화 사각형으로 옮긴다. 창 크기나 화면 비율이 바뀌어도
+        /// 한 프레임 뒤에 따라온다. <see cref="RectTransform.GetWorldCorners"/> 는 오버레이 캔버스에서만
+        /// 화면 픽셀이라(StatBox 도 같은 가정), CRT 화면이 캔버스를 Screen Space - Camera 로 돌려놓는
+        /// 동안에는 <see cref="SimulationCrtScreen"/> 이 물려 준 카메라로 환산해야 한다.
         /// </summary>
         private void UpdateViewportRect()
         {
@@ -399,11 +404,16 @@ namespace Simulation
 
             viewport.GetWorldCorners(viewportCorners);
 
+            // 오버레이 모드에서는 카메라가 null 이고 이 호출이 월드 좌표를 그대로 돌려준다 — 예전과 같은 값이다.
+            Camera uiCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            Vector2 min = RectTransformUtility.WorldToScreenPoint(uiCamera, viewportCorners[0]);
+            Vector2 max = RectTransformUtility.WorldToScreenPoint(uiCamera, viewportCorners[2]);
+
             var rect = new Rect(
-                viewportCorners[0].x / Screen.width,
-                viewportCorners[0].y / Screen.height,
-                (viewportCorners[2].x - viewportCorners[0].x) / Screen.width,
-                (viewportCorners[2].y - viewportCorners[0].y) / Screen.height);
+                min.x / Screen.width,
+                min.y / Screen.height,
+                (max.x - min.x) / Screen.width,
+                (max.y - min.y) / Screen.height);
 
             // rect 대입은 URP 렌더 타깃 재할당을 부른다 — 값이 그대로면 건드리지 않는다.
             if (builder.Cam.rect != rect) builder.Cam.rect = rect;

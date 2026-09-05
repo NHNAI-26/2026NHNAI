@@ -1495,6 +1495,78 @@ UI Controller` 의 자식이 아니라 별개 루트라 진입할 때 같이 꺼
 설치 가격 합계는 캐시하지 않고 매 프레임 다시 센다. `RocketBuilder.Changed`는 **부착 때 발생하지 않아서**
 (`EndDrag`가 `Attach`만 부른다) 이벤트로 캐시하면 낡은 값이 남는다.
 
+## CRT 화면: 설계 단계 전체를 브라운관 안에 넣는다
+
+설계·발사 화면이 떠 있는 동안 화면 전체가 CRT 모니터로 보인다. 3D 뿐 아니라 **UI 도 같이** 필터를 받는
+것이 요구사항이라, 어디에 포스트 프로세싱을 거느냐가 이 기능의 전부다. `SimulationCrtScreen` 이 그 배선을
+들고, `SimulationStageHost` 가 진입·퇴장 시점에 세 번 부른다.
+
+**카메라 스택은 쓸 수 없다.** URP 스택은 Base 카메라의 뷰포트 사각형을 스택 전체가 공유하는데, 이 화면의
+시뮬레이션 카메라는 `RocketDesignUI.UpdateViewportRect` 가 화면 가운데 사각형으로 잡아 준다. Overlay UI
+카메라를 얹으면 UI 가 그 사각형 안으로 찌그러지고, 반대로 시뮬레이션 카메라를 Overlay 로 돌리면 사각형이
+무시돼 3D 프레이밍이 통째로 바뀐다. Screen Space - Overlay 캔버스는 애초에 SRP 루프 밖에서 백버퍼에 직접
+그려지므로 어떤 injection point 로도 닿지 못한다.
+
+**그래서 합성한다.** 화면 크기 `RenderTexture` 한 장에 3D 카메라 둘(`01_Main` 의 클리어 전용 카메라와
+시뮬레이션 카메라)을 그대로 그리고, 그 결과를 설계 UI 캔버스 맨 뒤에 깐 `RawImage` 로 되돌린다. 캔버스는
+그동안만 `Screen Space - Camera` 가 되어 전용 CRT 카메라에 물린다. 최종 화면을 그리는 카메라가 그 하나뿐이라
+UI 든 3D 든 빠짐없이 **한 번씩만** 필터를 받는다.
+
+**`Camera.rect` 는 건드리지 않는다.** RenderTexture 가 화면과 정확히 같은 크기라 `Camera.pixelRect` 가
+지금과 같은 값으로 남고, `RocketBuilder` 의 `ScreenPointToRay`·`WorldToScreenPoint` 열 몇 곳이 손댈 것
+없이 그대로 맞는다. 이 문서가 앞에서 RenderTexture 를 피한 이유(좌표계 붕괴)가 여기서는 걸리지 않는다.
+바뀐 곳은 `UpdateViewportRect` 한 군데뿐인데, 오버레이 캔버스에서만 성립하던
+`GetWorldCorners` → 화면 픽셀 가정을 `RectTransformUtility.WorldToScreenPoint` 로 바꿔 두 모드 모두에서
+같은 값이 나오게 했다(오버레이일 때 카메라는 `null` 이고 예전과 같은 결과다).
+
+**필터는 전용 렌더러에만 매단다.** `Assets/Settings/CRT_Renderer.asset` 은 `MAT_CRT.mat` 을 쓰는
+`FullScreenPassRendererFeature`("CRT Screen") 하나만 가진 URP 렌더러고, PC/Mobile 파이프라인 에셋의
+렌더러 목록에 붙어 있다. CRT 카메라만 `SetRenderer` 로 이 렌더러를 고른다 — 기존 `PC_Renderer` 의
+"Uber Post Processing"(필터 None)은 그대로 두고, 합성용 카메라 둘은 기본 렌더러를 쓰므로 필터가 두 번
+걸리는 일이 없다.
+
+런타임에 `MAT_CRT` 의 **복제본을 꽂지 않는다.** `passMaterial` 은 피처(ScriptableObject)의 직렬화
+필드라, 플레이 중 에셋이 하나라도 다시 임포트되면 디스크의 원본으로 되돌아간다 — 복제본을 꽂아 두면
+그 순간 연출이 끊기고, 인스펙터로 값을 만져도 화면에 반영되지 않는다(복제본은 원본을 안 본다).
+그래서 에셋을 직접 몬다. 대신 플레이 중에는 `_CRTPowerOffAmount` 가 에셋 위에서 움직이는데,
+저장된 값이 0 이고 퇴장할 때 0 으로 되돌리므로 남지 않는다. 인스펙터로 CRT 값을 실시간 튜닝할 수 있는
+것도 이 덕분이다.
+
+**전원 값의 방향.** `_CRTPowerOffAmount` 는 `Range(0, 1)` 이고 **1 이 꺼진 화면**이다(0→0.5 수직 붕괴,
+0.5→1 수평 붕괴). 그래서 진입은 `1 → 0`(켜짐), 결과 이벤트 직전은 `0 → 1`(꺼짐)이다. 값을 100 까지
+올리는 것이 아니다. 붕괴 순간의 흰 섬광 세기는 `MAT_CRT` 의 `_CRTPowerBloomIntensity`(2.7) 가 정하는
+아트 값이다.
+
+**`_CRTStrength` 는 휜 프레임 안에서 페이드한다.** 원래 `UberPostCRT` 는 마지막에
+`lerp(sourceColor, poweredColor, strength)` 로 **왜곡되지 않은 원본**과 크로스페이드했다. CRT 결과는
+`_CRTCurvature`·`_CRTChromaticAberration`·`_CRTHorizontalJitter` 로 픽셀을 원래 자리에서 밀어내므로,
+서로 다른 두 기하를 섞으면 강도를 1 미만으로 낮추는 순간 화면 전체가 어긋난 채 겹쳐 보인다 —
+UI 가 선명한 한 장 + 중심으로 당겨진 한 장으로 두 번 나온다. 적용 지점(렌더러 피처·RT 블릿·카메라 스택)을
+무엇으로 바꿔도 같으므로 셰이더에서 고쳤다:
+
+- 픽셀을 미는 세 값에 `strength` 를 곱한다 — 강도가 낮아지면 왜곡도 같이 0 으로 간다(0 에서 연속).
+- 페이드 상대를 색수차 없는 **같은 `warpedUV` 샘플**(`warpedSource`)로 바꿔 두 항의 기하를 일치시킨다.
+  이미 뜨던 중앙 탭을 재사용하므로 샘플 수는 셋 그대로다.
+- 전원 붕괴와 그 마스크(`insideMask`·`powerMask`·`powerVisibility`)는 강도와 무관하게 **온전히** 건다.
+  강도에 비례해 약해지면 낮은 강도에서 화면이 끝까지 검어지지 않아 전원 끄기 연출이 성립하지 않는다.
+
+`_CRTStrength` 가 1 이면 출력은 이전과 완전히 동일하다. 이 결정은
+`UberShaderSuiteTests.PostProcessing.cs` 의 `CrtFilterUsesReviewedPropertiesAndProceduralSourceContract`
+가 문자열로 잠근다 — 예전 `lerp(sourceColor, ...)` 로 되돌리면 실패한다.
+
+**전환 연출.** 덮개(`DontDestroyOnLoad` 가 아니라 `SimulationStageHost` 에 붙은 최상위 오버레이 캔버스)는
+씬 교체 순간을 가린다. 진입에서 덮는 동작은 **즉시**다 —
+`ResearchOperationUIController.ShowDesignScreen` 이 이미 연구 화면을 꺼 놓고 호스트를 부르기 때문에,
+덮는 데 시간을 쓰면 그만큼 빈 방이 노출된다. 밑에서 위로 올라오는 연출은 걷어낼 때 하고, 전원 값이 1 이면
+화면이 완전히 검으므로 걷어내기와 power-on 을 **겹쳐서** 돌린다 — 그래야 올라오는 동안 볼 것이 있다.
+퇴장은 반대로 power-off 뒤 덮개가 위에서 아래로 내려와 덮고, 씬을 내린 뒤 같은 방향으로 마저 내려가
+연구 화면을 드러낸다.
+
+**결과 이벤트와의 순서.** `CompleteLaunch` 가 `designUI.ShowLaunchResult(grade)` 로 결과를 화면에 남기고,
+`HoldThenUnload` 가 `launchResultHoldSeconds`(기본 3초) 를 기다린 뒤 `UnloadRoutine` 으로 넘어간다.
+CRT 를 끄고 씬을 내리는 것이 전부 끝난 **다음에** `PublishPendingLaunchOutcome()` 이 불린다 — 신문이
+덮개 뒤에서 뜨면 등장 연출을 통째로 놓친다. 그만큼(전원 0.5초 + 덮개 0.4초) 결과 이벤트가 늦어진다.
+
 ## 테스트
 
 `Assets/Tests/EditMode/Simulation/RocketSimulationTests.cs` 한 파일이다. 잠그는 것은 계약이지 구현이

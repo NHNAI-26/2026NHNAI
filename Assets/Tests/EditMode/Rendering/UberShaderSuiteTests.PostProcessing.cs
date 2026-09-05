@@ -328,9 +328,19 @@ namespace Border.Rendering.Tests
                          "float2 powerUV = (uv - 0.5) / powerScale + 0.5;",
                          "float powerBloom = powerTransition * powerBloomIntensity;",
                          "powerMask * powerVisibility",
-                         "return lerp(sourceColor, poweredColor, strength);",
+                         // Overall Strength fades the filter inside the warped frame and
+                         // scales the warp itself. Cross-fading against the unwarped
+                         // source displaced the frame and double-imaged every edge.
+                         "clamp(abs(_CRTCurvature), 0.0, 0.5) * strength",
+                         "clamp(abs(_CRTChromaticAberration), 0.0, 8.0) * strength",
+                         "clamp(abs(_CRTHorizontalJitter), 0.0, 4.0) * strength",
+                         "float3 warpedSource = UberPostSampleLinear(warpedUV).rgb;",
+                         "float3 filtered = lerp(warpedSource, color, strength);",
+                         "return poweredColor;",
                      })
                 StringAssert.Contains(contract, crt.Value);
+            Assert.That(crt.Value, Does.Not.Contain("lerp(sourceColor, poweredColor"),
+                "CRT strength must not cross-fade against the unwarped source.");
             Assert.That(crt.Value, Does.Not.Contain("dot(centered, centered)"),
                 "CRT curvature must keep the four axis endpoints on-screen.");
             Assert.That(crt.Value, Does.Not.Contain("centered.x *= aspect"),
