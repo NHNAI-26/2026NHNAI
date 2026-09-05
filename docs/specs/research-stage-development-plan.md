@@ -315,6 +315,12 @@ DetailColumn
 애니메이터 메서드는 완료 콜백을 **인자로** 받는다. 반환된 시퀀스에 `OnComplete` 를 다시 걸면 DOTween 이
 콜백을 이어붙이지 않고 교체하므로, 애니메이터가 내부에 걸어둔 raycast 복구가 사라진다.
 
+새 전환을 시작할 때 진행 중이던 시퀀스는 `Kill` 이 아니라 `Complete` 한다(`FinishActiveSequence`). 시퀀스는
+하나뿐이라 죽이면 새 그룹에 없는 패널이 중간 상태로 방치된다 — 허브가 들어오는 동안 `부품 개발` 을 누르면
+`TopInfoBar` 가 화면 밖 반투명 상태로 남고, 그 뒤로 아무도 끝내주지 않아 영영 보이지 않는다.
+컨트롤러의 `OnDisable` 은 `closingPartDevelopment` 를 푼다. 닫는 도중 비활성화되면 애니메이터가 시퀀스를
+죽여 콜백이 오지 않고, 그 플래그가 남으면 이후 열기·닫기 클릭이 전부 무시된다.
+
 ### 프리팹 스테이지 미리보기
 
 `ResearchOperationScreen.prefab` 을 프리팹 에디터에서 그대로 열면 실제 화면과 다르게 보인다. `HubActionBar`,

@@ -57,7 +57,7 @@ namespace Border.Research
         public Sequence PlayEnter(PanelGroup group, Action onComplete = null)
         {
             CacheFinalPositions();
-            KillActiveSequence();
+            FinishActiveSequence();
             ForEach(group, motion => SetPanelState(motion, motion.StartPosition, 0f, false));
             activeSequence = CreateSequence(group, enterDuration, Ease.OutCubic, useStartPosition: false, targetAlpha: 1f, blocksRaycasts: true, onComplete);
             return activeSequence;
@@ -66,7 +66,7 @@ namespace Border.Research
         public Sequence PlayExit(PanelGroup group, Action onComplete = null)
         {
             CacheFinalPositions();
-            KillActiveSequence();
+            FinishActiveSequence();
             activeSequence = CreateSequence(group, exitDuration, Ease.InCubic, useStartPosition: true, targetAlpha: 0f, blocksRaycasts: false, onComplete);
             return activeSequence;
         }
@@ -199,6 +199,23 @@ namespace Border.Research
             };
 
             return new PanelMotion(rectTransform, group, finalPosition, finalPosition + offset);
+        }
+
+        /// <summary>
+        /// Snaps a still-running transition to its end before starting the next one. Killing it instead would
+        /// strand every panel the new group does not touch — open the part development panel while the hub is
+        /// still sliding in and TopInfoBar would sit half-transparent off-screen with nothing to finish it.
+        /// </summary>
+        private void FinishActiveSequence()
+        {
+            if (activeSequence == null)
+            {
+                return;
+            }
+
+            Sequence previous = activeSequence;
+            activeSequence = null;
+            previous.Complete();
         }
 
         private void KillActiveSequence()

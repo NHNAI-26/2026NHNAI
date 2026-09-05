@@ -143,6 +143,9 @@ namespace Border.Research
         {
             if (visibilityDialog != null) visibilityDialog.Hide();
             IsPartDevelopmentOpen = false;
+            // The animator kills its sequence on disable, so the close callback never lands — clear the guard
+            // here or every later click on 부품 개발 / 그만두기 is swallowed.
+            closingPartDevelopment = false;
             if (initialized)
             {
                 KillWaitFade();
