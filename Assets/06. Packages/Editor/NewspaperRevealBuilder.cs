@@ -36,7 +36,7 @@ public static class NewspaperRevealBuilder
             // The saved newspaper prefab is the source of truth for its original appearance.
             // Only migrate the sprite binding; keep all layout, material and animation settings.
             serialized.FindProperty("medium").enumValueIndex = (int)LaunchResultMedium.Newspaper;
-            serialized.FindProperty("presentationSprite").objectReferenceValue = sprite;
+            serialized.FindProperty("newspaperSprite").objectReferenceValue = sprite;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             reveal.SetSprite(sprite);
             PrefabUtility.SaveAsPrefabAsset(newspaperRoot, NewspaperPrefabPath);
@@ -66,7 +66,7 @@ public static class NewspaperRevealBuilder
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             fitter.aspectRatio = mailSprite.rect.width / mailSprite.rect.height;
             serialized.FindProperty("medium").enumValueIndex = (int)LaunchResultMedium.Mail;
-            serialized.FindProperty("presentationSprite").objectReferenceValue = mailSprite;
+            serialized.FindProperty("newspaperSprite").objectReferenceValue = mailSprite;
             serialized.FindProperty("showEvent").objectReferenceValue = null;
 
             TMP_Text heading = PaperText("Headline", content, font, mailSprite, 430, 318, 760, 64, 20, 16);

@@ -19,8 +19,8 @@ namespace Border.UI
         [SerializeField] private CanvasGroup backdrop;
         [SerializeField] private Image newspaperImage;
         [SerializeField] private LaunchResultMedium medium;
-        [FormerlySerializedAs("newspaperSprite")]
-        [SerializeField] private Sprite presentationSprite;
+        [FormerlySerializedAs("presentationSprite")]
+        [SerializeField] private Sprite newspaperSprite;
         [SerializeField] private TMP_Text headlineText;
         [SerializeField] private TMP_Text editionText;
         [SerializeField] private TMP_Text articleText;
@@ -61,7 +61,7 @@ namespace Border.UI
 
         public void SetSprite(Sprite sprite)
         {
-            presentationSprite = sprite;
+            newspaperSprite = sprite;
             activeSprite = null;
             ApplySprite();
         }
@@ -81,7 +81,7 @@ namespace Border.UI
                 return;
             }
 
-            activeSprite = presentationSprite;
+            activeSprite = newspaperSprite;
             ApplyArticle(article, photo);
             closeCallback = onClosed;
             closeCallbackArmed = onClosed != null;
@@ -93,7 +93,7 @@ namespace Border.UI
         private void ApplySprite()
         {
             if (newspaperImage == null) return;
-            Sprite sprite = activeSprite != null ? activeSprite : presentationSprite;
+            Sprite sprite = activeSprite != null ? activeSprite : newspaperSprite;
             if (sprite != null) newspaperImage.sprite = sprite;
             newspaperImage.preserveAspect = true;
         }
@@ -115,7 +115,7 @@ namespace Border.UI
         [ContextMenu("Preview Reveal (Play Mode)")]
         public void Show()
         {
-            activeSprite = presentationSprite;
+            activeSprite = newspaperSprite;
             ShowInternal(clearCloseCallback: true);
         }
 

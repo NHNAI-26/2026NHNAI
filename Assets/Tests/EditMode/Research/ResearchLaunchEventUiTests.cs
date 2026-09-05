@@ -242,7 +242,7 @@ namespace Border.Research.Tests
             var mail = FindReveal(report, LaunchResultMedium.Mail);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             Sprite emailSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/05. Arts/UI/Email/Email.png");
-            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("presentationSprite", flags).GetValue(mail);
+            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("newspaperSprite", flags).GetValue(mail);
             Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(mail);
 
             Assert.That(emailSprite, Is.Not.Null);
@@ -378,8 +378,8 @@ namespace Border.Research.Tests
                     "Assets/05. Arts/UI/Newspaper/newspaper-original-transparent.png")
                 .OfType<Sprite>().Single();
 
-            Assert.That(GetPrivateField<Sprite>(reveal, "presentationSprite"), Is.SameAs(expected),
-                "The original newspaperSprite serialized reference must migrate to presentationSprite.");
+            Assert.That(GetPrivateField<Sprite>(reveal, "newspaperSprite"), Is.SameAs(expected),
+                "The original newspaperSprite field must directly reference the original newspaper sprite.");
             typeof(NewspaperReveal).GetMethod("OnValidate", BindingFlags.Instance | BindingFlags.NonPublic)
                 .Invoke(reveal, null);
             Image paperImage = GetPrivateField<Image>(reveal, "newspaperImage");
