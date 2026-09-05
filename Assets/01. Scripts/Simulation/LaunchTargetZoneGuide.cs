@@ -35,8 +35,8 @@ namespace Simulation
         private const string TransparentKeyword = "_SURFACE_TYPE_TRANSPARENT";
         private const string UnlitKeyword = "_UNLIT_ON";
 
-        private readonly Color idleColor = new(1f, 0.86f, 0.22f, 0.18f);
-        private readonly Color activeColor = new(1f, 1f, 0.38f, 0.38f);
+        private readonly Color idleColor = new(1f, 0.86f, 0.22f, 0.28f);
+        private readonly Color activeColor = new(1f, 1f, 0.38f, 0.52f);
 
         private Transform targetRoot;
         private MeshRenderer targetRenderer;
@@ -52,6 +52,8 @@ namespace Simulation
         public Bounds TargetBounds => targetBounds;
         public bool IsVisible => targetRoot != null && targetRoot.gameObject.activeSelf;
         public Material TargetMaterial => targetMaterial;
+        public Material ArrowMaterial => arrowMaterial;
+        public Mesh ArrowMesh => arrowMesh;
 
         public void Initialize(Transform rocketTransform, Vector3 center, float radius)
         {
@@ -79,7 +81,7 @@ namespace Simulation
             float distance = Mathf.Clamp(toTarget.magnitude * 0.08f, 3f, 9f);
             arrow.position = rocket.position + toTarget.normalized * distance;
             arrow.rotation = Quaternion.LookRotation(toTarget.normalized, Vector3.up);
-            arrow.localScale = Vector3.one * Mathf.Clamp(toTarget.magnitude * 0.015f, 1.2f, 4f);
+            arrow.localScale = Vector3.one * Mathf.Clamp(toTarget.magnitude * 0.009f, 0.7f, 2.2f);
         }
 
         public void Dispose()
@@ -130,7 +132,7 @@ namespace Simulation
             arrowRenderer = host.AddComponent<MeshRenderer>();
             arrowRenderer.shadowCastingMode = ShadowCastingMode.Off;
             arrowRenderer.receiveShadows = false;
-            arrowMaterial = CreateHologramMaterial(idleColor);
+            arrowMaterial = CreateSolidMaterial(activeColor);
             arrowRenderer.sharedMaterial = arrowMaterial;
         }
 
@@ -138,7 +140,7 @@ namespace Simulation
         {
             Color color = inside ? activeColor : idleColor;
             ApplyColor(targetMaterial, color);
-            ApplyColor(arrowMaterial, color);
+            ApplyColor(arrowMaterial, new Color(1f, 0.92f, 0.1f, 1f));
         }
 
         private static Material CreateHologramMaterial(Color color)
@@ -185,6 +187,42 @@ namespace Simulation
             return material;
         }
 
+        private static Material CreateSolidMaterial(Color color)
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null) shader = Shader.Find("Shader/Uber/3D Object");
+
+            var material = new Material(shader) { name = "Launch Target Direction Solid" };
+            ApplyColor(material, new Color(color.r, color.g, color.b, 1f));
+            if (material.HasProperty(SurfaceId))
+            {
+                material.SetFloat(SurfaceId, 0f);
+                material.DisableKeyword(TransparentKeyword);
+            }
+            if (material.HasProperty(BlendId)) material.SetFloat(BlendId, 0f);
+            if (material.HasProperty(LightingModeId))
+            {
+                material.SetFloat(LightingModeId, 1f);
+                material.EnableKeyword(UnlitKeyword);
+            }
+            if (material.HasProperty(SrcBlendId)) material.SetFloat(SrcBlendId, (float)BlendMode.One);
+            if (material.HasProperty(DstBlendId)) material.SetFloat(DstBlendId, (float)BlendMode.Zero);
+            if (material.HasProperty(SrcBlendAlphaId)) material.SetFloat(SrcBlendAlphaId, (float)BlendMode.One);
+            if (material.HasProperty(DstBlendAlphaId)) material.SetFloat(DstBlendAlphaId, (float)BlendMode.Zero);
+            if (material.HasProperty(ZWriteId)) material.SetFloat(ZWriteId, 1f);
+            if (material.HasProperty(CastShadowsId)) material.SetFloat(CastShadowsId, 0f);
+            if (material.HasProperty(ReceiveShadowsId)) material.SetFloat(ReceiveShadowsId, 0f);
+            if (material.HasProperty(HologramEnabledId))
+            {
+                material.SetFloat(HologramEnabledId, 0f);
+                material.DisableKeyword(HologramKeyword);
+            }
+
+            material.SetOverrideTag("RenderType", "Opaque");
+            material.renderQueue = (int)RenderQueue.Geometry;
+            return material;
+        }
+
         private static void ApplyColor(Material material, Color color)
         {
             if (material == null) return;
@@ -207,12 +245,12 @@ namespace Simulation
             var mesh = new Mesh { name = "LaunchTargetDirectionTriangle" };
             mesh.vertices = new[]
             {
-                new Vector3(0f, 0f, 1.2f),
-                new Vector3(-0.55f, 0f, -0.6f),
-                new Vector3(0.55f, 0f, -0.6f),
-                new Vector3(0f, 0.18f, 1.2f),
-                new Vector3(-0.55f, 0.18f, -0.6f),
-                new Vector3(0.55f, 0.18f, -0.6f),
+                new Vector3(0f, 0f, 0.72f),
+                new Vector3(-0.58f, 0f, -0.42f),
+                new Vector3(0.58f, 0f, -0.42f),
+                new Vector3(0f, 0.14f, 0.72f),
+                new Vector3(-0.58f, 0.14f, -0.42f),
+                new Vector3(0.58f, 0.14f, -0.42f),
             };
             mesh.triangles = new[]
             {
