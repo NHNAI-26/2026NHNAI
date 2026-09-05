@@ -1,5 +1,6 @@
 using System;
 using Border.Research;
+using UnityEngine;
 
 namespace Simulation
 {
@@ -17,6 +18,8 @@ namespace Simulation
         public float TargetAltitude { get; set; } = 200f;
         public float TargetHorizontalMin { get; set; } = 80f;
         public float TargetHorizontalMax { get; set; } = 120f;
+        public Vector3 TargetBoxCenterOffset { get; set; } = new(0f, 260f, 100f);
+        public Vector3 TargetBoxSize { get; set; } = new(100f, 120f, 100f);
         public float RequiredHoldSeconds { get; set; } = 3f;
         public float MaxAttitudeError { get; set; } = 30f;
         public float MaxHoldSpeed { get; set; } = 50f;
@@ -36,6 +39,10 @@ namespace Simulation
             RequireNonnegative(copy.TargetAltitude, nameof(TargetAltitude));
             RequireNonnegative(copy.TargetHorizontalMin, nameof(TargetHorizontalMin));
             RequireNonnegative(copy.TargetHorizontalMax, nameof(TargetHorizontalMax));
+            RequireFinite(copy.TargetBoxCenterOffset, nameof(TargetBoxCenterOffset));
+            RequirePositive(copy.TargetBoxSize.x, nameof(TargetBoxSize));
+            RequirePositive(copy.TargetBoxSize.y, nameof(TargetBoxSize));
+            RequirePositive(copy.TargetBoxSize.z, nameof(TargetBoxSize));
             RequireNonnegative(copy.RequiredHoldSeconds, nameof(RequiredHoldSeconds));
             RequireNonnegative(copy.MaxAttitudeError, nameof(MaxAttitudeError));
             RequireNonnegative(copy.MaxHoldSpeed, nameof(MaxHoldSpeed));
@@ -60,6 +67,20 @@ namespace Simulation
         {
             if (float.IsNaN(value) || float.IsInfinity(value) || value < 0f)
                 throw new ArgumentOutOfRangeException(name, "Value must be finite and nonnegative.");
+        }
+
+        private static void RequirePositive(float value, string name)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value) || value <= 0f)
+                throw new ArgumentOutOfRangeException(name, "Value must be finite and positive.");
+        }
+
+        private static void RequireFinite(Vector3 value, string name)
+        {
+            if (float.IsNaN(value.x) || float.IsInfinity(value.x)
+                || float.IsNaN(value.y) || float.IsInfinity(value.y)
+                || float.IsNaN(value.z) || float.IsInfinity(value.z))
+                throw new ArgumentOutOfRangeException(name, "Value must be finite.");
         }
     }
 
@@ -89,6 +110,8 @@ namespace Simulation
 
         /// <summary>이 미션이 실제로 쓰는 단계 수. 나머지 단계는 화면에서 흐리게 나온다.</summary>
         public int StageCount { get; }
+        public Bounds TargetBoxBounds => new(_rules.TargetBoxCenterOffset, _rules.TargetBoxSize);
+        public bool UsesTargetBox => UsesTargetBoxMission(_missionId);
 
         public LaunchMissionEvaluator(LaunchMissionId missionId, LaunchMissionRules rules = null)
         {
@@ -105,7 +128,7 @@ namespace Simulation
 
         public LaunchMissionOutcome Step(float deltaTime, float altitude, float horizontalDistance,
             float speed, float attitudeError, float totalBurnSeconds, bool evaluateFailure = true,
-            bool isGrounded = false, bool hasSplashed = false, float angularSpeed = 0f)
+            bool isGrounded = false, bool hasSplashed = false, float angularSpeed = 0f, bool inTargetBox = false)
         {
             if (Outcome != LaunchMissionOutcome.Running)
                 return Outcome;
@@ -121,7 +144,7 @@ namespace Simulation
 
             _elapsedSeconds += deltaTime;
             _hasLiftedOff |= altitude >= _rules.LiftoffAltitude;
-            bool inZone = altitude >= _rules.TargetAltitude
+            bool inZone = UsesTargetBox ? inTargetBox : altitude >= _rules.TargetAltitude
                 && horizontalDistance >= _rules.TargetHorizontalMin
                 && horizontalDistance <= _rules.TargetHorizontalMax;
             bool holdMission = _missionId == LaunchMissionId.ZoneHold
@@ -209,9 +232,9 @@ namespace Simulation
                 case LaunchMissionId.HighAltitude:
                     return $"고도 {r.HighAltitude:0.##} m 도달";
                 case LaunchMissionId.TargetZone:
-                    return $"고도 {r.TargetAltitude:0.##} m 이상, 수평 거리 {r.TargetHorizontalMin:0.##}~{r.TargetHorizontalMax:0.##} m 진입";
+                    return $"목표 구역 진입 ({r.TargetBoxSize.x:0.##}×{r.TargetBoxSize.y:0.##}×{r.TargetBoxSize.z:0.##} m)";
                 default:
-                    string hold = $"고도 {r.TargetAltitude:0.##} m 이상, 수평 거리 {r.TargetHorizontalMin:0.##}~{r.TargetHorizontalMax:0.##} m에서 자세 오차 {r.MaxAttitudeError:0.##}° 이하, 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
+                    string hold = $"목표 구역 안에서 자세 오차 {r.MaxAttitudeError:0.##}° 이하, 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
                     return missionId == LaunchMissionId.LowPowerZoneHold
                         ? hold + $" (전체 엔진 누적 연소 시간 {r.MaxBurnSeconds:0.##}초 이하)" : hold;
             }
@@ -229,5 +252,10 @@ namespace Simulation
             if ((int)missionId < 1 || (int)missionId > 5)
                 throw new ArgumentOutOfRangeException(nameof(missionId));
         }
+
+        private static bool UsesTargetBoxMission(LaunchMissionId missionId) =>
+            missionId == LaunchMissionId.TargetZone
+            || missionId == LaunchMissionId.ZoneHold
+            || missionId == LaunchMissionId.LowPowerZoneHold;
     }
 }

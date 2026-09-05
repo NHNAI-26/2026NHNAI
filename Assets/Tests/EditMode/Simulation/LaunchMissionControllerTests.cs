@@ -176,6 +176,57 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void TargetBoxMission_CreatesRuntimeGuide()
+        {
+            ReinitializeController(LaunchMissionId.TargetZone);
+
+            Assert.That(_controller.UsesTargetBox, Is.True);
+            Assert.That(_controller.TargetBoxBounds.center, Is.EqualTo(new Vector3(0f, 260f, 100f)));
+            Assert.That(_controller.TargetBoxBounds.size, Is.EqualTo(new Vector3(100f, 120f, 100f)));
+            Assert.That(_object.GetComponent<LaunchTargetZoneGuide>(), Is.Not.Null);
+            Assert.That(_object.GetComponent<LaunchTargetZoneGuide>().IsVisible, Is.True);
+        }
+
+        [Test]
+        public void AltitudeMission_DoesNotCreateRuntimeGuide()
+        {
+            Assert.That(_controller.UsesTargetBox, Is.False);
+            Assert.That(_object.GetComponent<LaunchTargetZoneGuide>(), Is.Null);
+        }
+
+        [Test]
+        public void TargetBoxMission_SucceedsWhenRocketBoundsTouchZone()
+        {
+            ReinitializeController(LaunchMissionId.TargetZone);
+            var collider = _object.AddComponent<BoxCollider>();
+            collider.size = new Vector3(4f, 4f, 4f);
+
+            _rocket.Launch();
+            _object.transform.position = new Vector3(0f, 198f, 50f);
+            Physics.SyncTransforms();
+            Invoke(_controller, "FixedUpdate");
+
+            Assert.That(_controller.IsInTargetBox, Is.True);
+            Assert.That(_results, Is.EqualTo(new[] { true }));
+            Assert.That(_object.GetComponent<LaunchTargetZoneGuide>().IsVisible, Is.False);
+        }
+
+        [Test]
+        public void TargetBoxMission_StaysRunningOutsideZone()
+        {
+            ReinitializeController(LaunchMissionId.TargetZone);
+            _object.AddComponent<BoxCollider>().size = Vector3.one;
+
+            _rocket.Launch();
+            _object.transform.position = new Vector3(0f, 150f, 0f);
+            Physics.SyncTransforms();
+            Invoke(_controller, "FixedUpdate");
+
+            Assert.That(_controller.IsInTargetBox, Is.False);
+            Assert.That(_results, Is.Empty);
+        }
+
+        [Test]
         public void LowSpeedAfterMovement_KeepsFlyingAndCanStillSucceed()
         {
             _rocket.Launch();
@@ -241,5 +292,13 @@ namespace Simulation.Tests
 
         private static void Invoke(object target, string name) =>
             target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, null);
+
+        private void ReinitializeController(LaunchMissionId mission)
+        {
+            Object.DestroyImmediate(_controller);
+            _controller = _object.AddComponent<LaunchMissionController>();
+            _controller.Initialize(mission, () => true, success => _results.Add(success));
+            _controller.ExplosionRequested.AddListener(() => _explosions++);
+        }
     }
 }

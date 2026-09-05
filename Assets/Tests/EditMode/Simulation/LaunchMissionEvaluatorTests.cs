@@ -16,21 +16,19 @@ namespace Simulation.Tests
                 "Reaching the objective still succeeds at zero speed.");
         }
 
-        [TestCase(80f)]
-        [TestCase(120f)]
-        public void TargetZone_IncludesBothHorizontalBoundaries(float distance)
+        [Test]
+        public void TargetZone_SucceedsWhenRocketBoundsOverlapTargetBox()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.TargetZone);
-            Assert.That(evaluator.Step(0.1f, 200f, distance, 10f, 180f, 20f), Is.EqualTo(LaunchMissionOutcome.Succeeded));
+            Assert.That(evaluator.Step(0.1f, 199f, 0f, 10f, 180f, 20f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
         [Test]
-        public void TargetZone_RequiresAltitudeAndDistanceInTheSameSample()
+        public void TargetZone_IgnoresLegacyDistanceWhenTargetBoxIsOutside()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.TargetZone);
-            Assert.That(evaluator.Step(0.1f, 200f, 79f, 10f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(0.1f, 199f, 100f, 10f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(0.1f, 200f, 121f, 10f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(0.1f, 200f, 100f, 10f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
         }
 
         [TestCase(LaunchMissionId.ZoneHold)]
@@ -38,24 +36,27 @@ namespace Simulation.Tests
         public void HoldMission_RequiresThreeContinuousSeconds(LaunchMissionId mission)
         {
             var evaluator = new LaunchMissionEvaluator(mission);
-            Assert.That(evaluator.Step(2f, 200f, 80f, 50f, 30f, 8f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(2f, 200f, 0f, 50f, 30f, 8f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Running));
             Assert.That(evaluator.HoldSeconds, Is.EqualTo(2f));
-            Assert.That(evaluator.Step(1f, 200f, 120f, 50f, 30f, 8f), Is.EqualTo(LaunchMissionOutcome.Succeeded));
+            Assert.That(evaluator.Step(1f, 200f, 0f, 50f, 30f, 8f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
-        [TestCase(199f, 100f, 10f, 0f)]
-        [TestCase(200f, 79f, 10f, 0f)]
-        [TestCase(200f, 121f, 10f, 0f)]
-        [TestCase(200f, 100f, 50.01f, 0f)]
-        [TestCase(200f, 100f, 10f, 30.01f)]
-        public void HoldMission_ResetsOnAnyBrokenCondition(float altitude, float distance, float speed, float angle)
+        [TestCase(false, 10f, 0f)]
+        [TestCase(true, 50.01f, 0f)]
+        [TestCase(true, 10f, 30.01f)]
+        public void HoldMission_ResetsOnAnyBrokenCondition(bool inTargetBox, float speed, float angle)
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold);
-            evaluator.Step(2f, 200f, 100f, 10f, 0f, 0f);
-            Assert.That(evaluator.Step(0.1f, altitude, distance, speed, angle, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            evaluator.Step(2f, 200f, 0f, 10f, 0f, 0f, inTargetBox: true);
+            Assert.That(evaluator.Step(0.1f, 200f, 0f, speed, angle, 0f, inTargetBox: inTargetBox),
+                Is.EqualTo(LaunchMissionOutcome.Running));
             Assert.That(evaluator.HoldSeconds, Is.Zero);
-            Assert.That(evaluator.Step(2f, 200f, 100f, 10f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(1f, 200f, 100f, 10f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Succeeded));
+            Assert.That(evaluator.Step(2f, 200f, 0f, 10f, 0f, 0f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(1f, 200f, 0f, 10f, 0f, 0f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
         [TestCase(LaunchMissionId.ZoneHold, LaunchMissionOutcome.Succeeded)]
@@ -63,15 +64,16 @@ namespace Simulation.Tests
         public void OnlyLowPowerMission_EnforcesAggregateBurnBudget(LaunchMissionId mission, LaunchMissionOutcome expected)
         {
             var evaluator = new LaunchMissionEvaluator(mission);
-            Assert.That(evaluator.Step(3f, 200f, 100f, 10f, 0f, 8.01f), Is.EqualTo(expected));
+            Assert.That(evaluator.Step(3f, 200f, 0f, 10f, 0f, 8.01f, inTargetBox: true), Is.EqualTo(expected));
         }
 
         [Test]
         public void LowPowerMission_BurnBudgetExceededDuringHoldResetsProgress()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.LowPowerZoneHold);
-            evaluator.Step(2f, 200f, 100f, 10f, 0f, 8f);
-            Assert.That(evaluator.Step(1f, 200f, 100f, 10f, 0f, 8.01f), Is.EqualTo(LaunchMissionOutcome.Running));
+            evaluator.Step(2f, 200f, 0f, 10f, 0f, 8f, inTargetBox: true);
+            Assert.That(evaluator.Step(1f, 200f, 0f, 10f, 0f, 8.01f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Running));
             Assert.That(evaluator.HoldSeconds, Is.Zero);
         }
 
@@ -110,8 +112,10 @@ namespace Simulation.Tests
         {
             var evaluator = new LaunchMissionEvaluator(mission);
             evaluator.Step(0.1f, 10f, 0f, 10f, 0f, 0f);
-            Assert.That(evaluator.Step(2f, 200f, 100f, 0f, 0f, 8f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(1f, 200f, 100f, 0f, 0f, 8f), Is.EqualTo(LaunchMissionOutcome.Succeeded));
+            Assert.That(evaluator.Step(2f, 200f, 0f, 0f, 0f, 8f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(1f, 200f, 0f, 0f, 0f, 8f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
         [Test]
@@ -119,17 +123,19 @@ namespace Simulation.Tests
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold,
                 new LaunchMissionRules { RequiredHoldSeconds = 4f });
-            Assert.That(evaluator.Step(3f, 200f, 100f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(1f, 200f, 100f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Succeeded));
+            Assert.That(evaluator.Step(3f, 200f, 0f, 0f, 0f, 0f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(1f, 200f, 0f, 0f, 0f, 0f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
         [Test]
         public void BrokenHold_AtLowSpeedKeepsFlying()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold);
-            evaluator.Step(3f, 199f, 100f, 10f, 0f, 0f);
-            evaluator.Step(1f, 200f, 100f, 10f, 0f, 0f);
-            Assert.That(evaluator.Step(10f, 199f, 100f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            evaluator.Step(3f, 199f, 0f, 10f, 0f, 0f);
+            evaluator.Step(1f, 200f, 0f, 10f, 0f, 0f, inTargetBox: true);
+            Assert.That(evaluator.Step(10f, 199f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
             Assert.That(evaluator.HoldSeconds, Is.Zero);
         }
 
@@ -224,9 +230,9 @@ namespace Simulation.Tests
             Assert.That(evaluator.StageIndex, Is.EqualTo(2), "이륙");
             evaluator.Step(0.1f, 200f, 0f, 10f, 0f, 0f);
             Assert.That(evaluator.StageIndex, Is.EqualTo(3), "상승");
-            evaluator.Step(0.1f, 200f, 100f, 60f, 0f, 0f);
+            evaluator.Step(0.1f, 200f, 0f, 60f, 0f, 0f, inTargetBox: true);
             Assert.That(evaluator.StageIndex, Is.EqualTo(4), "목표 구역 진입 — 속력이 커서 체류는 아직 아니다.");
-            evaluator.Step(0.1f, 200f, 100f, 10f, 0f, 0f);
+            evaluator.Step(0.1f, 200f, 0f, 10f, 0f, 0f, inTargetBox: true);
             Assert.That(evaluator.StageIndex, Is.EqualTo(5), "체류 시작");
         }
 
@@ -234,7 +240,7 @@ namespace Simulation.Tests
         public void StageIndex_DoesNotFallBackWhenHoldBreaks()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold);
-            evaluator.Step(0.1f, 200f, 100f, 10f, 0f, 0f);
+            evaluator.Step(0.1f, 200f, 0f, 10f, 0f, 0f, inTargetBox: true);
             Assert.That(evaluator.StageIndex, Is.EqualTo(5));
 
             evaluator.Step(0.1f, 10f, 0f, 10f, 0f, 0f);

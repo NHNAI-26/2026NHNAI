@@ -170,6 +170,11 @@ namespace Simulation
         private float _launchYaw;
         private float _launchAltitude;
         private bool _launchViewSwapped;
+        private bool _hasPendingLaunchTargetPreview;
+        private Vector3 _launchTargetPreviewCenter;
+        private float _launchTargetPreviewHoldSeconds = 3f;
+        private float _launchTargetPreviewStartTime;
+        private float _launchTargetPreviewBlendSeconds = 0.75f;
         private ParticleSystem _trail;
         private ParticleSystem.Particle[] _trailParticles;
 
@@ -322,13 +327,26 @@ namespace Simulation
             EnsureTrajectoryTrail();
             _pipCamera.enabled = true;
             _trail.Play();
+            if (_hasPendingLaunchTargetPreview)
+            {
+                _launchTargetPreviewStartTime = Time.time;
+            }
             ApplyLaunchViews();
+        }
+
+        public void PreviewLaunchTarget(Vector3 targetCenter, float holdSeconds = 3f)
+        {
+            _hasPendingLaunchTargetPreview = true;
+            _launchTargetPreviewCenter = targetCenter;
+            _launchTargetPreviewHoldSeconds = Mathf.Max(0f, holdSeconds);
+            if (rocket != null && rocket.Launched) _launchTargetPreviewStartTime = Time.time;
         }
 
         public void ReturnToDesign()
         {
             launchCam.Priority = 0;
             _launchViewSwapped = false;
+            _hasPendingLaunchTargetPreview = false;
             if (_pipCamera != null) _pipCamera.enabled = false;
             if (_trail != null) _trail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             Select(null);
@@ -426,10 +444,10 @@ namespace Simulation
             float pullback = PullbackDistance(rocket.transform.position.y - _launchAltitude,
                 pullbackNearDistance, pullbackGrowth, pullbackFarDistance);
 
-            PlaceView(launchCam.transform, _launchViewSwapped ? pullback : chaseDistance);
+            PlaceLaunchCameraView(launchCam.transform, _launchViewSwapped ? pullback : chaseDistance, true);
             if (_pipCamera != null)
             {
-                PlaceView(_pipCamera.transform, _launchViewSwapped ? chaseDistance : pullback);
+                PlaceLaunchCameraView(_pipCamera.transform, _launchViewSwapped ? chaseDistance : pullback, false);
             }
 
             UpdateTrailDotSize(pullback);
@@ -473,7 +491,7 @@ namespace Simulation
         /// 한가운데 남는다. 두 뷰의 차이는 거리 하나뿐이고, 상태를 두지 않으므로 스왑으로 담당 카메라가
         /// 바뀌어도 한 프레임에 맞는다.
         /// </summary>
-        private void PlaceView(Transform view, float distance)
+        private void PlaceLaunchCameraView(Transform view, float distance, bool allowTargetPreview)
         {
             Quaternion rotation = Quaternion.Euler(0f, _launchYaw, 0f);
             Vector3 target = rocket.transform.position;
@@ -485,8 +503,46 @@ namespace Simulation
             Vector3 shake = LaunchShake(
                 TrailDotWorldSize(shakeScreenAmplitude, distance, cam.fieldOfView) * rocket.ThrustFraction,
                 Time.time, shakeFrequency);
-            view.SetPositionAndRotation(
-                target + rotation * (new Vector3(0f, 0f, -distance) + shake), rotation);
+            Vector3 position = target + rotation * (new Vector3(0f, 0f, -distance) + shake);
+            Quaternion finalRotation = rotation;
+            if (allowTargetPreview && TryGetLaunchTargetPreviewRotation(position, rotation, out Quaternion preview))
+                finalRotation = preview;
+            view.SetPositionAndRotation(position, finalRotation);
+        }
+
+        private bool TryGetLaunchTargetPreviewRotation(Vector3 cameraPosition, Quaternion finalRotation,
+            out Quaternion rotation)
+        {
+            rotation = finalRotation;
+            if (!_hasPendingLaunchTargetPreview) return false;
+
+            float elapsed = Time.time - _launchTargetPreviewStartTime;
+            if (elapsed < _launchTargetPreviewHoldSeconds)
+            {
+                rotation = LookAtLaunchTarget(cameraPosition);
+                return true;
+            }
+
+            float blendElapsed = elapsed - _launchTargetPreviewHoldSeconds;
+            if (blendElapsed >= _launchTargetPreviewBlendSeconds)
+            {
+                _hasPendingLaunchTargetPreview = false;
+                return false;
+            }
+
+            float t = _launchTargetPreviewBlendSeconds <= 0f
+                ? 1f
+                : Mathf.SmoothStep(0f, 1f, blendElapsed / _launchTargetPreviewBlendSeconds);
+            rotation = Quaternion.Slerp(LookAtLaunchTarget(cameraPosition), finalRotation, t);
+            return true;
+        }
+
+        private Quaternion LookAtLaunchTarget(Vector3 cameraPosition)
+        {
+            Vector3 direction = _launchTargetPreviewCenter - cameraPosition;
+            return direction.sqrMagnitude < 0.0001f
+                ? Quaternion.Euler(0f, _launchYaw, 0f)
+                : Quaternion.LookRotation(direction.normalized, Vector3.up);
         }
 
         /// <summary>

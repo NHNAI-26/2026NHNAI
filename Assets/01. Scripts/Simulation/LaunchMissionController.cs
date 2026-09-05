@@ -22,9 +22,12 @@ namespace Simulation
         private Rigidbody body;
         private Vector3 origin;
         private LaunchMissionEvaluator evaluator;
+        private LaunchTargetZoneGuide targetGuide;
+        private Bounds targetBoxBounds;
         private Action<bool> completed;
         private bool returning;
         private float explosionTime;
+        private bool inTargetBox;
         public bool IsExploding { get; private set; }
         public bool CanSelfDestruct => rocket != null && rocket.Launched && !returning && !IsExploding;
         public string Objective { get; private set; }
@@ -54,6 +57,9 @@ namespace Simulation
         public int StageCount => evaluator != null ? evaluator.StageCount : LaunchMissionEvaluator.StageNames.Length;
         public float Speed => body.linearVelocity.magnitude;
         public UnityEvent ExplosionRequested => explosionRequested;
+        public bool UsesTargetBox => evaluator != null && evaluator.UsesTargetBox;
+        public bool IsInTargetBox => inTargetBox;
+        public Bounds TargetBoxBounds => targetBoxBounds;
 
         public void Initialize(LaunchMissionId mission, Func<bool> authorize, Action<bool> onCompleted)
         {
@@ -74,6 +80,14 @@ namespace Simulation
             Objective = LaunchMissionEvaluator.GetObjectiveDescription(mission, rules);
             completed = onCompleted;
             rocket.AuthorizeLaunch = authorize;
+
+            if (evaluator.UsesTargetBox)
+            {
+                targetBoxBounds = new Bounds(origin + evaluator.TargetBoxBounds.center, evaluator.TargetBoxBounds.size);
+                targetGuide = gameObject.AddComponent<LaunchTargetZoneGuide>();
+                targetGuide.Initialize(transform, origin, evaluator.TargetBoxBounds);
+                FindFirstObjectByType<RocketBuilder>()?.PreviewLaunchTarget(targetBoxBounds.center);
+            }
         }
 
         private void FixedUpdate()
@@ -92,9 +106,12 @@ namespace Simulation
             float distance = new Vector2(offset.x, offset.z).magnitude;
             MaxAltitude = Mathf.Max(MaxAltitude, Altitude);
             MaxDistance = Mathf.Max(MaxDistance, distance);
+            inTargetBox = UsesTargetBox && CalculateRocketBounds(out Bounds rocketBounds)
+                && TouchesOrOverlaps(rocketBounds, targetBoxBounds);
+            if (targetGuide != null) targetGuide.Tick(inTargetBox);
             var outcome = evaluator.Step(Time.fixedDeltaTime, Altitude, distance, Speed,
                 Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds, enableAutomaticFailure,
-                rocket.IsGrounded, rocket.Splashed, body.angularVelocity.magnitude * Mathf.Rad2Deg);
+                rocket.IsGrounded, rocket.Splashed, body.angularVelocity.magnitude * Mathf.Rad2Deg, inTargetBox);
             Status = $"고도 {Altitude:0.0}m / 속력 {Speed:0.0}m/s\n거리 {distance:0.0}m / 체류 {evaluator.HoldSeconds:0.0}s / 총 연소 {rocket.TotalBurnSeconds:0.0}s";
             if (outcome != LaunchMissionOutcome.Running) Finish(outcome == LaunchMissionOutcome.Succeeded);
         }
@@ -123,6 +140,7 @@ namespace Simulation
         private void OnDestroy()
         {
             if (rocket != null) rocket.OverheatExplosionStarted -= HandleOverheat;
+            if (targetGuide != null) targetGuide.Dispose();
         }
 
         private void BeginExplosion(string status)
@@ -146,10 +164,49 @@ namespace Simulation
             returning = true;
             Finished = true;
             Succeeded = success;
+            if (targetGuide != null) targetGuide.Dispose();
             GetComponent<LaunchPhotoCapture>()?.CaptureOutcome();
             rocket.StopFlight();
             Status = success ? "미션 성공" : evaluator.FailureReason;
             completed?.Invoke(success);
         }
+
+        private bool CalculateRocketBounds(out Bounds bounds)
+        {
+            bounds = new Bounds(transform.position, Vector3.zero);
+            bool hasBounds = false;
+
+            foreach (Collider collider in GetComponentsInChildren<Collider>())
+            {
+                if (collider == null || !collider.enabled) continue;
+                if (!hasBounds)
+                {
+                    bounds = collider.bounds;
+                    hasBounds = true;
+                }
+                else bounds.Encapsulate(collider.bounds);
+            }
+
+            foreach (Renderer renderer in GetComponentsInChildren<Renderer>())
+            {
+                if (renderer == null || !renderer.enabled) continue;
+                if (!hasBounds)
+                {
+                    bounds = renderer.bounds;
+                    hasBounds = true;
+                }
+                else bounds.Encapsulate(renderer.bounds);
+            }
+
+            if (hasBounds) return true;
+
+            bounds = new Bounds(transform.position, Vector3.one);
+            return true;
+        }
+
+        private static bool TouchesOrOverlaps(Bounds a, Bounds b) =>
+            a.min.x <= b.max.x && a.max.x >= b.min.x
+            && a.min.y <= b.max.y && a.max.y >= b.min.y
+            && a.min.z <= b.max.z && a.max.z >= b.min.z;
     }
 }
