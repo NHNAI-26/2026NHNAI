@@ -57,7 +57,7 @@ namespace Border.Research.Tests
             Assert.That(session.Model.Quarter, Is.EqualTo(ResearchPrototypeModel.StartQuarter));
             Assert.That(session.Model.Funds, Is.EqualTo(ResearchPrototypeModel.InitialFunds));
             Assert.That(session.Model.TotalLaunches, Is.Zero);
-            Assert.That(session.Model.ActiveEnginePresetCount, Is.EqualTo(1));
+            Assert.That(session.Model.ActiveEnginePresetCount, Is.Zero);
             Assert.That(session.Model.GetEnginePreset(EnginePresetId.Engine01).Completion, Is.Zero);
             Assert.That(session.Model.Missions.Count(mission => mission.Unlocked), Is.EqualTo(1));
         }

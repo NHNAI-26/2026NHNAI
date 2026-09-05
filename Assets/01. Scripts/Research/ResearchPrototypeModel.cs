@@ -766,8 +766,8 @@ namespace Border.Research
             GameWon = false;
             FinalYear = 0;
             FinalQuarter = 0;
-            ActiveEnginePresetCount = 1;
-            LastMessage = "2018 Q1. 첫 엔진 프리셋 연구 판단을 시작합니다.";
+            ActiveEnginePresetCount = 0;
+            LastMessage = "2018 Q1. 새로운 엔진을 먼저 개발하세요.";
 
             for (int i = 0; i < Missions.Length; i++)
             {
@@ -796,7 +796,7 @@ namespace Border.Research
                     AttemptCount = 0,
                     BestGrade = ResearchGrade.F,
                     HasBestGrade = false,
-                    Unlocked = i == 0
+                    Unlocked = false
                 };
             }
         }
