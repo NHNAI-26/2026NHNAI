@@ -313,6 +313,23 @@ FOV 40 / 0.1 / 5000이고 브레인이 그 값을 카메라에 밀어넣으므�
   `pullbackNearDistance`(40) + 고도 × `pullbackGrowth`(3), 상한 `pullbackFarDistance`(500).
   정점(약 126 유닛)에서 418 유닛까지 빠지고, 추적 뷰와 **약 1 : 35** 차이가 난다.
 
+**연소 중에는 두 뷰가 같이 흔들린다**(`RocketBuilder.LaunchShake`). 진폭은 궤적 점과 **같은 규칙으로
+화면 기준**이라 `TrailDotWorldSize`를 그대로 재사용한다 — 월드 기준으로 재면 500 유닛까지 빠지는
+후퇴 뷰에서 흔들림이 통째로 사라진다. 세기는 `Rocket.ThrustFraction`(이번 스텝에 실제로 건 추력 ÷
+전 엔진 최대 추력)에 비례하므로 램프와 함께 자라고 연료 소진·과열·자폭에서 저절로 멎으며, 절반만
+점화한 발사는 절반만 흔들린다. **자세는 건드리지 않는다** — 위치 오프셋만 뷰 로컬 X·Y로 넣어
+"피치 0 고정" 규약을 그대로 둔다.
+
+두 축은 Perlin 잡음의 **서로 다른 행**에서 뽑는다. 처음에는 `(t, 0)`과 `(0, t)`를 썼는데
+`Mathf.PerlinNoise`는 두 인자에 대칭이라 **두 값이 정확히 같았다** — 흔들림이 대각선 한 방향으로만
+움직여 진동이 아니라 미끄러짐으로 읽힌다. 테스트가 이걸 잡았다
+(`LaunchShake_StaysInsideAmplitude_AndStopsWhenThereIsNoThrust`).
+
+설정의 카메라 흔들림 토글과는 **아직 연결하지 않았다.** `SettingsSO.IsCameraShakeOn`은 있지만
+`changeCameraShakeEvent` 채널 에셋이 프로젝트에 없고 `SettingsSystem` 쪽 필드도 비어 있다 —
+채널이 생기면 `RocketBuilder`가 그걸 구독하는 자리를 `ponytail:` 주석으로 남겼다. 그때까지는
+`shakeScreenAmplitude = 0`이 끄는 손잡이다.
+
 후퇴 뷰는 여기 오기까지 두 번 갈아엎었다. 기록해 둘 값어치가 있다:
 
 1. **거리 + 피치를 같이 lerp** — 카메라가 기울어지니 지평선이 프레임 안에서 계속 움직여, 무엇을
@@ -421,6 +438,24 @@ UI 쪽은 `RocketDesignUI.BuildLaunchPip()`이다. 우하단 `(-16, 16)`은 미�
 발사 전에는 `isKinematic = true`로 발사대에 고정. `Launch()`가 이를 풀고, 엔진 목록을 한 번 수집하고,
 각 엔진의 연료를 만탱크로 되돌린다.
 
+### 이륙은 램프로 시작한다
+
+`Launch()` 직후 첫 `FixedUpdate`에 최대 추력이 걸리면 로켓이 **튀어오른다** — 무거운 물체가 힘겹게
+뜨는 그림이 아니라 가벼운 물체가 팝하는 그림이다. 그래서 추력을 0에서 `ignitionRampSeconds`(기본
+1.2초)에 걸쳐 `Mathf.SmoothStep`으로 올린다(`Rocket.RampFactor`). 그동안 로켓은 **발사대 데크
+콜라이더 위에 그대로 앉아 있다** — 추력 < 무게인 구성이 패드에 앉아 있는 것과 같은 상태이고,
+`isKinematic`을 붙들어 두는 별도 홀드다운은 필요 없다.
+
+**램프는 힘만이 아니라 연소·발열에도 같이 걸린다**(`RocketPart.OutputAt` → `Tick(deltaTime,
+thrustScale)`). 힘만 줄이면 패드 위에서 연료를 만큼 헛되이 태우게 되는데, 배율을 같이 태우면
+총 역적이 보존되고 잃는 것은 **늦게 뜬 만큼의 중력 손실뿐**이다. 대신 램프 구간은 발열도 낮아
+과열 여유가 조금 생긴다.
+
+**램프 시계는 부품이 아니라 로켓에 있다.** 엔진은 전부 같은 순간에 점화하므로 시계가 여러 개일
+이유가 없고, `RocketPart.Output`은 EditMode 테스트가 "프리셋 최대치 × 스로틀"로 잠가 둔 계약이라
+거기에 램프를 섞으면 테스트 다섯 개가 깨진다. `Tick`이 기본값 인자(`thrustScale = 1f`)를 받는 형태라
+램프를 모르는 호출자(테스트)는 예전과 똑같이 동작한다.
+
 ### 연료
 
 연료는 **엔진 부품별**로 들고 있다(`RocketPart.fuel`, `RocketPart.burnRate`). 로켓 공용 탱크가 아니다.
@@ -485,8 +520,14 @@ UI 쪽은 `RocketDesignUI.BuildLaunchPip()`이다. 우하단 `(-16, 16)`은 미�
 = 1920 N·m, 150 kg 기준 관성모멘트 ≈ 210 kg·m² → 각가속도 ≈ 9.1 rad/s². 감쇠가 없으면 1초 안에
 한 바퀴 돌아 버그처럼 보인다. **`angularDamping = 4`**가 ω를 약 2.3 rad/s(≈130°/s)로 제한한다.
 
-**튜닝 손잡이는 네 개다.** `burnRate`(비행 길이), `thrust`(가속), `angularDamping`(기울어지는 속도),
-`tankMassPerFuel`(탱크 무게 대 연료 비율). 전부 인스펙터 노출이라 코드 수정 없이 재생하며 맞춘다.
+위 표는 `ignitionRampSeconds = 0`(램프 없음) 기준이다. 기본 1.2초를 쓰면 로켓이 대략 0.8~1.0초쯤
+패드에서 떨어지고, 그만큼의 중력 손실로 **정점이 10 m 안팎 깎인다**(2엔진 기준 126 m → 대략 115 m).
+`LowAltitude` 미션 기준이 100 m 라 여유가 좁아졌다 — 프리셋 연료나 미션 기준을 올리는 대신
+램프 시간을 줄여 맞추기로 했다.
+
+**튜닝 손잡이는 여섯 개다.** `burnRate`(비행 길이), `thrust`(가속), `angularDamping`(기울어지는 속도),
+`tankMassPerFuel`(탱크 무게 대 연료 비율), `ignitionRampSeconds`(이륙이 얼마나 힘겨운가 · 정점 손실),
+`shakeScreenAmplitude`(발사 카메라 흔들림). 전부 인스펙터 노출이라 코드 수정 없이 재생하며 맞춘다.
 `tankMassPerFuel`이 "기본 엔진 1개로 뜰 수 있는가"를 가르는 손잡이다 — 0.25면 못 뜨고, 0.22 이하면
 뜬다(122 kg, 순힘 +3 N). 상수로 박으면 안 되는 이유다. 실패한 구성이 "실패로 읽히되 좌절스럽지 않은"
 지점은 `angularDamping`과 이 계수에서 같이 잡는다.
@@ -496,13 +537,20 @@ UI 쪽은 `RocketDesignUI.BuildLaunchPip()`이다. 우하단 `(-16, 16)`은 미�
 
 ## 불꽃
 
-엔진 프리팹의 자식 `Flame`이 ParticleSystem 하나다. **켜고 끄는 신호는 `RocketPart.TryBurn`의 반환값**
+엔진 프리팹의 자식 `Flame`이 ParticleSystem 하나다. **켜고 끄는 신호는 `RocketPart.Tick`의 반환값**
 이다 — `Rocket.FixedUpdate`가 이미 계산해서 버리던 bool이라 새 컴포넌트도, 이벤트도, 인터페이스도
-만들지 않았다. 소진 판정이 `TryBurn` 안에 있으므로 꺼짐 처리도 거기서 끝나고 `Rocket.cs`는 손대지 않는다.
+만들지 않았다. 소진 판정이 `Tick` 안에 있으므로 꺼짐 처리도 거기서 끝나고 `Rocket.cs`는 손대지 않는다.
 `flame`이 비어 있어도 동작하므로 불꽃 없는 부품도 허용된다.
 
-발사 전에는 `TryBurn`이 호출되지 않고 파티클의 Play On Awake도 꺼져 있어 자동으로 꺼진 상태다.
-매 프레임 `Play()`를 다시 부르지 않도록 `isEmitting`으로 한 번 걸러낸다.
+발사 전에는 `Tick`이 호출되지 않고 파티클의 Play On Awake도 꺼져 있어 자동으로 꺼진 상태다.
+`Play()`/`Stop()`은 여전히 `isEmitting`으로 전이에서만 부르지만, **세기는 켜져 있는 동안 매 스텝 쓴다** —
+이륙 램프에 맞춰 `startSpeedMultiplier`와 `rateOverTimeMultiplier`가 같이 자라서, 추력이 붙는 과정이
+화면에 보이는 유일한 신호가 된다. 프리팹이 저작한 원래 배수는 첫 호출에서 한 번 캡처한다
+(`CaptureFlameDefaults`) — 이 컴포넌트에는 `Awake`가 없고 EditMode 테스트도 `Awake`를 돌리지 않아
+지연 캡처가 두 경로를 같이 만족시킨다.
+
+**파티클 트랜스폼 스케일로는 하지 않는다.** 아래 로컬 스케일 문단이 기록한 루트 스케일 상쇄 문제가
+그대로 돌아오고, `FitToMesh`가 잡아 둔 노즐 바닥 위치까지 같이 흔들린다.
 
 **머티리얼은 URP 기본 `Universal Render Pipeline/Particles/Unlit`(가산 블렌드)을 쓴다.**
 프로젝트 자체 `Shader/Uber/Particle`을 쓰지 않은 이유는 변이 매니페스트다 — Uber 쪽에서 새 키워드

@@ -68,6 +68,18 @@ namespace Simulation
         [Tooltip("궤적 레이어. 이 레이어를 후퇴 뷰를 맡은 카메라만 그린다.")]
         [SerializeField] private int trailLayer = 8; // Trajectory
 
+        [Header("Launch shake")]
+        // ponytail: 설정의 카메라 흔들림 토글과는 아직 연결하지 않았다. SettingsSO.IsCameraShakeOn 은
+        // 있지만 changeCameraShakeEvent 채널 에셋이 프로젝트에 없고 SettingsSystem 쪽도 비어 있다 —
+        // 채널이 생기면 BoolEventChannelSO 를 하나 받아 여기서 구독한다.
+        [Tooltip("연소 중 카메라가 흔들리는 폭. 화면 높이 비율이라 추적 뷰와 후퇴 뷰가 같은 세기로 보인다. 0 이면 끈다.")]
+        [SerializeField] private float shakeScreenAmplitude = 0.006f;
+        [Tooltip("흔들림 속도(Hz 에 가깝다). 낮을수록 저주파로 묵직하게 흔들린다.")]
+        [SerializeField] private float shakeFrequency = 14f;
+
+        /// <summary>흔들림 Y 축이 쓰는 Perlin 행. X 축(0)과 떨어져 있기만 하면 되는 임의값이다.</summary>
+        private const float YNoiseRow = 137.3f;
+
         [Header("Orbit camera")]
         [SerializeField] private float orbitSensitivity = 0.3f; // 도/픽셀
         [SerializeField] private float minPitch = -20f;
@@ -457,8 +469,32 @@ namespace Simulation
             Vector3 target = rocket.transform.position;
             // 로켓은 물을 통과해 가라앉는다. 카메라까지 따라 들어가면 물을 아래에서 올려다보게 된다.
             target.y = Mathf.Max(target.y, cameraFloorY);
+            // 진폭은 궤적 점과 같은 규칙으로 화면 기준이다 — 거리로 재면 후퇴 뷰(최대 500)에서
+            // 흔들림이 통째로 사라진다. 세기는 실제로 걸린 추력을 따르므로 연료가 떨어지면 저절로 멎고,
+            // 자세는 건드리지 않는다: 두 발사 뷰의 "피치 0 고정" 규약이 그대로 남아야 한다.
+            Vector3 shake = LaunchShake(
+                TrailDotWorldSize(shakeScreenAmplitude, distance, cam.fieldOfView) * rocket.ThrustFraction,
+                Time.time, shakeFrequency);
             view.SetPositionAndRotation(
-                target + rotation * new Vector3(0f, 0f, -distance), rotation);
+                target + rotation * (new Vector3(0f, 0f, -distance) + shake), rotation);
+        }
+
+        /// <summary>
+        /// 뷰 로컬 X·Y 흔들림 오프셋. 두 축을 Perlin 잡음의 <b>서로 다른 행</b>에서 뽑는다 —
+        /// <c>PerlinNoise(t, 0)</c> 과 <c>PerlinNoise(0, t)</c> 는 대칭이라 값이 정확히 같고,
+        /// 그러면 두 축이 완전히 상관되어 대각선으로만 움직인다(진동이 아니라 미끄러짐으로 읽힌다).
+        /// <see cref="Mathf.PerlinNoise"/> 는 0~1 을 살짝 벗어날 수 있으므로 잘라서 진폭을 보장한다.
+        /// </summary>
+        public static Vector3 LaunchShake(float worldAmplitude, float time, float frequency)
+        {
+            if (worldAmplitude <= 0f) return Vector3.zero;
+
+            float t = time * frequency;
+            return new Vector3(
+                Offset(t, 0f), Offset(t, YNoiseRow), 0f);
+
+            float Offset(float x, float y) =>
+                (Mathf.Clamp01(Mathf.PerlinNoise(x, y)) - 0.5f) * 2f * worldAmplitude;
         }
 
         /// <summary>
