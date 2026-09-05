@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using Border.Audio;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -176,6 +177,7 @@ namespace Simulation
             // raycastTarget 이 남아 있어야 연출 중 클릭이 뒤로 새지 않는다.
             SetCurtainAlpha(0f);
 
+            if (frameHinge != null) SoundManager.Instance?.PlaySfx("woosh2");
             yield return TweenFrameAngle(LiftDegrees, 0f, RiseSeconds, Back);
             yield return TweenPower(1f, 0f, PowerOnSeconds);
             yield return TweenFrameScale(1f, ZoomScale, ZoomSeconds);
