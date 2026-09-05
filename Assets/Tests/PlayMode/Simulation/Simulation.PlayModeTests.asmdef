@@ -1,0 +1,15 @@
+{
+    "name": "Simulation.PlayModeTests",
+    "rootNamespace": "Simulation.Tests",
+    "references": ["Border", "Simulation"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": ["TestAssemblies"]
+}

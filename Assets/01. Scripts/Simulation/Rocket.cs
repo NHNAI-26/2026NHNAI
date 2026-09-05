@@ -24,6 +24,7 @@ namespace Simulation
         [SerializeField] private float sinkDepth = 30f;
 
         private readonly List<RocketPart> _engines = new();
+        private readonly HashSet<(Collider Self, Collider Surface)> _groundContacts = new();
         private readonly DeterministicRng _rng = new();
         private Rigidbody _body;
         private float _bodyMass;
@@ -62,6 +63,41 @@ namespace Simulation
             return rampSeconds <= 0f ? 1f : Mathf.SmoothStep(0f, 1f, elapsedSeconds / rampSeconds);
         }
 
+        public bool IsGrounded
+        {
+            get
+            {
+                _groundContacts.RemoveWhere(pair => pair.Self == null || pair.Surface == null
+                    || !pair.Self.enabled || !pair.Surface.enabled
+                    || !pair.Self.gameObject.activeInHierarchy || !pair.Surface.gameObject.activeInHierarchy);
+                return _groundContacts.Count > 0;
+            }
+        }
+
+        private void OnCollisionEnter(Collision collision) => UpdateGroundContact(collision);
+        private void OnCollisionStay(Collision collision) => UpdateGroundContact(collision);
+
+        private void OnCollisionExit(Collision collision)
+        {
+            _groundContacts.RemoveWhere(pair => pair.Surface == collision.collider);
+        }
+
+        private void UpdateGroundContact(Collision collision)
+        {
+            _groundContacts.RemoveWhere(pair => pair.Surface == collision.collider);
+            if (collision.rigidbody == _body) return;
+            for (int i = 0; i < collision.contactCount; i++)
+            {
+                // Side impacts are not ground support. Keep each collider pair separately;
+                // sleeping rigidbodies stop sending Stay but remain supported until Exit.
+                ContactPoint contact = collision.GetContact(i);
+                if (Vector3.Dot(contact.normal, Vector3.up) < 0.5f) continue;
+                _groundContacts.Add((contact.thisCollider, contact.otherCollider));
+            }
+        }
+
+        private void OnDisable() => _groundContacts.Clear();
+
         private void Awake()
         {
             _body = GetComponent<Rigidbody>();
@@ -89,6 +125,7 @@ namespace Simulation
             if (AuthorizeLaunch != null && !AuthorizeLaunch()) return;
 
             Launched = true;
+            _groundContacts.Clear();
             Overheated = false;
             _sinceLaunch = 0f;
             _body.isKinematic = false;
@@ -151,6 +188,7 @@ namespace Simulation
 
         public void ResetFlight(Vector3 position, Quaternion rotation)
         {
+            _groundContacts.Clear();
             foreach (RocketPart engine in _engines) engine.Shutdown();
             _body.isKinematic = false;
             _body.linearVelocity = Vector3.zero;
