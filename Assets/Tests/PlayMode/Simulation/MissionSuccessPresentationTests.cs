@@ -247,6 +247,30 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void Descent_RendersAboveCrtCameraFromAnotherScene()
+        {
+            var overlayScene = UnityEngine.SceneManagement.SceneManager.CreateScene("success CRT overlay test");
+            var overlay = new GameObject("CRT output camera").AddComponent<Camera>();
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(overlay.gameObject, overlayScene);
+            overlay.depth = 20f;
+            try
+            {
+                Assert.That(presentation.Begin(camera), Is.True);
+                presentation.Evaluate(1f);
+                Assert.That(overlay.enabled, Is.True);
+                Assert.That(presentation.PresentationCamera.depth, Is.GreaterThan(overlay.depth));
+                Assert.That(presentation.PresentationCamera.targetTexture, Is.Null);
+                presentation.End();
+                Assert.That(overlay.enabled, Is.True);
+            }
+            finally
+            {
+                Object.Destroy(overlay.gameObject);
+                UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(overlayScene);
+            }
+        }
+
+        [Test]
         public void RocketPrefab_HasRuntimePresentationReferences()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/3D/RocketBody.prefab");

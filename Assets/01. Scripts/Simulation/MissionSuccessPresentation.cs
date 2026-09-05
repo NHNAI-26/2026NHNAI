@@ -125,6 +125,10 @@ namespace Simulation
             presentationCamera.farClipPlane = distance + assembly.size.z * 4f + 20f;
             presentationCamera.transform.SetPositionAndRotation(
                 assembly.center + Vector3.back * distance, Quaternion.identity);
+            foreach (Camera camera in Camera.allCameras)
+                if (camera != presentationCamera && camera.targetTexture == null
+                    && camera.targetDisplay == presentationCamera.targetDisplay)
+                    presentationCamera.depth = Mathf.Max(presentationCamera.depth, camera.depth + 1f);
             presentationCamera.enabled = true;
 
             foreach (GameObject root in gameObject.scene.GetRootGameObjects())
