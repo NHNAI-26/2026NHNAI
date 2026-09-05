@@ -18,7 +18,7 @@ namespace Simulation
 
         [Header("Splashdown")]
         [Tooltip("수면 높이(월드 y). 씬의 Ground 와 같은 값이어야 한다.")]
-        [SerializeField] private float waterLevel = -8.9f;
+        [SerializeField] private float waterLevel = -6.71f;
         [SerializeField] private float waterDamping = 4f;
         [Tooltip("수면 아래 이만큼 내려가면 멈춘다.")]
         [SerializeField] private float sinkDepth = 30f;
