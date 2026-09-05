@@ -343,7 +343,7 @@ namespace Simulation
                 // 부품이 커서 아래 표면으로 옮겨진다 — 자기 콜라이더가 꺼져 뒤쪽 본체가 맞는다.
                 else if (_dragMoved || (position - _dragStart).sqrMagnitude > DragSlopPixels * DragSlopPixels)
                 {
-                    _dragMoved = true;
+                    BeginDragMovement();
                     Drag(position);
                 }
 
@@ -790,6 +790,8 @@ namespace Simulation
             if (_selected == null || rocket.Launched) return;
 
             UpdateRotationSound(false);
+            if (_selected.transform.IsChildOf(rocket.transform))
+                SoundManager.Instance?.PlaySfx("engine_detach");
             Destroy(_selected.gameObject);
             _mode = EditMode.None;
             _grabAxis = -1;
@@ -860,6 +862,14 @@ namespace Simulation
             return best;
         }
 
+        private void BeginDragMovement()
+        {
+            if (_dragMoved) return;
+            _dragMoved = true;
+            if (_dragParent != null && rocket != null && _dragParent.IsChildOf(rocket.transform))
+                SoundManager.Instance?.PlaySfx("engine_detach");
+        }
+
         private void Drag(Vector2 screenPosition)
         {
             Ray ray = cam.ScreenPointToRay(screenPosition);
@@ -916,6 +926,8 @@ namespace Simulation
             else if (_overRocket)
             {
                 rocket.Attach(part, _attachPoint);
+                for (int i = 0; i < 2; i++)
+                    SoundManager.Instance?.PlaySfx("engine_attach");
             }
             else
             {

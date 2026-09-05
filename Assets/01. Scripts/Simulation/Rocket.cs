@@ -15,6 +15,7 @@ namespace Simulation
         private bool[] rendererVisibility;
         public bool Exploded { get; private set; }
         public event System.Action OverheatExplosionStarted;
+        public event System.Action ExplosionStarted;
         public event System.Action<bool> ExplosionPhotoRequested;
         // ponytail: 계수 하나를 모든 엔진이 공유한다. 프리셋마다 탱크 밀도를 다르게 하고 싶어지면 그때
         // EngineStatsSO 필드로 내린다 — CreateRuntimeCopy 와 리서치 브리지도 같이 넓어진다.
@@ -393,6 +394,7 @@ namespace Simulation
         {
             if (Exploded || !Launched) return;
             Exploded = true;
+            ExplosionStarted?.Invoke();
             if (explosionPrefab == null) ExplosionPhotoRequested?.Invoke(false);
             StopFlight();
             ThrustFraction = 0f;

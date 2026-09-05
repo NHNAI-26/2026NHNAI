@@ -36,6 +36,7 @@ namespace Simulation
             rocket.LaunchStarted += OnLaunch;
             rocket.LiftoffStarted += OnLiftoff;
             rocket.SplashdownStarted += OnSplashdown;
+            rocket.ExplosionStarted += OnExplosion;
         }
 
         private void OnLaunch()
@@ -57,6 +58,13 @@ namespace Simulation
                 SoundManager.Instance.PlayBgm("Launch");
                 spark = SoundManager.Instance.PlaySfx("SparkStart");
             }
+        }
+
+        private void OnExplosion()
+        {
+            ClearAudio();
+            for (int i = 0; i < 4; i++)
+                SoundManager.Instance?.PlaySfx("RocketExplosion");
         }
 
         private void OnSplashdown(Vector3 impactPoint)
@@ -132,6 +140,7 @@ namespace Simulation
                 rocket.LaunchStarted -= OnLaunch;
                 rocket.LiftoffStarted -= OnLiftoff;
                 rocket.SplashdownStarted -= OnSplashdown;
+                rocket.ExplosionStarted -= OnExplosion;
             }
             ClearAudio();
         }
