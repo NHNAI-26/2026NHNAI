@@ -160,7 +160,7 @@ namespace Simulation.Tests
         }
 
         [Test]
-        public void AggregateBurnLimit_CutsOffAllEnginesButKeepsRocketFlying()
+        public void BurnDurationLimit_IsIndependentOfEngineCountAndKeepsRocketFlying()
         {
             var rocketGo = Track(new GameObject("burn limited rocket"));
             var rocket = rocketGo.AddComponent<Rocket>();
@@ -174,13 +174,17 @@ namespace Simulation.Tests
             RocketPart second = CreateEngine(Stats(100f, 1000f, BaselineOutput, 100f));
             rocket.Attach(first, Vector3.left);
             rocket.Attach(second, Vector3.right);
-            rocket.SetAggregateBurnLimit(0.05f);
+            rocket.SetBurnDurationLimit(0.05f);
             rocket.Launch();
 
             Invoke(rocket, "FixedUpdate");
             Invoke(rocket, "FixedUpdate");
+            Invoke(rocket, "FixedUpdate");
 
             Assert.That(rocket.TotalBurnSeconds, Is.EqualTo(0.05f).Within(1e-5f));
+            Assert.That(first.Remaining, Is.EqualTo(99f).Within(1e-4f));
+            Assert.That(second.Remaining, Is.EqualTo(99f).Within(1e-4f),
+                "엔진 수가 늘어도 연소 시간 제한이 더 빨리 줄어들면 안 된다.");
             Assert.That(rocket.EnginesCutOffByBurnLimit, Is.True);
             Assert.That(first.Ignited, Is.False);
             Assert.That(second.Ignited, Is.False);

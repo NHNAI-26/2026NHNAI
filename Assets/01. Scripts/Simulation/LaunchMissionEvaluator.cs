@@ -233,7 +233,7 @@ namespace Simulation
                 default:
                     string hold = $"목표 구역 안에서 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
                     return missionId == LaunchMissionId.LowPowerZoneHold
-                        ? hold + $" (전체 엔진 누적 연소 {r.MaxBurnSeconds:0.##}초에 자동 차단)" : hold;
+                        ? hold + $" (엔진 연소 {r.MaxBurnSeconds:0.##}초 후 자동 차단)" : hold;
             }
         }
 

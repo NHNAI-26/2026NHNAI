@@ -78,7 +78,7 @@ namespace Simulation
                 SplashdownFailureSeconds = splashdownFailureSeconds,
                 NoLiftoffTimeout = noLiftoffTimeout
             };
-            rocket.SetAggregateBurnLimit(mission == LaunchMissionId.LowPowerZoneHold
+            rocket.SetBurnDurationLimit(mission == LaunchMissionId.LowPowerZoneHold
                 ? rules.MaxBurnSeconds
                 : float.PositiveInfinity);
             evaluator = new LaunchMissionEvaluator(mission, rules);

@@ -73,7 +73,7 @@ namespace Simulation
         private Vector3 _liftVelocity;
         private float _liftElapsed;
         private float _physicsBlendElapsed;
-        private float _aggregateBurnLimit = float.PositiveInfinity;
+        private float _burnDurationLimit = float.PositiveInfinity;
 
         public bool LiftAssistActive => _liftPhase != LiftPhase.None;
 
@@ -86,14 +86,14 @@ namespace Simulation
         public bool EnginesCutOffByBurnLimit { get; private set; }
 
         /// <summary>
-        /// 전체 엔진의 누적 연소 예산. 한계에 닿으면 엔진만 끄고 로켓은 관성 비행을 계속한다.
+        /// 엔진 수와 무관한 실제 연소 시간 제한. 한계에 닿으면 엔진만 끄고 로켓은 관성 비행을 계속한다.
         /// </summary>
-        public void SetAggregateBurnLimit(float seconds)
+        public void SetBurnDurationLimit(float seconds)
         {
             if (float.IsNaN(seconds) || seconds < 0f)
                 throw new System.ArgumentOutOfRangeException(nameof(seconds));
 
-            _aggregateBurnLimit = seconds;
+            _burnDurationLimit = seconds;
             EnginesCutOffByBurnLimit = false;
         }
 
@@ -490,25 +490,27 @@ namespace Simulation
             float ramp = RampFactor(_sinceLaunch, ignitionRampSeconds);
             float applied = 0f;
             bool hasUpwardEngine = false;
+            bool anyEngineBurned = false;
+            float burnDelta = Time.fixedDeltaTime;
+
+            if (!float.IsPositiveInfinity(_burnDurationLimit))
+            {
+                float remainingBurnTime = _burnDurationLimit - TotalBurnSeconds;
+                if (remainingBurnTime <= 0f)
+                {
+                    CutOffEnginesAtBurnLimit();
+                    ApplyLiftAssist(Time.fixedDeltaTime, physicsBlend, false);
+                    return;
+                }
+
+                burnDelta = Mathf.Min(burnDelta, remainingBurnTime);
+            }
 
             for (int i = 0; i < _engines.Count; i++)
             {
-                float burnDelta = Time.fixedDeltaTime;
-                if (!float.IsPositiveInfinity(_aggregateBurnLimit))
-                {
-                    float remainingBudget = _aggregateBurnLimit - TotalBurnSeconds;
-                    if (remainingBudget <= 0f)
-                    {
-                        CutOffEnginesAtBurnLimit();
-                        break;
-                    }
-
-                    burnDelta = Mathf.Min(burnDelta, remainingBudget);
-                }
-
                 RocketPart engine = _engines[i];
                 bool burned = engine.Tick(burnDelta, ramp);
-                if (burned) TotalBurnSeconds = Mathf.Min(TotalBurnSeconds + burnDelta, _aggregateBurnLimit);
+                anyEngineBurned |= burned;
 
                 if (engine.Overheated)
                 {
@@ -531,20 +533,21 @@ namespace Simulation
                 hasUpwardEngine |= engine.HasFuel && output > 0f
                     && Vector3.Dot(engine.transform.up, Vector3.up) > 0f;
 
-                if (!float.IsPositiveInfinity(_aggregateBurnLimit)
-                    && TotalBurnSeconds >= _aggregateBurnLimit)
-                {
-                    CutOffEnginesAtBurnLimit();
-                    hasUpwardEngine = false;
-                    break;
-                }
-
                 if (engine.HasFuel) continue;
 
                 _liveEngines--;
                 Log.D(_liveEngines > 0
                     ? $"Fuel out: {engine.name}, {_liveEngines} engine(s) left"
                     : $"Fuel out: {engine.name}, all engines dry", this);
+            }
+
+            if (anyEngineBurned)
+                TotalBurnSeconds = Mathf.Min(TotalBurnSeconds + burnDelta, _burnDurationLimit);
+            if (!float.IsPositiveInfinity(_burnDurationLimit)
+                && TotalBurnSeconds >= _burnDurationLimit)
+            {
+                CutOffEnginesAtBurnLimit();
+                hasUpwardEngine = false;
             }
 
             ApplyLiftAssist(Time.fixedDeltaTime, physicsBlend, hasUpwardEngine);
@@ -559,7 +562,7 @@ namespace Simulation
             _liveEngines = 0;
             foreach (RocketPart engine in _engines) engine.Shutdown();
             ThrustFraction = 0f;
-            Log.D($"Aggregate burn limit reached at {TotalBurnSeconds:0.##} s; engines cut off", this);
+            Log.D($"Burn duration limit reached at {TotalBurnSeconds:0.##} s; engines cut off", this);
         }
     }
 }

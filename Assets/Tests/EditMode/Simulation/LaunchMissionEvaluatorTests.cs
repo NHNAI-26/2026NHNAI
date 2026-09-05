@@ -67,7 +67,7 @@ namespace Simulation.Tests
 
         [TestCase(LaunchMissionId.ZoneHold)]
         [TestCase(LaunchMissionId.LowPowerZoneHold)]
-        public void HoldMission_DoesNotDisqualifyAfterAggregateBurnBudget(LaunchMissionId mission)
+        public void HoldMission_DoesNotDisqualifyAfterBurnDurationLimit(LaunchMissionId mission)
         {
             var evaluator = new LaunchMissionEvaluator(mission);
             Assert.That(evaluator.Step(3f, 200f, 0f, 10f, 0f, 8.01f, inTargetBox: true),
