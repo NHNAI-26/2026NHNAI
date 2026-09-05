@@ -23,11 +23,12 @@ namespace Simulation
         private Vector3 origin;
         private LaunchMissionEvaluator evaluator;
         private LaunchTargetZoneGuide targetGuide;
-        private Bounds targetBoxBounds;
+        private Vector3 targetZoneCenter;
+        private float targetZoneRadius;
         private Action<bool> completed;
         private bool returning;
         private float explosionTime;
-        private bool inTargetBox;
+        private bool inTargetZone;
         public bool IsExploding { get; private set; }
         public bool CanSelfDestruct => rocket != null && rocket.Launched && !returning && !IsExploding;
         public string Objective { get; private set; }
@@ -58,8 +59,10 @@ namespace Simulation
         public float Speed => body.linearVelocity.magnitude;
         public UnityEvent ExplosionRequested => explosionRequested;
         public bool UsesTargetBox => evaluator != null && evaluator.UsesTargetBox;
-        public bool IsInTargetBox => inTargetBox;
-        public Bounds TargetBoxBounds => targetBoxBounds;
+        public bool IsInTargetBox => inTargetZone;
+        public Bounds TargetBoxBounds => new(targetZoneCenter, Vector3.one * (targetZoneRadius * 2f));
+        public Vector3 TargetZoneCenter => targetZoneCenter;
+        public float TargetZoneRadius => targetZoneRadius;
 
         public void Initialize(LaunchMissionId mission, Func<bool> authorize, Action<bool> onCompleted)
         {
@@ -83,16 +86,18 @@ namespace Simulation
 
             if (evaluator.UsesTargetBox)
             {
-                targetBoxBounds = new Bounds(origin + evaluator.TargetBoxBounds.center, evaluator.TargetBoxBounds.size);
+                targetZoneCenter = origin + evaluator.TargetZoneCenterOffset;
+                targetZoneRadius = evaluator.TargetZoneRadius;
                 targetGuide = gameObject.AddComponent<LaunchTargetZoneGuide>();
-                targetGuide.Initialize(transform, origin, evaluator.TargetBoxBounds);
-                FindFirstObjectByType<RocketBuilder>()?.PreviewLaunchTarget(targetBoxBounds.center);
+                targetGuide.Initialize(transform, targetZoneCenter, targetZoneRadius);
+                FindFirstObjectByType<RocketBuilder>()?.PreviewDesignTarget(TargetBoxBounds);
             }
         }
 
         private void FixedUpdate()
         {
             if (evaluator == null || returning || IsExploding) return;
+            UpdateTargetBoxState();
 
             // 클램프에 붙들려 있는 동안은 시계를 세운다 — 홀드가 이륙 타임아웃과 접지 실패 판정을
             // 먹으면 준비 시간을 늘릴 때마다 미션 난이도가 같이 바뀐다.
@@ -106,18 +111,20 @@ namespace Simulation
             float distance = new Vector2(offset.x, offset.z).magnitude;
             MaxAltitude = Mathf.Max(MaxAltitude, Altitude);
             MaxDistance = Mathf.Max(MaxDistance, distance);
-            inTargetBox = UsesTargetBox && CalculateRocketBounds(out Bounds rocketBounds)
-                && TouchesOrOverlaps(rocketBounds, targetBoxBounds);
-            if (targetGuide != null) targetGuide.Tick(inTargetBox);
             var outcome = evaluator.Step(Time.fixedDeltaTime, Altitude, distance, Speed,
                 Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds, enableAutomaticFailure,
-                rocket.IsGrounded, rocket.Splashed, body.angularVelocity.magnitude * Mathf.Rad2Deg, inTargetBox);
+                rocket.IsGrounded, rocket.Splashed, body.angularVelocity.magnitude * Mathf.Rad2Deg, inTargetZone);
             Status = $"고도 {Altitude:0.0}m / 속력 {Speed:0.0}m/s\n거리 {distance:0.0}m / 체류 {evaluator.HoldSeconds:0.0}s / 총 연소 {rocket.TotalBurnSeconds:0.0}s";
             if (outcome != LaunchMissionOutcome.Running) Finish(outcome == LaunchMissionOutcome.Succeeded);
         }
 
         private void Update()
         {
+            if (evaluator != null && !returning && !IsExploding && (rocket == null || !rocket.Launched))
+            {
+                UpdateTargetBoxState();
+            }
+
             if (!IsExploding || returning || waitForExplosionCompletion) return;
             explosionTime += Time.unscaledDeltaTime;
             if (explosionTime >= placeholderExplosionSeconds) CompleteSelfDestruction();
@@ -204,9 +211,22 @@ namespace Simulation
             return true;
         }
 
-        private static bool TouchesOrOverlaps(Bounds a, Bounds b) =>
-            a.min.x <= b.max.x && a.max.x >= b.min.x
-            && a.min.y <= b.max.y && a.max.y >= b.min.y
-            && a.min.z <= b.max.z && a.max.z >= b.min.z;
+        private void UpdateTargetBoxState()
+        {
+            if (!UsesTargetBox)
+            {
+                return;
+            }
+
+            inTargetZone = CalculateRocketBounds(out Bounds rocketBounds)
+                && TouchesSphere(rocketBounds, targetZoneCenter, targetZoneRadius);
+            if (targetGuide != null) targetGuide.Tick(inTargetZone);
+        }
+
+        private static bool TouchesSphere(Bounds bounds, Vector3 center, float radius)
+        {
+            Vector3 closest = bounds.ClosestPoint(center);
+            return (closest - center).sqrMagnitude <= radius * radius;
+        }
     }
 }
