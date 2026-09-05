@@ -1298,6 +1298,123 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void OperationUI_FundsFeedback_InitialAndUnchangedRefreshStayNeutral()
+        {
+            var host = new GameObject("Research UI Funds Feedback Test Host");
+
+            try
+            {
+                ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
+                controller.InitializeForTests();
+                var funds = (TMP_Text)FindText(host.transform, "Funds");
+                Color baseColor = funds.color;
+                Vector3 baseScale = funds.rectTransform.localScale;
+
+                Assert.That(controller.IsFundsFeedbackActiveForTests(), Is.False);
+                controller.RefreshForTests();
+
+                Assert.That(controller.IsFundsFeedbackActiveForTests(), Is.False);
+                AssertColor(funds.color, baseColor);
+                Assert.That(Vector3.Distance(funds.rectTransform.localScale, baseScale), Is.LessThan(0.001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void OperationUI_FundsFeedback_IncreaseTurnsGreenAndGrowsThenRestores()
+        {
+            var host = new GameObject("Research UI Funds Increase Test Host");
+
+            try
+            {
+                ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
+                controller.InitializeForTests();
+                var funds = (TMP_Text)FindText(host.transform, "Funds");
+                Color baseColor = funds.color;
+                Vector3 baseScale = funds.rectTransform.localScale;
+
+                FindButton(host.transform, "WaitQuarterButton").onClick.Invoke();
+                Assert.That(controller.IsFundsFeedbackActiveForTests(), Is.True);
+                controller.GotoFundsFeedbackForTests(0.25f);
+
+                AssertColor(funds.color, new Color32(91, 214, 123, 255));
+                Assert.That(Vector3.Distance(funds.rectTransform.localScale, baseScale * 1.15f), Is.LessThan(0.001f));
+
+                controller.CompleteFundsFeedbackForTests();
+                Assert.That(controller.IsFundsFeedbackActiveForTests(), Is.False);
+                AssertColor(funds.color, baseColor);
+                Assert.That(Vector3.Distance(funds.rectTransform.localScale, baseScale), Is.LessThan(0.001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void OperationUI_FundsFeedback_DecreaseTurnsRedWithoutScalingThenRestores()
+        {
+            var host = new GameObject("Research UI Funds Decrease Test Host");
+
+            try
+            {
+                ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
+                controller.InitializeForTests();
+                var funds = (TMP_Text)FindText(host.transform, "Funds");
+                Color baseColor = funds.color;
+                Vector3 baseScale = funds.rectTransform.localScale;
+
+                FindButton(host.transform, "CreateEnginePresetButton").onClick.Invoke();
+                Assert.That(controller.IsFundsFeedbackActiveForTests(), Is.True);
+                controller.GotoFundsFeedbackForTests(0.25f);
+
+                AssertColor(funds.color, new Color32(239, 91, 91, 255));
+                Assert.That(Vector3.Distance(funds.rectTransform.localScale, baseScale), Is.LessThan(0.001f));
+
+                controller.CompleteFundsFeedbackForTests();
+                Assert.That(controller.IsFundsFeedbackActiveForTests(), Is.False);
+                AssertColor(funds.color, baseColor);
+                Assert.That(Vector3.Distance(funds.rectTransform.localScale, baseScale), Is.LessThan(0.001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void OperationUI_FundsFeedback_NewChangeInterruptsAndRestartsFromBaseVisual()
+        {
+            var host = new GameObject("Research UI Funds Interrupt Test Host");
+
+            try
+            {
+                ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
+                controller.InitializeForTests();
+                var funds = (TMP_Text)FindText(host.transform, "Funds");
+                Vector3 baseScale = funds.rectTransform.localScale;
+
+                FindButton(host.transform, "WaitQuarterButton").onClick.Invoke();
+                controller.GotoFundsFeedbackForTests(0.25f);
+                Assert.That(Vector3.Distance(funds.rectTransform.localScale, baseScale * 1.15f), Is.LessThan(0.001f));
+
+                FindButton(host.transform, "CreateEnginePresetButton").onClick.Invoke();
+                Assert.That(Vector3.Distance(funds.rectTransform.localScale, baseScale), Is.LessThan(0.001f));
+                controller.GotoFundsFeedbackForTests(0.25f);
+
+                AssertColor(funds.color, new Color32(239, 91, 91, 255));
+                Assert.That(Vector3.Distance(funds.rectTransform.localScale, baseScale), Is.LessThan(0.001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
         public void OperationUI_UsesPreplacedEngineCardsBeforeConfiguredFallback()
         {
             var host = new GameObject("Research UI Test Host");
@@ -1649,6 +1766,14 @@ namespace Border.Research.Tests
             PropertyInfo property = text.GetType().GetProperty("text");
             Assert.That(property, Is.Not.Null);
             return (string)property.GetValue(text);
+        }
+
+        private static void AssertColor(Color actual, Color expected)
+        {
+            Assert.That(actual.r, Is.EqualTo(expected.r).Within(0.001f));
+            Assert.That(actual.g, Is.EqualTo(expected.g).Within(0.001f));
+            Assert.That(actual.b, Is.EqualTo(expected.b).Within(0.001f));
+            Assert.That(actual.a, Is.EqualTo(expected.a).Within(0.001f));
         }
     }
 }
