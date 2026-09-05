@@ -21,7 +21,6 @@ namespace Simulation
         public Vector3 TargetBoxCenterOffset { get; set; } = new(0f, 260f, 130f);
         public Vector3 TargetBoxSize { get; set; } = Vector3.one * 168f;
         public float RequiredHoldSeconds { get; set; } = 3f;
-        public float MaxAttitudeError { get; set; } = 30f;
         public float MaxHoldSpeed { get; set; } = 50f;
         public float MaxBurnSeconds { get; set; } = 8f;
         public float FailureSpeed { get; set; } = 1f;
@@ -44,7 +43,6 @@ namespace Simulation
             RequirePositive(copy.TargetBoxSize.y, nameof(TargetBoxSize));
             RequirePositive(copy.TargetBoxSize.z, nameof(TargetBoxSize));
             RequireNonnegative(copy.RequiredHoldSeconds, nameof(RequiredHoldSeconds));
-            RequireNonnegative(copy.MaxAttitudeError, nameof(MaxAttitudeError));
             RequireNonnegative(copy.MaxHoldSpeed, nameof(MaxHoldSpeed));
             RequireNonnegative(copy.MaxBurnSeconds, nameof(MaxBurnSeconds));
             RequireNonnegative(copy.FailureSpeed, nameof(FailureSpeed));
@@ -150,8 +148,7 @@ namespace Simulation
                 && horizontalDistance <= _rules.TargetHorizontalMax;
             bool holdMission = _missionId == LaunchMissionId.ZoneHold
                 || _missionId == LaunchMissionId.LowPowerZoneHold;
-            bool holding = holdMission && inZone && attitudeError <= _rules.MaxAttitudeError
-                && speed <= _rules.MaxHoldSpeed
+            bool holding = holdMission && inZone && speed <= _rules.MaxHoldSpeed
                 && (_missionId != LaunchMissionId.LowPowerZoneHold || totalBurnSeconds <= _rules.MaxBurnSeconds);
             HoldSeconds = holding ? HoldSeconds + deltaTime : 0f;
             bool settled = evaluateFailure && !holding && !hasSplashed && isGrounded
@@ -235,7 +232,7 @@ namespace Simulation
                 case LaunchMissionId.TargetZone:
                     return $"목표 구역 진입 ({r.TargetBoxSize.x:0.##} × {r.TargetBoxSize.y:0.##} × {r.TargetBoxSize.z:0.##} m)";
                 default:
-                    string hold = $"목표 구역 안에서 자세 오차 {r.MaxAttitudeError:0.##}° 이하, 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
+                    string hold = $"목표 구역 안에서 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
                     return missionId == LaunchMissionId.LowPowerZoneHold
                         ? hold + $" (전체 엔진 누적 연소 시간 {r.MaxBurnSeconds:0.##}초 이하)" : hold;
             }

@@ -36,21 +36,20 @@ namespace Simulation.Tests
         public void HoldMission_RequiresThreeContinuousSeconds(LaunchMissionId mission)
         {
             var evaluator = new LaunchMissionEvaluator(mission);
-            Assert.That(evaluator.Step(2f, 200f, 0f, 50f, 30f, 8f, inTargetBox: true),
+            Assert.That(evaluator.Step(2f, 200f, 0f, 50f, 180f, 8f, inTargetBox: true),
                 Is.EqualTo(LaunchMissionOutcome.Running));
             Assert.That(evaluator.HoldSeconds, Is.EqualTo(2f));
-            Assert.That(evaluator.Step(1f, 200f, 0f, 50f, 30f, 8f, inTargetBox: true),
+            Assert.That(evaluator.Step(1f, 200f, 0f, 50f, 180f, 8f, inTargetBox: true),
                 Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
-        [TestCase(false, 10f, 0f)]
-        [TestCase(true, 50.01f, 0f)]
-        [TestCase(true, 10f, 30.01f)]
-        public void HoldMission_ResetsOnAnyBrokenCondition(bool inTargetBox, float speed, float angle)
+        [TestCase(false, 10f)]
+        [TestCase(true, 50.01f)]
+        public void HoldMission_ResetsOnAnyBrokenCondition(bool inTargetBox, float speed)
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold);
             evaluator.Step(2f, 200f, 0f, 10f, 0f, 0f, inTargetBox: true);
-            Assert.That(evaluator.Step(0.1f, 200f, 0f, speed, angle, 0f, inTargetBox: inTargetBox),
+            Assert.That(evaluator.Step(0.1f, 200f, 0f, speed, 0f, 0f, inTargetBox: inTargetBox),
                 Is.EqualTo(LaunchMissionOutcome.Running));
             Assert.That(evaluator.HoldSeconds, Is.Zero);
             Assert.That(evaluator.Step(2f, 200f, 0f, 10f, 0f, 0f, inTargetBox: true),
