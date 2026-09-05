@@ -72,10 +72,13 @@ namespace Border.Prologue.Tests
         public IEnumerator Skip_ImmediatelyStopsKeys_AndDoesNotRestartThem()
         {
             root.SetActive(true);
+            var overlayGroup = controller.GetComponent<CanvasGroup>();
+            Assert.IsTrue(overlayGroup.blocksRaycasts);
             Call("PlayTypingSound", "ABC", 0, 1);
             Assert.Greater(Keys(), 0);
             controller.Skip();
             Assert.AreEqual(0, Keys());
+            Assert.IsFalse(overlayGroup.blocksRaycasts, "Skipped prologue fade must not keep blocking the operation UI.");
             yield return new WaitForSecondsRealtime(0.2f);
             Assert.IsTrue(controller == null);
             Assert.AreEqual(0, Keys());

@@ -38,6 +38,7 @@ namespace Border.Prologue
             }
 
             overlayGroup.alpha = 1f;
+            overlayGroup.blocksRaycasts = true;
             lineText.text = string.Empty;
             lineText.alpha = 0f;
             routine = StartCoroutine(PlayRoutine());
@@ -96,6 +97,8 @@ namespace Border.Prologue
         {
             StopTypingSound();
             routine = null; // Skip() 재진입 차단
+            overlayGroup.blocksRaycasts = false;
+            overlayGroup.interactable = false;
             lineText.alpha = 0f;
             lineText.maxVisibleCharacters = int.MaxValue;
 
