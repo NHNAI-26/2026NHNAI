@@ -651,6 +651,18 @@ namespace Border.Editor.Research
 
             bool changed = false;
             Transform child = parent.Find(childName);
+            if (child == null && childName == OperationCanvasName)
+            {
+                foreach (Transform candidate in parent)
+                {
+                    if (PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(candidate.gameObject) != prefabPath) continue;
+                    if (registerUndo) Undo.RecordObject(candidate.gameObject, "Reuse Research Operation Canvas");
+                    candidate.name = childName;
+                    child = candidate;
+                    changed = true;
+                    break;
+                }
+            }
             if (child == null)
             {
                 GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);

@@ -213,10 +213,11 @@ namespace Border.Research
 
             GameObject instance;
             bool createdInstance = false;
-            Transform existingCanvas = transform.Find("ResearchOperationCanvas");
+            Transform existingCanvas = transform.Find("ResearchOperationCanvas") ?? transform.Find("ResearchOperationScreen");
             if (existingCanvas != null)
             {
                 instance = existingCanvas.gameObject;
+                instance.name = "ResearchOperationCanvas";
             }
             else if (CanCreateRuntimeUiFallback())
             {

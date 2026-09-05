@@ -300,6 +300,7 @@ namespace Border.Research.Editor
                 detail.fontSizeMin = 10f;
                 detail.fontSizeMax = 12f;
             }
+            ResearchUiPrefabBuilder.LayoutEngineNameEditor(root);
         }
 
         private static void AddGauge(Transform parent, string name, float maxValue, Sprite[] sprites)
