@@ -17,9 +17,8 @@ namespace Border.UI
         [SerializeField] private CanvasGroup contentGroup;
         [SerializeField] private CanvasGroup backdrop;
         [SerializeField] private Image newspaperImage;
-        [SerializeField] private Sprite newspaperSprite;
-        [SerializeField] private Sprite mailSprite;
-        [SerializeField] private Sprite fallbackSprite;
+        [SerializeField] private LaunchResultMedium medium;
+        [SerializeField] private Sprite presentationSprite;
         [SerializeField] private TMP_Text headlineText;
         [SerializeField] private TMP_Text editionText;
         [SerializeField] private TMP_Text articleText;
@@ -51,20 +50,6 @@ namespace Border.UI
         private Action closeCallback;
         private bool closeCallbackArmed;
         private Sprite activeSprite;
-        private LaunchResultMedium activeMedium = LaunchResultMedium.Newspaper;
-        private bool layoutCached;
-        private RectLayout headlineLayout;
-        private RectLayout editionLayout;
-        private RectLayout articleLayout;
-        private RectLayout effectsLayout;
-        private RectLayout effectsBackgroundLayout;
-        private RectLayout photoLayout;
-        private RectLayout photoFallbackLayout;
-        private TextLayout headlineTextLayout;
-        private TextLayout editionTextLayout;
-        private TextLayout articleTextLayout;
-        private TextLayout effectsTextLayout;
-        private Material photoMaterial;
 
         public bool IsShowing => view != null && view.activeSelf;
         public bool IsAnimating => sequence != null && sequence.IsActive();
@@ -74,7 +59,7 @@ namespace Border.UI
 
         public void SetSprite(Sprite sprite)
         {
-            newspaperSprite = sprite;
+            presentationSprite = sprite;
             activeSprite = null;
             ApplySprite();
         }
@@ -82,16 +67,19 @@ namespace Border.UI
         public void ShowSprite(Sprite sprite)
         {
             activeSprite = sprite;
-            activeMedium = LaunchResultMedium.Newspaper;
             ApplySprite();
             Show();
         }
 
         public void Present(LaunchNewspaperArticle article, Texture photo, Action onClosed)
         {
-            activeMedium = article.Medium;
-            activeSprite = ResolveSprite(article.Medium);
-            ApplyPresentationLayout(article.Medium);
+            if (article.Medium != medium)
+            {
+                Debug.LogError($"{name} is configured for {medium} but received {article.Medium}.", this);
+                return;
+            }
+
+            activeSprite = presentationSprite;
             ApplyArticle(article, photo);
             closeCallback = onClosed;
             closeCallbackArmed = onClosed != null;
@@ -103,15 +91,8 @@ namespace Border.UI
         private void ApplySprite()
         {
             if (newspaperImage == null) return;
-            newspaperImage.sprite = activeSprite != null ? activeSprite : ResolveSprite(LaunchResultMedium.Newspaper);
+            newspaperImage.sprite = activeSprite != null ? activeSprite : presentationSprite;
             newspaperImage.preserveAspect = true;
-        }
-
-        private Sprite ResolveSprite(LaunchResultMedium medium)
-        {
-            if (medium == LaunchResultMedium.Mail && mailSprite != null) return mailSprite;
-            if (newspaperSprite != null) return newspaperSprite;
-            return fallbackSprite;
         }
 
         private void Awake() => ResetView();
@@ -131,7 +112,7 @@ namespace Border.UI
         [ContextMenu("Preview Reveal (Play Mode)")]
         public void Show()
         {
-            activeMedium = LaunchResultMedium.Newspaper;
+            activeSprite = presentationSprite;
             ShowInternal(clearCloseCallback: true);
         }
 
@@ -140,7 +121,6 @@ namespace Border.UI
             if (!Application.isPlaying || !isActiveAndEnabled || !CachePose()) return;
             if (clearCloseCallback) ClearCloseCallback();
             ResetView();
-            ApplyPresentationLayout(activeMedium);
             ApplySprite();
             view.SetActive(true);
             Canvas.ForceUpdateCanvases();
@@ -337,167 +317,5 @@ namespace Border.UI
             }
         }
 
-        private void ApplyPresentationLayout(LaunchResultMedium medium)
-        {
-            CacheLayout();
-            if (medium == LaunchResultMedium.Mail)
-            {
-                ApplyMailLayout();
-                return;
-            }
-
-            RestoreNewspaperLayout();
-        }
-
-        private void CacheLayout()
-        {
-            if (layoutCached) return;
-
-            headlineLayout = CaptureRect(headlineText != null ? headlineText.rectTransform : null);
-            editionLayout = CaptureRect(editionText != null ? editionText.rectTransform : null);
-            articleLayout = CaptureRect(articleText != null ? articleText.rectTransform : null);
-            effectsLayout = CaptureRect(effectsText != null ? effectsText.rectTransform : null);
-            effectsBackgroundLayout = CaptureRect(effectsBackground);
-            photoLayout = CaptureRect(photoImage != null ? photoImage.rectTransform : null);
-            photoFallbackLayout = CaptureRect(photoFallbackText != null ? photoFallbackText.rectTransform : null);
-            headlineTextLayout = CaptureText(headlineText);
-            editionTextLayout = CaptureText(editionText);
-            articleTextLayout = CaptureText(articleText);
-            effectsTextLayout = CaptureText(effectsText);
-            photoMaterial = photoImage != null ? photoImage.material : null;
-            layoutCached = true;
-        }
-
-        private void ApplyMailLayout()
-        {
-            SetRect(headlineText != null ? headlineText.rectTransform : null,
-                new Vector2(0.36f, 0.715f), new Vector2(0.93f, 0.79f));
-            SetRect(editionText != null ? editionText.rectTransform : null,
-                new Vector2(0.36f, 0.665f), new Vector2(0.93f, 0.705f));
-            SetRect(articleText != null ? articleText.rectTransform : null,
-                new Vector2(0.36f, 0.445f), new Vector2(0.93f, 0.645f));
-            SetRect(photoImage != null ? photoImage.rectTransform : null,
-                new Vector2(0.37f, 0.285f), new Vector2(0.59f, 0.425f));
-            SetRect(photoFallbackText != null ? photoFallbackText.rectTransform : null,
-                new Vector2(0.37f, 0.285f), new Vector2(0.59f, 0.425f));
-            SetRect(effectsBackground, new Vector2(0.35f, 0.13f), new Vector2(0.94f, 0.27f));
-            SetRect(effectsText != null ? effectsText.rectTransform : null,
-                new Vector2(0.37f, 0.15f), new Vector2(0.92f, 0.25f));
-
-            SetText(headlineText, 16f, 13f, 16f, TextAlignmentOptions.Left);
-            SetText(editionText, 11f, 9f, 11f, TextAlignmentOptions.Left);
-            SetText(articleText, 12f, 10f, 12f, TextAlignmentOptions.TopLeft);
-            SetText(effectsText, 11f, 9f, 11f, TextAlignmentOptions.TopLeft);
-
-            if (photoImage != null) photoImage.material = null;
-        }
-
-        private void RestoreNewspaperLayout()
-        {
-            ApplyRect(headlineText != null ? headlineText.rectTransform : null, headlineLayout);
-            ApplyRect(editionText != null ? editionText.rectTransform : null, editionLayout);
-            ApplyRect(articleText != null ? articleText.rectTransform : null, articleLayout);
-            ApplyRect(effectsText != null ? effectsText.rectTransform : null, effectsLayout);
-            ApplyRect(effectsBackground, effectsBackgroundLayout);
-            ApplyRect(photoImage != null ? photoImage.rectTransform : null, photoLayout);
-            ApplyRect(photoFallbackText != null ? photoFallbackText.rectTransform : null, photoFallbackLayout);
-            ApplyText(headlineText, headlineTextLayout);
-            ApplyText(editionText, editionTextLayout);
-            ApplyText(articleText, articleTextLayout);
-            ApplyText(effectsText, effectsTextLayout);
-
-            if (photoImage != null) photoImage.material = photoMaterial;
-        }
-
-        private static RectLayout CaptureRect(RectTransform rect)
-        {
-            if (rect == null) return default;
-
-            return new RectLayout
-            {
-                AnchorMin = rect.anchorMin,
-                AnchorMax = rect.anchorMax,
-                AnchoredPosition = rect.anchoredPosition,
-                SizeDelta = rect.sizeDelta,
-                Pivot = rect.pivot
-            };
-        }
-
-        private static void ApplyRect(RectTransform rect, RectLayout layout)
-        {
-            if (rect == null) return;
-
-            rect.anchorMin = layout.AnchorMin;
-            rect.anchorMax = layout.AnchorMax;
-            rect.anchoredPosition = layout.AnchoredPosition;
-            rect.sizeDelta = layout.SizeDelta;
-            rect.pivot = layout.Pivot;
-        }
-
-        private static void SetRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax)
-        {
-            if (rect == null) return;
-
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = Vector2.zero;
-            rect.pivot = new Vector2(0.5f, 0.5f);
-        }
-
-        private static TextLayout CaptureText(TMP_Text text)
-        {
-            if (text == null) return default;
-
-            return new TextLayout
-            {
-                FontSize = text.fontSize,
-                FontSizeMin = text.fontSizeMin,
-                FontSizeMax = text.fontSizeMax,
-                Alignment = text.alignment
-            };
-        }
-
-        private static void ApplyText(TMP_Text text, TextLayout layout)
-        {
-            if (text == null) return;
-
-            text.fontSize = layout.FontSize;
-            text.fontSizeMin = layout.FontSizeMin;
-            text.fontSizeMax = layout.FontSizeMax;
-            text.alignment = layout.Alignment;
-        }
-
-        private static void SetText(
-            TMP_Text text,
-            float fontSize,
-            float fontSizeMin,
-            float fontSizeMax,
-            TextAlignmentOptions alignment)
-        {
-            if (text == null) return;
-
-            text.fontSize = fontSize;
-            text.fontSizeMin = fontSizeMin;
-            text.fontSizeMax = fontSizeMax;
-            text.alignment = alignment;
-        }
-
-        private struct RectLayout
-        {
-            public Vector2 AnchorMin;
-            public Vector2 AnchorMax;
-            public Vector2 AnchoredPosition;
-            public Vector2 SizeDelta;
-            public Vector2 Pivot;
-        }
-
-        private struct TextLayout
-        {
-            public float FontSize;
-            public float FontSizeMin;
-            public float FontSizeMax;
-            public TextAlignmentOptions Alignment;
-        }
     }
 }

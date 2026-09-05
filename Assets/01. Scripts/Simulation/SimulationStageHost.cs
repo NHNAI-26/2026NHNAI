@@ -167,7 +167,6 @@ namespace Simulation
 
             loaded = false;
             busy = false;
-            ResearchFlowSession.GetOrCreate().PublishPendingLaunchOutcome();
         }
 
         private bool BeginLaunch(Rocket rocket)
@@ -246,11 +245,32 @@ namespace Simulation
                 {
                     if (presentation != null) presentation.End();
                 }
-                yield return UnloadRoutine();
+                yield return ShowResultBeforeUnload();
                 yield break;
             }
             yield return new WaitForSecondsRealtime(launchResultHoldSeconds);
-            yield return UnloadRoutine();
+            yield return ShowResultBeforeUnload();
+        }
+
+        private IEnumerator ShowResultBeforeUnload()
+        {
+            while (photoCapture != null && photoCapture.IsCapturing) yield return null;
+
+            if (research == null)
+            {
+                yield return UnloadRoutine();
+                yield break;
+            }
+
+            research.ShowLaunchResultOverlay(
+                ResearchFlowSession.GetOrCreate().LastLaunchResult,
+                ContinueUnloadAfterResult);
+        }
+
+        private void ContinueUnloadAfterResult()
+        {
+            if (!loaded) return;
+            StartCoroutine(UnloadRoutine());
         }
 
         private static Camera FindSceneCamera(Scene scene)

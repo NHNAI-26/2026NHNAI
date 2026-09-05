@@ -270,6 +270,25 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void LaunchResultOverlay_WaitsForDismissalBeforeInvokingStageContinuation()
+        {
+            CreateOperation();
+            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
+            session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
+            session.CommitPendingDesignLaunch(out ResearchLaunchResultData result);
+            bool continued = false;
+
+            operation.ShowLaunchResultOverlay(result, () => continued = true);
+
+            Assert.That(report.gameObject.activeSelf, Is.True);
+            Assert.That(continued, Is.False);
+            Invoke(report, "Respond");
+            Assert.That(continued, Is.True);
+            Assert.That(session.HasUnacknowledgedLaunchResult, Is.False);
+            Assert.That(report.gameObject.activeSelf, Is.False);
+        }
+
+        [Test]
         public void MainScene_HasWiredSessionAndSeparateInactiveOutcomePrefabs()
         {
             var scene = EditorSceneManager.OpenPreviewScene("Assets/00. Scenes/01_Main.unity");

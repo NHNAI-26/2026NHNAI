@@ -39,6 +39,8 @@ Unity.exe -batchmode -projectPath . -runTests -testPlatform PlayMode -testResult
 
 Use `dotnet build` for C# compile feedback; use batchmode for Unity behavior.
 
+Do not run `dotnet build`, Unity compilation, or Unity batchmode tests for trivial edits, small documentation changes, formatting-only work, or read-only investigation. When compilation or tests are needed, batch related changes first and run the fewest meaningful verification commands so the user can keep testing in Unity without repeated interruptions.
+
 ## Coding Style & Naming Conventions
 
 Use four-space indentation. Use PascalCase for types, methods, and public properties; camelCase for locals and parameters; `_camelCase` for private serialized fields when matching nearby code. Keep pure C# separate from Unity scene/component behavior.

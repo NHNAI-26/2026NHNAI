@@ -130,7 +130,7 @@ namespace Border.Research.Tests
             Assert.That(publicArticle.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
             Assert.That(privateArticle.Medium, Is.EqualTo(LaunchResultMedium.Mail));
             Assert.That(privateWhistleblower.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
-            Assert.That(publicCleanTelemetry.Medium, Is.EqualTo(LaunchResultMedium.Mail));
+            Assert.That(publicCleanTelemetry.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
             Assert.That(finalArticle.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
         }
 
@@ -162,7 +162,15 @@ namespace Border.Research.Tests
                 Assert.That(body, Does.Not.Contain("책임자님,"));
             }
 
-            Assert.That(body, Does.Contain(outcomeEvent.Description));
+            if (article.Medium == LaunchResultMedium.Mail)
+            {
+                Assert.That(body, Does.Contain(outcomeEvent.Description));
+            }
+            else
+            {
+                Assert.That(body, Does.Not.Contain("책임자님,"));
+                Assert.That(body, Does.Not.Contain("했습니다."));
+            }
             Assert.That(body, Does.Not.Contain("미션:"));
             Assert.That(body, Does.Not.Contain("판정:"));
             Assert.That(body, Does.Not.Contain("종료 사유:"));
@@ -187,6 +195,7 @@ namespace Border.Research.Tests
                     visibility: TestVisibility.Private), "저고도 안정화");
 
             Assert.That(article.Medium, Is.EqualTo(LaunchResultMedium.Mail));
+            Assert.That(article.Heading, Is.EqualTo("[시험 결과] 저고도 안정화 - 비공개 성능 개선 확인"));
             Assert.That(article.Edition, Is.EqualTo("2024년 2분기 내부 메일"));
             Assert.That(article.Body, Does.StartWith("책임자님,"));
             Assert.That(article.Body, Does.Contain("저고도 안정화 시험 결과를 확인했습니다."));
@@ -211,23 +220,15 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void ResultReport_MissingMailSpriteFallsBackToNewspaperSprite()
+        public void ResultReport_ContainsSeparateNewspaperAndMailPrefabs()
         {
             ResearchResultReportController report = CreateReport();
-            ResearchLaunchResultData result = CreateResult(null, visibility: TestVisibility.Private);
-            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
-            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            FieldInfo mailSpriteField = typeof(NewspaperReveal).GetField("mailSprite", flags);
-            mailSpriteField.SetValue(newspaper, null);
+            NewspaperReveal[] reveals = report.GetComponentsInChildren<NewspaperReveal>(true);
 
-            report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
-
-            Sprite newspaperSprite = (Sprite)typeof(NewspaperReveal).GetField("newspaperSprite", flags).GetValue(newspaper);
-            Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(newspaper);
-
-            Assert.That(LaunchNewspaperArticle.Create(result, "저고도 안정화").Medium, Is.EqualTo(LaunchResultMedium.Mail));
-            Assert.That(mailSpriteField.GetValue(newspaper), Is.Null);
-            Assert.That(image.sprite, Is.SameAs(newspaperSprite));
+            Assert.That(reveals, Has.Length.EqualTo(2));
+            Assert.That(FindReveal(report, LaunchResultMedium.Newspaper).name, Is.EqualTo("NewspaperReveal"));
+            Assert.That(FindReveal(report, LaunchResultMedium.Mail).name, Is.EqualTo("MailReveal"));
+            Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/MailReveal.prefab"), Is.Not.Null);
         }
 
         [Test]
@@ -238,11 +239,11 @@ namespace Border.Research.Tests
 
             report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
 
-            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
+            var mail = FindReveal(report, LaunchResultMedium.Mail);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             Sprite emailSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/05. Arts/UI/Email/Email.png");
-            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("mailSprite", flags).GetValue(newspaper);
-            Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(newspaper);
+            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("presentationSprite", flags).GetValue(mail);
+            Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(mail);
 
             Assert.That(emailSprite, Is.Not.Null);
             Assert.That(mailSprite, Is.SameAs(emailSprite));
@@ -261,9 +262,9 @@ namespace Border.Research.Tests
             TMP_Text body = FindText(report.gameObject, "Body");
             TMP_Text effects = FindText(report.gameObject, "Effects");
             TMP_Text edition = FindText(report.gameObject, "Edition");
-            RawImage photo = report.GetComponentsInChildren<RawImage>(true).Single(item => item.name == "Photo");
-            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
-            RectTransform effectsBackground = GetPrivateField<RectTransform>(newspaper, "effectsBackground");
+            RawImage photo = FindSelectedComponent<RawImage>(report.gameObject, "Photo");
+            var mail = FindReveal(report, LaunchResultMedium.Mail);
+            RectTransform effectsBackground = GetPrivateField<RectTransform>(mail, "effectsBackground");
 
             Assert.That(headline.rectTransform.anchorMin.x, Is.GreaterThan(0.3f));
             Assert.That(headline.rectTransform.anchorMax.y, Is.LessThan(0.82f));
@@ -284,14 +285,12 @@ namespace Border.Research.Tests
         public void ResultReport_NewspaperRestoresSavedLayoutAndPrintedPhoto()
         {
             ResearchResultReportController report = CreateReport();
-            ResearchLaunchResultData privateResult = CreateResult(null, visibility: TestVisibility.Private);
             ResearchLaunchResultData publicResult = CreateResult(null, visibility: TestVisibility.Public);
 
-            report.Initialize(ResearchFlowSession.GetOrCreate(), privateResult, null);
             report.Initialize(ResearchFlowSession.GetOrCreate(), publicResult, null);
 
             TMP_Text headline = FindText(report.gameObject, "Headline");
-            RawImage photo = report.GetComponentsInChildren<RawImage>(true).Single(item => item.name == "Photo");
+            RawImage photo = FindSelectedComponent<RawImage>(report.gameObject, "Photo");
 
             Assert.That(headline.rectTransform.anchorMin.x, Is.EqualTo(0.24772727f).Within(0.0001f));
             Assert.That(headline.rectTransform.anchorMax.y, Is.EqualTo(0.9446773f).Within(0.0001f));
@@ -533,8 +532,23 @@ namespace Border.Research.Tests
 
         private static TMP_Text FindText(GameObject root, string name)
         {
-            TMP_Text text = root.GetComponentsInChildren<TMP_Text>(true).Single(item => item.name == name);
-            return text;
+            return FindSelectedComponent<TMP_Text>(root, name);
+        }
+
+        private static T FindSelectedComponent<T>(GameObject root, string name) where T : Component
+        {
+            return root.GetComponentsInChildren<T>(true).Single(item =>
+            {
+                NewspaperReveal reveal = item.GetComponentInParent<NewspaperReveal>(true);
+                return item.name == name && reveal != null && reveal.gameObject.activeSelf;
+            });
+        }
+
+        private static NewspaperReveal FindReveal(ResearchResultReportController report, LaunchResultMedium medium)
+        {
+            FieldInfo field = typeof(NewspaperReveal).GetField("medium", BindingFlags.Instance | BindingFlags.NonPublic);
+            return report.GetComponentsInChildren<NewspaperReveal>(true)
+                .Single(item => (LaunchResultMedium)field.GetValue(item) == medium);
         }
 
         private static TMP_Text FindButtonLabel(GameObject root, string buttonName)
