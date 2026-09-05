@@ -607,6 +607,124 @@ namespace Simulation.Tests
             Assert.IsFalse(flame.isEmitting, "연료가 떨어지면 불꽃이 꺼져야 한다.");
         }
 
+        private ParticleSystem AddSmoke(RocketPart part, string field, bool loop)
+        {
+            var go = new GameObject(field);
+            go.transform.SetParent(part.transform);
+            var system = go.AddComponent<ParticleSystem>();
+            system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = system.main;
+            main.playOnAwake = false;
+            main.loop = loop;
+            SetField(part, field, system);
+            return system;
+        }
+
+        [Test]
+        public void SmokeSingle_HoldAndBurn_StopOnFuelExhaustionWithoutRestart()
+        {
+            RocketPart part = CreateEngine(Stats(10f, 1000f, BaselineOutput, 100f));
+            var single = AddSmoke(part, "smokeSingle", true);
+            var fail = AddSmoke(part, "smokeFail", false);
+            part.Prepare(new DeterministicRng());
+            Assert.IsFalse(single.isEmitting);
+            part.HoldExhaust(0.5f);
+            Assert.IsTrue(single.isEmitting);
+            Assert.AreEqual(10f, part.Remaining);
+            part.Tick(0.25f);
+            Assert.IsTrue(single.isEmitting);
+            Assert.IsTrue(part.Tick(0.25f), "마지막 연료의 추력은 유지한다.");
+            Assert.IsFalse(single.isEmitting, "연료 소진 프레임에 방출을 중지한다.");
+            part.HoldExhaust(1f);
+            part.Tick(0.25f);
+            Assert.IsFalse(single.isEmitting);
+            Assert.IsFalse(fail.isEmitting, "연료 소진은 시동 실패가 아니다.");
+        }
+
+        [Test]
+        public void SmokeFail_PlaysOnceOnFailedPrepare_AndClearsOnSuccessfulRetry()
+        {
+            RocketPart part = CreateEngine(Stats(10f, 1000f, BaselineOutput, 0f));
+            var single = AddSmoke(part, "smokeSingle", true);
+            var fail = AddSmoke(part, "smokeFail", false);
+            part.Prepare(new DeterministicRng());
+            Assert.IsTrue(fail.isEmitting);
+            Assert.IsFalse(single.isEmitting);
+            fail.Simulate(12f, true, false, true);
+            Assert.IsFalse(fail.isEmitting);
+            Assert.AreEqual(0, fail.particleCount);
+            part.HoldExhaust(1f);
+            part.Tick(0.25f);
+            Assert.IsFalse(fail.isEmitting, "Tick과 홀드는 실패 연출을 재시작하지 않는다.");
+            Assert.IsFalse(single.isEmitting);
+            part.Prepare(new DeterministicRng());
+            Assert.IsTrue(fail.isEmitting, "새 발사의 실패는 다시 연출한다.");
+            part.ApplyPreset(Stats(10f, 1000f, BaselineOutput, 100f));
+            part.Prepare(new DeterministicRng());
+            Assert.IsFalse(fail.IsAlive(true));
+            part.Tick(0.1f);
+            Assert.IsTrue(single.isEmitting);
+        }
+
+        [Test]
+        public void Smoke_ShutdownStopsBothEffects_AndEmptyTankCannotStartSingle()
+        {
+            RocketPart part = CreateEngine(Stats(0f, 1000f, BaselineOutput, 100f));
+            var single = AddSmoke(part, "smokeSingle", true);
+            var fail = AddSmoke(part, "smokeFail", false);
+            part.Prepare(new DeterministicRng());
+            part.HoldExhaust(1f);
+            Assert.IsFalse(single.isEmitting);
+            Assert.IsFalse(fail.isEmitting);
+            single.Play();
+            fail.Play();
+            part.Shutdown();
+            Assert.IsFalse(single.isEmitting);
+            Assert.IsFalse(fail.isEmitting);
+        }
+
+        [Test]
+        public void Smoke_MeshResizeScalesBothEffects_WithoutAccumulatingOnRefit()
+        {
+            RocketPart part = CreateEngine(Stats(10f, 1000f, BaselineOutput, 100f));
+            var box = part.GetComponent<BoxCollider>();
+            box.size = Vector3.one;
+            var single = AddSmoke(part, "smokeSingle", true);
+            var fail = AddSmoke(part, "smokeFail", false);
+            var mesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            mesh.transform.SetParent(part.transform);
+            mesh.transform.localScale = new Vector3(2f, 4f, 2f);
+            SetField(part, "meshRoot", mesh.transform);
+            float initialSize = single.main.startSizeMultiplier;
+            float initialFailRadius = fail.shape.radius;
+            Invoke(part, "FitToMesh");
+            Assert.AreEqual(initialSize * 2f, single.main.startSizeMultiplier, 0.001f);
+            Assert.AreEqual(initialFailRadius * 2f, fail.shape.radius, 0.001f);
+            Assert.AreEqual(new Vector3(0f, -2f, 0f), single.transform.localPosition);
+            Assert.AreEqual(single.transform.localPosition, fail.transform.localPosition);
+            Invoke(part, "FitToMesh");
+            Assert.AreEqual(initialSize * 2f, single.main.startSizeMultiplier, 0.001f);
+        }
+
+        [Test]
+        public void RocketEnginePrefab_BindsSmokeEffects_WithControlledPlayback()
+        {
+            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/03. Prefabs/Simulation/RocketEngine.prefab");
+            var part = prefab.GetComponent<RocketPart>();
+            var serialized = new UnityEditor.SerializedObject(part);
+            var single = serialized.FindProperty("smokeSingle").objectReferenceValue as ParticleSystem;
+            var fail = serialized.FindProperty("smokeFail").objectReferenceValue as ParticleSystem;
+            Assert.IsNotNull(single);
+            Assert.IsNotNull(fail);
+            Assert.AreEqual("Smoke_Single", single.name);
+            Assert.AreEqual("Smoke_Fail", fail.name);
+            Assert.IsFalse(single.main.playOnAwake);
+            Assert.IsFalse(fail.main.playOnAwake);
+            Assert.IsTrue(single.main.loop);
+            Assert.IsFalse(fail.main.loop);
+        }
+
         [Test]
         public void PresetLibrary_CapsSlotsAtTen()
         {
