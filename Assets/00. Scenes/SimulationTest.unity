@@ -225,6 +225,9 @@ MonoBehaviour:
   holdSeconds: 2.5
   bounceRenderer: {fileID: 2017519178}
   bounceAmplitude: 0.25
+  assistedLiftHeight: 3
+  assistedLiftSeconds: 2.5
+  physicsBlendSeconds: 1
   waterLevel: -8.9
   waterDamping: 4
   sinkDepth: 30
@@ -585,6 +588,63 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &1921207887
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7790885957663122227, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9095440140045658871, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
+      propertyPath: m_Name
+      value: RocketDesignUI
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: f79fada08dad5e34196d9deb59d800e9, type: 3}
 --- !u!1001 &1937180463
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1009,3 +1069,4 @@ SceneRoots:
   - {fileID: 2037640413}
   - {fileID: 1937180463}
   - {fileID: 2742493699025380440}
+  - {fileID: 1921207887}

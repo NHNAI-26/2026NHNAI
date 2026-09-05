@@ -4,20 +4,24 @@ using Border.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace Simulation
 {
     /// <summary>
     /// 설계 화면 UI: 좌측 엔진 프리셋 패널(호버 스탯 + 드래그로 꺼내기)과 선택 부품의 이동·회전 버튼.
-    /// 연구 운영 화면과 같은 방식으로 UGUI 를 코드에서 만들고 런타임에 스폰한다 — 씬을 건드리지 않는다.
-    /// 기획 근거는 <c>docs/specs/rocket-design-ui-spec.md</c>.
+    ///
+    /// 화면 자체는 <c>Assets/03. Prefabs/UI/Simulation/RocketDesignUI.prefab</c> 에 저작돼 있고
+    /// <c>SimulationTest</c> 씬에 인스턴스로 놓여 있다. 이 컴포넌트는 그것을 짓지 않는다 —
+    /// <see cref="BindInterface"/> 로 자식을 이름으로 잡고 <see cref="WireInterface"/> 로 리스너·
+    /// 커서 아이콘·프리셋 목록만 채운다. 셋 다 씬 객체나 런타임 상태를 가리켜 프리팹에 못 담기는 것들이다.
+    /// 예외는 <c>DesignStageTester</c> 용 화면으로, 그쪽만 아직 <see cref="BakeTesterInterface"/> 가
+    /// 코드로 굽는다. 기획 근거는 <c>docs/specs/rocket-design-ui-spec.md</c>.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class RocketDesignUI : MonoBehaviour
     {
-        private const string TargetSceneName = "SimulationTest";
+        private const string CanvasName = "RocketDesignCanvas";
 
         // 버튼 바를 부품 중심 위로 띄우는 세로 간격(캔버스 단위). 기즈모가 화면상 고정
         // 크기(720 기준 반경 약 72)라 상수 하나로 모든 줌에서 통한다 — 90 이면 +Y 핸들 끝을
@@ -31,19 +35,10 @@ namespace Simulation
         // 미션 컨트롤에서는 패널을 화면 가장자리와 서로에게 딱 붙인다. 카메라가 뷰포트 사각형만
         // 그리므로 그 밖은 아무도 지우지 않고 이전 프레임 픽셀이 그대로 남는다 — 여백을 두면 그 틈으로
         // 찌꺼기가 보인다. 오버레이 캔버스는 3D 뷰 위에 그려지므로 전체 화면 배경으로 덮을 수도 없다.
-        private const float Margin = 16f; // SimulationTest 단독 재생 전용
-        private const float BarHeight = 64f;
-        private const float DockWidth = 200f;
+        private const float Margin = 16f;      // 테스터 화면의 가장자리 여백
+        private const float BarHeight = 64f;   // 상·하단 바 높이 — 프리팹과 같은 값이어야 한다
+        private const float DockWidth = 200f;  // 좌측 도크 폭 — 같음
         private const float ViewportLeft = DockWidth;
-        private const float StripHeight = 32f;
-        private const float StageDotSize = 18f;
-        private const float CellGap = 4f;      // 상단 바 칸 사이 간격
-        private const float InfoRowHeight = 34f; // 발사 정보 한 줄
-
-        // 하단 바 오른쪽 끝 복귀 버튼과 발사·자폭 버튼의 가로 폭. 미션 텍스트의 오른쪽 여백도 여기서 나온다.
-        private const float ExitButtonWidth = 96f;
-        private const float ActionButtonWidth = 120f;
-        private const float BarButtonHeight = 40f;
 
         // 프로젝트 기본 UI 아트 시트. 연구·메뉴 화면은 에디터에서 프리팹에 구워 넣지만
         // (ResearchUiArtApplicator, MenuUiPrefabBuilder) 이 화면은 런타임에 만들어지므로
@@ -68,7 +63,6 @@ namespace Simulation
 
         // 미션 컨트롤 모드에서만 만드는 것들. 01_Main 위에 얹었을 때(SimulationStageHost)만 켜지고,
         // SimulationTest 씬을 직접 재생하면 예전 그대로 좌측 패널만 뜬다.
-        private bool missionControl;
         [SerializeField] private bool testerInterface;
         private Rocket rocket;
         private RectTransform viewport;
@@ -85,9 +79,14 @@ namespace Simulation
         private SimulationStageHost stageHost;
         private Button launchButton;
         private Button destructButton;
+        private Button exitButton;
         private LaunchMissionController mission;
         private readonly List<RocketPart> placedParts = new();
         private readonly Vector3[] viewportCorners = new Vector3[4];
+
+        // 프리팹의 줄 이름(`Row_{라벨}`)과 같아야 한다 — BindMissionControl 이 이 배열로 찾는다.
+        private static readonly string[] FlightInfoLabels =
+            { "미션", "최고 고도", "최대 거리", "총 연소", "체류", "남은 연료", "결과" };
 
         private RocketBuilder builder;
         private Canvas canvas;
@@ -105,31 +104,6 @@ namespace Simulation
         private Button moveButton;
         private Button rotateButton;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void SpawnInSimulationScene()
-        {
-            if (SceneManager.GetActiveScene().name != TargetSceneName) return;
-            if (FindFirstObjectByType<RocketDesignUI>() != null) return;
-
-            Spawn(false);
-        }
-
-        /// <summary>
-        /// Awake 는 AddComponent 시점에 돌아서 컴포넌트를 붙인 뒤에는 모드를 넣을 수 없다.
-        /// 비활성 상태로 만들어 필드를 채운 뒤 켠다.
-        /// </summary>
-        internal static RocketDesignUI Spawn(bool missionControl)
-        {
-            var host = new GameObject("Rocket Design UI");
-            host.SetActive(false);
-
-            RocketDesignUI ui = host.AddComponent<RocketDesignUI>();
-            ui.missionControl = missionControl;
-
-            host.SetActive(true);
-            return ui;
-        }
-
         private void Awake()
         {
             builder = FindFirstObjectByType<RocketBuilder>();
@@ -141,8 +115,12 @@ namespace Simulation
 
             rocket = FindFirstObjectByType<Rocket>();
 
-            if (testerInterface) BindTesterInterface();
+            EnsureEventSystem();
+            // 구운 프리팹으로 들어왔으면 캔버스가 이미 자식으로 있다 — 다시 짓지 않고 참조만 잡는다.
+            if (transform.Find(CanvasName) != null) BindInterface();
             else BuildInterface();
+            WireInterface();
+
             builder.Changed += RefreshTools;
             builder.PresetLibraryChanged += RebuildPresetPanel;
             RefreshTools();
@@ -158,12 +136,16 @@ namespace Simulation
 
         private void LateUpdate()
         {
+            // LaunchMissionController 는 SimulationStageHost 가 씬을 올린 **뒤에** 로켓에 붙인다.
+            // 이 화면은 그 씬에 함께 들어오므로 Awake 시점에는 아직 없다 — 붙을 때까지 매 프레임 본다.
+            if (mission == null && rocket != null) mission = rocket.GetComponent<LaunchMissionController>();
+
             if (testerInterface)
             {
                 launchButton.gameObject.SetActive(!rocket.Launched);
                 RefreshTools();
             }
-            if (missionControl)
+            else
             {
                 UpdateViewportRect();
                 UpdateTopBar();
@@ -193,11 +175,13 @@ namespace Simulation
 
         // ---- 구성 ---------------------------------------------------------------------------
 
+        /// <summary>
+        /// 테스터 화면만 코드로 짓는다(<see cref="BakeTesterInterface"/>). 리스너, 커서 아이콘,
+        /// 프리셋 목록처럼 씬·연구 상태에 매인 것은 <see cref="WireInterface"/> 몫이라 여기 없다.
+        /// </summary>
         private void BuildInterface()
         {
-            EnsureEventSystem();
-
-            RectTransform canvasTransform = CreateGroup("RocketDesignCanvas", transform);
+            RectTransform canvasTransform = CreateGroup(CanvasName, transform);
             canvasRect = canvasTransform; // 버튼 바 클램프에서 매 프레임 쓴다 — 캐스팅을 반복하지 않는다
             canvas = canvasTransform.gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -208,259 +192,26 @@ namespace Simulation
             scaler.referenceResolution = new Vector2(1280f, 720f);
             scaler.matchWidthOrHeight = 0.5f;
 
-            BuildPresetPanel(canvasTransform);
+            BuildPresetPanelShell(canvasTransform);
             BuildStatBox(canvasTransform);
             BuildPartTools(canvasTransform);
             BuildLaunchPip(canvasTransform);
-
-            if (missionControl) BuildMissionControl(canvasTransform);
         }
 
         /// <summary>
-        /// 관제 배치: 상단 정보 바, 좌측 프리셋 패널(BuildPresetPanel), 그 오른쪽을 꽉 채우는 3D 뷰포트,
-        /// 뷰포트 아래 비행 단계 스테퍼, 미션 문구와 버튼을 담은 하단 바.
-        /// 뷰포트는 <b>Image 가 없는 빈 RectTransform</b> 이어야 한다 — 그래픽을 붙이면
-        /// <see cref="EventSystem.IsPointerOverGameObject"/> 가 뷰포트 전체를 UI 로 판정해서
-        /// <see cref="RocketBuilder"/> 의 3D 입력이 통째로 막힌다. 같은 이유로 전체 화면 배경 패널도 만들지 않는다.
+        /// 프리셋 패널의 껍데기(배경·레이아웃·제목)만 만든다. 목록은 연구가 무엇을 열었는지에 따라
+        /// 달라져 구울 수 없으므로 <see cref="FillPresetPanel"/> 이 런타임에 채운다.
         /// </summary>
-        private void BuildMissionControl(RectTransform canvasTransform)
+        private void BuildPresetPanelShell(RectTransform canvasTransform)
         {
-            mission = rocket != null ? rocket.GetComponent<LaunchMissionController>() : null;
-            stageHost = FindFirstObjectByType<SimulationStageHost>();
-
-            BuildTopBar(canvasTransform);
-            BuildFlightInfoPanel(canvasTransform);
-
-            pendingEffectsPanel = CreateArtPanel("PendingLaunchEffects", canvasTransform, PanelSprite);
-            pendingEffectsPanel.anchorMin = new Vector2(0f, 1f);
-            pendingEffectsPanel.anchorMax = Vector2.one;
-            pendingEffectsPanel.pivot = new Vector2(0.5f, 1f);
-            pendingEffectsText = CreateText("Effects", pendingEffectsPanel, 16, FontStyles.Normal, string.Empty);
-            pendingEffectsText.raycastTarget = false;
-            pendingEffectsText.textWrappingMode = TextWrappingModes.Normal;
-            Fill((RectTransform)pendingEffectsText.transform, 12f);
-
-            // 카메라 뷰포트의 유일한 원천. 정규화 상수를 따로 두면 CanvasScaler 가 늘어나는 비율에서
-            // 좌측 패널과 어긋난다 — 매 프레임 이 사각형을 읽어 카메라에 먹인다.
-            viewport = CreateGroup("Viewport", canvasTransform);
-            viewport.anchorMin = Vector2.zero;
-            viewport.anchorMax = Vector2.one;
-            viewport.offsetMin = new Vector2(ViewportLeft, BarHeight + StripHeight);
-            viewport.offsetMax = new Vector2(0f, -BarHeight);
-
-            BuildStageStrip(canvasTransform);
-            BuildBottomBar(canvasTransform);
-
-            // 작은 화면은 뷰 안 우하단에 앉힌다. 캔버스에 그대로 두면 하단 바 뒤로 들어간다 —
-            // 뷰포트에는 Graphic 이 없으므로 자식 버튼을 붙여도 위의 입력 규칙은 깨지지 않는다.
-            launchPip.SetParent(viewport, false);
-            launchPip.anchoredPosition = new Vector2(-12f, 12f);
-
-            // 떠다니는 두 가지는 바보다 나중에 그려야 한다 — 오버레이 캔버스는 형제 순서가 곧 그리는 순서다.
-            statBox.SetAsLastSibling();
-            partTools.SetAsLastSibling();
-        }
-
-        /// <summary>
-        /// 제목·날짜·잔여 자금 세 칸. 값은 <see cref="UpdateTopBar"/> 가 매 프레임 채운다.
-        /// 바 자체는 Graphic 이 없는 껍데기고 칸마다 패널을 따로 깐다 — 한 장 위에 글자만 셋 얹으면
-        /// 어디부터 어디까지가 한 항목인지 안 읽힌다. 바는 뷰포트 위쪽 바깥이라 Image 를 빼도 3D 입력과 무관하다.
-        /// </summary>
-        private void BuildTopBar(RectTransform canvasTransform)
-        {
-            RectTransform bar = CreateGroup("TopBar", canvasTransform);
-            bar.anchorMin = new Vector2(0f, 1f);
-            bar.anchorMax = Vector2.one;
-            bar.pivot = new Vector2(0.5f, 1f);
-            bar.offsetMin = new Vector2(0f, -BarHeight);
-            bar.offsetMax = Vector2.zero;
-
-            TMP_Text title = CreateText("Title", DockCell("TitleCell", bar, 0f, 0.32f), 20, FontStyles.Bold, "ARTEMIS CONTROL");
-            title.raycastTarget = false;
-            Fill((RectTransform)title.transform, 10f);
-
-            dateText = CreateText("Date", DockCell("DateCell", bar, 0.32f, 0.62f), 16, FontStyles.Bold, string.Empty);
-            dateText.alignment = TextAlignmentOptions.Center;
-            dateText.raycastTarget = false;
-            Fill((RectTransform)dateText.transform, 10f);
-
-            fundsText = CreateText("Funds", DockCell("FundsCell", bar, 0.62f, 1f), 16, FontStyles.Bold, string.Empty);
-            fundsText.alignment = TextAlignmentOptions.Right;
-            fundsText.raycastTarget = false;
-            Fill((RectTransform)fundsText.transform, 10f);
-        }
-
-        /// <summary>상단 바의 한 칸. 칸 사이 <see cref="CellGap"/> 만큼 벌려 패널 경계가 보이게 한다.</summary>
-        private static RectTransform DockCell(string name, RectTransform bar, float min, float max)
-        {
-            RectTransform cell = CreateArtPanel(name, bar, PanelSprite);
-            cell.GetComponent<Image>().raycastTarget = false;
-            cell.anchorMin = new Vector2(min, 0f);
-            cell.anchorMax = new Vector2(max, 1f);
-            cell.offsetMin = new Vector2(min > 0f ? CellGap : 0f, 0f);
-            cell.offsetMax = new Vector2(max < 1f ? -CellGap : 0f, 0f);
-            return cell;
-        }
-
-        /// <summary>현재 미션 문구와 발사·자폭·복귀 버튼. 발사 버튼과 자폭 버튼은 같은 자리를 교대로 쓴다.</summary>
-        private void BuildBottomBar(RectTransform canvasTransform)
-        {
-            RectTransform bar = CreateArtPanel("BottomBar", canvasTransform, PanelSprite);
-            bar.anchorMin = Vector2.zero;
-            bar.anchorMax = new Vector2(1f, 0f);
-            bar.pivot = new Vector2(0.5f, 0f);
-            bar.offsetMin = Vector2.zero;
-            bar.offsetMax = new Vector2(0f, BarHeight);
-
-            missionText = CreateText("Mission", bar, 14, FontStyles.Normal, string.Empty);
-            missionText.raycastTarget = false;
-            var missionRect = (RectTransform)missionText.transform;
-            missionRect.anchorMin = Vector2.zero;
-            missionRect.anchorMax = Vector2.one;
-            missionRect.offsetMin = new Vector2(12f, 6f);
-            missionRect.offsetMax = new Vector2(-(ExitButtonWidth + ActionButtonWidth + 36f), -6f);
-
-            launchButton = CreateButton("LaunchButton", bar, "발사", out _);
-            PlaceBarButton((RectTransform)launchButton.transform, -12f, ActionButtonWidth);
-            launchButton.onClick.AddListener(builder.RequestLaunch);
-
-            destructButton = CreateButton("SelfDestructButton", bar, "자폭", out _);
-            PlaceBarButton((RectTransform)destructButton.transform, -12f, ActionButtonWidth);
-            destructButton.onClick.AddListener(() => mission?.SelfDestruct());
-
-            BuildExitButton(bar);
-        }
-
-        /// <summary>
-        /// 비행 단계 스테퍼. 이름과 단계 수는 <see cref="LaunchMissionEvaluator.StageNames"/> 하나에서만 온다 —
-        /// UI 가 같은 문자열을 복제하면 미션 규칙이 바뀔 때 화면만 낡은 채로 남는다.
-        /// 연결선은 각 칸이 자기 오른쪽에 하나씩 들고 있어(마지막 칸만 없다) 라벨 위를 가로지르지 않는다.
-        /// </summary>
-        private void BuildStageStrip(RectTransform canvasTransform)
-        {
-            RectTransform strip = CreateArtPanel("StageStrip", canvasTransform, PanelSprite);
-            strip.GetComponent<Image>().raycastTarget = false;
-            stageStrip = strip;
-            strip.anchorMin = Vector2.zero;
-            strip.anchorMax = new Vector2(1f, 0f);
-            strip.pivot = new Vector2(0.5f, 0f);
-            strip.offsetMin = new Vector2(ViewportLeft, BarHeight);
-            strip.offsetMax = new Vector2(0f, BarHeight + StripHeight);
-
-            var layout = strip.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(12, 12, 0, 0);
-            layout.childAlignment = TextAnchor.MiddleLeft;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-
-            int count = LaunchMissionEvaluator.StageNames.Length;
-            stageDots = new Image[count];
-            stageLines = new Image[count];
-            stageLabels = new TMP_Text[count];
-
-            for (int i = 0; i < count; i++)
-            {
-                RectTransform cell = CreateGroup($"Stage_{i}", strip);
-                var cellLayout = cell.gameObject.AddComponent<HorizontalLayoutGroup>();
-                cellLayout.spacing = 6f;
-                cellLayout.childAlignment = TextAnchor.MiddleLeft;
-                cellLayout.childControlWidth = true;
-                cellLayout.childControlHeight = true;
-                cellLayout.childForceExpandWidth = false;
-
-                stageDots[i] = CreateStageDot(cell);
-
-                TMP_Text label = CreateText("Label", cell, 12, FontStyles.Bold,
-                    LaunchMissionEvaluator.StageNames[i]);
-                label.raycastTarget = false;
-                label.textWrappingMode = TextWrappingModes.NoWrap;
-                stageLabels[i] = label;
-
-                // 연결선은 점·라벨 뒤에 온다. 앞에 두면 남는 폭을 먼저 먹어 점과 라벨이 칸 오른쪽 끝으로
-                // 밀리고, 마지막 칸의 라벨이 화면 밖으로 나간다. 마지막 칸은 이을 다음 점이 없다.
-                if (i < count - 1) stageLines[i] = CreateStageLine(cell);
-            }
-        }
-
-        /// <summary>칸의 남는 폭을 전부 먹는 가로줄. 두께는 부모 높이와 무관하게 2 로 고정한다.</summary>
-        private static Image CreateStageLine(RectTransform cell)
-        {
-            RectTransform holder = CreateGroup("Line", cell);
-            LayoutElement element = holder.gameObject.AddComponent<LayoutElement>();
-            element.flexibleWidth = 1f;
-            element.minWidth = 0f;
-            element.preferredWidth = 0f;
-
-            RectTransform line = CreatePanel("Fill", holder, StageIdleColor);
-            line.anchorMin = new Vector2(0f, 0.5f);
-            line.anchorMax = new Vector2(1f, 0.5f);
-            line.pivot = new Vector2(0.5f, 0.5f);
-            line.sizeDelta = new Vector2(0f, 2f);
-
-            Image image = line.GetComponent<Image>();
-            image.raycastTarget = false;
-            return image;
-        }
-
-        private static Image CreateStageDot(RectTransform cell)
-        {
-            RectTransform dot = CreateGroup("Dot", cell);
-            dot.gameObject.AddComponent<LayoutElement>().preferredWidth = StageDotSize;
-
-            var image = dot.gameObject.AddComponent<Image>();
-            image.preserveAspect = true;
-            image.raycastTarget = false;
-            return image;
-        }
-
-        /// <summary>
-        /// 설계 화면에서 연구 화면으로 나가는 유일한 문. 미션 컨트롤 모드에서만 만든다 —
-        /// SimulationTest 를 단독 재생할 때는 돌아갈 연구 화면 자체가 없다.
-        /// </summary>
-        private static void BuildExitButton(RectTransform bottomBar)
-        {
-            RectTransform rect = CreateArtPanel("ExitButton", bottomBar, ButtonSprite);
-            PlaceBarButton(rect, -(ActionButtonWidth + 24f), ExitButtonWidth);
-
-            var button = rect.gameObject.AddComponent<Button>();
-            button.targetGraphic = rect.GetComponent<Image>();
-            button.onClick.AddListener(SimulationStageHost.CloseDesignStage);
-
-            TMP_Text label = CreateText("Label", rect, 15, FontStyles.Bold, "연구 화면");
-            label.alignment = TextAlignmentOptions.Center;
-            label.raycastTarget = false;
-            Fill((RectTransform)label.transform, 4f);
-        }
-
-        /// <summary>바 오른쪽 끝에서 <paramref name="x"/> 만큼 안쪽으로 붙인다(음수가 안쪽).</summary>
-        private static void PlaceBarButton(RectTransform rect, float x, float width)
-        {
-            rect.anchorMin = new Vector2(1f, 0.5f);
-            rect.anchorMax = new Vector2(1f, 0.5f);
-            rect.pivot = new Vector2(1f, 0.5f);
-            rect.anchoredPosition = new Vector2(x, 0f);
-            rect.sizeDelta = new Vector2(width, BarButtonHeight);
-        }
-
-        /// <summary>상단 바 안에서 가로 구간(0~1)을 잡아 앉힌다.</summary>
-        private void BuildPresetPanel(RectTransform canvasTransform)
-        {
-            if (presetPanel != null)
-            {
-                Destroy(presetPanel.gameObject);
-            }
-
             presetPanel = CreateArtPanel("PresetPanel", canvasTransform, PanelSprite);
             presetPanel.SetAsFirstSibling();
             presetPanel.anchorMin = new Vector2(0f, 0f);
             presetPanel.anchorMax = new Vector2(0f, 1f);
             presetPanel.pivot = new Vector2(0f, 0.5f);
             // 미션 컨트롤 모드에서는 상·하단 바 사이에 딱 끼우고, SimulationTest 단독 재생에서는 예전처럼 띄운다.
-            float edge = missionControl ? 0f : Margin;
-            float dock = missionControl ? BarHeight : Margin;
-            presetPanel.offsetMin = new Vector2(edge, dock);
-            presetPanel.offsetMax = new Vector2(edge + DockWidth, -dock);
+            presetPanel.offsetMin = new Vector2(Margin, Margin);
+            presetPanel.offsetMax = new Vector2(Margin + DockWidth, -Margin);
 
             var layout = presetPanel.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(12, 12, 12, 12);
@@ -470,6 +221,22 @@ namespace Simulation
             layout.childControlWidth = true;
 
             CreateText("Title", presetPanel, 18, FontStyles.Bold, "엔진 프리셋");
+        }
+
+        /// <summary>
+        /// 제목 아래 목록을 새로 깐다. 지운 자식은 같은 프레임에 사라지지 않으므로
+        /// (<see cref="Object.Destroy"/> 는 지연된다) 먼저 부모에서 떼어 낸다 — 안 그러면
+        /// 세로 레이아웃이 한 프레임 동안 옛 줄과 새 줄을 같이 늘어놓는다.
+        /// </summary>
+        private void FillPresetPanel()
+        {
+            for (int i = presetPanel.childCount - 1; i >= 1; i--)
+            {
+                Transform child = presetPanel.GetChild(i);
+                child.SetParent(null, false);
+                if (Application.isPlaying) Destroy(child.gameObject);
+                else DestroyImmediate(child.gameObject);
+            }
 
             IReadOnlyList<EngineStatsSO> presets = builder.PresetLibrary != null
                 ? builder.PresetLibrary.Slots
@@ -509,71 +276,6 @@ namespace Simulation
             }
         }
 
-        /// <summary>
-        /// 발사 뒤 좌측 도크를 넘겨받는 비행 정보 패널. 프리셋 패널과 같은 자리·같은 폭이라
-        /// 발사 순간 뷰포트 폭이 흔들리지 않는다. 프리셋 목록을 부수고 다시 짓는 대신 둘을 번갈아 켠다.
-        /// </summary>
-        private void BuildFlightInfoPanel(RectTransform canvasTransform)
-        {
-            flightInfoPanel = CreateArtPanel("FlightInfoPanel", canvasTransform, PanelSprite);
-            flightInfoPanel.SetAsFirstSibling();
-            flightInfoPanel.anchorMin = new Vector2(0f, 0f);
-            flightInfoPanel.anchorMax = new Vector2(0f, 1f);
-            flightInfoPanel.pivot = new Vector2(0f, 0.5f);
-            flightInfoPanel.offsetMin = new Vector2(0f, BarHeight);
-            flightInfoPanel.offsetMax = new Vector2(DockWidth, -BarHeight);
-
-            var layout = flightInfoPanel.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(12, 12, 12, 12);
-            layout.spacing = 6f;
-            layout.childForceExpandHeight = false;
-            layout.childControlHeight = true;
-            layout.childControlWidth = true;
-
-            CreateText("Title", flightInfoPanel, 18, FontStyles.Bold, "발사 정보");
-
-            string[] labels = { "미션", "최고 고도", "최대 거리", "총 연소", "체류", "남은 연료", "결과" };
-            flightInfoValues = new TMP_Text[labels.Length];
-            for (int i = 0; i < labels.Length; i++)
-            {
-                flightInfoValues[i] = CreateInfoRow(labels[i]);
-            }
-
-            flightInfoPanel.gameObject.SetActive(false);
-        }
-
-        /// <summary>라벨과 값을 좌우로 나눠 담은 한 줄. 값 텍스트만 돌려준다 — 갱신은 그쪽만 한다.</summary>
-        private TMP_Text CreateInfoRow(string label)
-        {
-            RectTransform row = CreateArtPanel($"Row_{label}", flightInfoPanel, CardSprite);
-            row.GetComponent<Image>().raycastTarget = false;
-            // 가로 레이아웃 그룹은 자식의 flexibleHeight 를 부모에게 그대로 올린다 — 0 으로 눌러 두지 않으면
-            // 줄이 패널 높이를 나눠 먹어 카드 일곱 장이 늘어난다.
-            LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
-            rowLayout.minHeight = InfoRowHeight;
-            rowLayout.flexibleHeight = 0f;
-
-            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(8, 8, 0, 0);
-            layout.spacing = 4f;
-            layout.childAlignment = TextAnchor.MiddleLeft;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-
-            TMP_Text caption = CreateText("Label", row, 12, FontStyles.Bold, label);
-            caption.raycastTarget = false;
-            caption.textWrappingMode = TextWrappingModes.NoWrap;
-            caption.color = StagePendingColor;
-            caption.gameObject.AddComponent<LayoutElement>().preferredWidth = 64f;
-
-            TMP_Text value = CreateText("Value", row, 13, FontStyles.Bold, string.Empty);
-            value.raycastTarget = false;
-            value.alignment = TextAlignmentOptions.Right;
-            value.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            return value;
-        }
-
         private void BuildStatBox(RectTransform canvasTransform)
         {
             statBox = CreateArtPanel("StatBox", canvasTransform, BoxSprite);
@@ -606,17 +308,14 @@ namespace Simulation
             rotateButton = CreateButton("RotateButton", partTools,
                 ArtemisCursor.IconSprite(ArtemisCursor.Icon.Rotate));
 
-            moveButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Move));
-            rotateButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Rotate));
-
             partTools.gameObject.SetActive(false);
         }
 
         /// <summary>
         /// 발사 후에만 뜨는 작은 화면. 두 번째 카메라가 RenderTexture 에 그린 것을 그대로 얹고,
         /// 누르면 큰 화면과 역할이 바뀐다(<see cref="RocketBuilder.ToggleLaunchView"/>).
-        /// 여기서는 캔버스 우하단에 두고, 미션 컨트롤 모드는 <see cref="BuildMissionControl"/> 에서
-        /// 부모를 <c>Viewport</c> 로 옮겨 3D 뷰 안에 앉힌다.
+        /// 테스터 화면에서는 캔버스 우하단에 둔다. 저작 프리팹 쪽은 <c>Viewport</c> 의 자식이라
+        /// 3D 뷰 안 우하단에 앉는다 — 캔버스에 그대로 두면 하단 바 뒤로 들어간다.
         /// </summary>
         private void BuildLaunchPip(RectTransform canvasTransform)
         {
@@ -642,7 +341,6 @@ namespace Simulation
 
             var button = launchPip.gameObject.AddComponent<Button>();
             button.targetGraphic = launchPip.GetComponent<Image>();
-            button.onClick.AddListener(builder.ToggleLaunchView);
 
             launchPip.gameObject.SetActive(false);
         }
@@ -844,7 +542,7 @@ namespace Simulation
         {
             if (testerInterface) return;
             HideStats();
-            BuildPresetPanel((RectTransform)canvas.transform);
+            FillPresetPanel();
         }
 
         /// <summary>
@@ -916,6 +614,7 @@ namespace Simulation
             testerInterface = true;
             builder = source;
             BuildInterface();
+            FillPresetPanel();
             launchButton = CreateButton("LaunchButton", canvasRect, "발사", out _);
             RectTransform launchRect = (RectTransform)launchButton.transform;
             launchRect.anchorMin = launchRect.anchorMax = Vector2.right;
@@ -930,9 +629,13 @@ namespace Simulation
             resetRect.sizeDelta = new Vector2(120, 44);
         }
 
-        private void BindTesterInterface()
+        /// <summary>
+        /// 구운 화면의 자식들을 이름으로 다시 잡는다. <see cref="BuildInterface"/> 가 붙인 이름이
+        /// 그대로 경로라, 프리팹에서 오브젝트 이름을 바꾸면 여기서 끊긴다.
+        /// </summary>
+        private void BindInterface()
         {
-            canvasRect = (RectTransform)transform.Find("RocketDesignCanvas");
+            canvasRect = (RectTransform)transform.Find(CanvasName);
             canvas = canvasRect.GetComponent<Canvas>();
             presetPanel = (RectTransform)canvasRect.Find("PresetPanel");
             statBox = (RectTransform)canvasRect.Find("StatBox");
@@ -940,18 +643,93 @@ namespace Simulation
             partTools = (RectTransform)canvasRect.Find("PartTools");
             moveButton = partTools.Find("MoveButton").GetComponent<Button>();
             rotateButton = partTools.Find("RotateButton").GetComponent<Button>();
-            moveButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Move));
-            rotateButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Rotate));
-            launchPip = (RectTransform)canvasRect.Find("LaunchPip");
+
+            // 저작 프리팹은 PiP 를 뷰포트 안에 두고, 테스터 화면은 캔버스 바로 아래에 둔다.
+            launchPip = (RectTransform)(canvasRect.Find("LaunchPip") ?? canvasRect.Find("Viewport/LaunchPip"));
             pipImage = launchPip.GetComponentInChildren<RawImage>(true);
             pipLabel = launchPip.GetComponentInChildren<TMP_Text>(true);
+
+            if (testerInterface)
+            {
+                launchButton = canvasRect.Find("LaunchButton").GetComponent<Button>();
+                return;
+            }
+
+            BindMissionControl();
+        }
+
+        private void BindMissionControl()
+        {
+            Transform topBar = canvasRect.Find("TopBar");
+            dateText = topBar.Find("DateCell/Date").GetComponent<TMP_Text>();
+            fundsText = topBar.Find("FundsCell/Funds").GetComponent<TMP_Text>();
+
+            pendingEffectsPanel = (RectTransform)canvasRect.Find("PendingLaunchEffects");
+            pendingEffectsText = pendingEffectsPanel.GetComponentInChildren<TMP_Text>(true);
+            viewport = (RectTransform)canvasRect.Find("Viewport");
+
+            stageStrip = (RectTransform)canvasRect.Find("StageStrip");
+            int count = LaunchMissionEvaluator.StageNames.Length;
+            stageDots = new Image[count];
+            stageLines = new Image[count];
+            stageLabels = new TMP_Text[count];
+            for (int i = 0; i < count; i++)
+            {
+                Transform cell = stageStrip.Find($"Stage_{i}");
+                stageDots[i] = cell.Find("Dot").GetComponent<Image>();
+                stageLabels[i] = cell.Find("Label").GetComponent<TMP_Text>();
+                Transform line = cell.Find("Line/Fill");
+                stageLines[i] = line != null ? line.GetComponent<Image>() : null;
+            }
+
+            Transform bottomBar = canvasRect.Find("BottomBar");
+            missionText = bottomBar.Find("Mission").GetComponent<TMP_Text>();
+            launchButton = bottomBar.Find("LaunchButton").GetComponent<Button>();
+            destructButton = bottomBar.Find("SelfDestructButton").GetComponent<Button>();
+            exitButton = bottomBar.Find("ExitButton").GetComponent<Button>();
+
+            flightInfoPanel = (RectTransform)canvasRect.Find("FlightInfoPanel");
+            flightInfoValues = new TMP_Text[FlightInfoLabels.Length];
+            for (int i = 0; i < FlightInfoLabels.Length; i++)
+            {
+                flightInfoValues[i] = flightInfoPanel.Find($"Row_{FlightInfoLabels[i]}/Value").GetComponent<TMP_Text>();
+            }
+        }
+
+        /// <summary>
+        /// 구운 화면이든 코드로 지은 화면이든 똑같이 필요한 뒷정리. 버튼 리스너는 씬 객체를,
+        /// 커서 아이콘은 런타임에 그린 텍스처를 가리켜 어느 쪽도 프리팹에 직렬화되지 않는다.
+        /// </summary>
+        private void WireInterface()
+        {
+            SetIcon(moveButton, ArtemisCursor.Icon.Move);
+            SetIcon(rotateButton, ArtemisCursor.Icon.Rotate);
+            moveButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Move));
+            rotateButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Rotate));
             launchPip.GetComponent<Button>().onClick.AddListener(builder.ToggleLaunchView);
-            launchButton = canvasRect.Find("LaunchButton").GetComponent<Button>();
+
+            if (testerInterface)
+            {
+                launchButton.onClick.AddListener(builder.RequestLaunch);
+                DesignStageTester tester = FindFirstObjectByType<DesignStageTester>();
+                canvasRect.Find("ResetButton").GetComponent<Button>().onClick.AddListener(tester.ReturnToDesign);
+                foreach (DesignTesterPresetEntry entry in presetPanel.GetComponentsInChildren<DesignTesterPresetEntry>(true))
+                    entry.Bind(this);
+                return;
+            }
+
+            FillPresetPanel();
+
+            stageHost = FindFirstObjectByType<SimulationStageHost>();
             launchButton.onClick.AddListener(builder.RequestLaunch);
-            DesignStageTester tester = FindFirstObjectByType<DesignStageTester>();
-            canvasRect.Find("ResetButton").GetComponent<Button>().onClick.AddListener(tester.ReturnToDesign);
-            foreach (DesignTesterPresetEntry entry in presetPanel.GetComponentsInChildren<DesignTesterPresetEntry>(true))
-                entry.Bind(this);
+            destructButton.onClick.AddListener(() => mission?.SelfDestruct());
+            exitButton.onClick.AddListener(SimulationStageHost.CloseDesignStage);
+        }
+
+        private static void SetIcon(Button button, ArtemisCursor.Icon icon)
+        {
+            Transform child = button.transform.Find("Icon");
+            if (child != null) child.GetComponent<Image>().sprite = ArtemisCursor.IconSprite(icon);
         }
 
         internal void BeginPresetDrag(EngineStatsSO preset, Vector2 screenPosition)
