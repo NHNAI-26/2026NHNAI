@@ -78,6 +78,51 @@ namespace Simulation.Tests
                 "전환 후에는 보조력 없이 엔진 힘과 중력만 적용한다.");
         }
 
+        [UnityTest]
+        public IEnumerator BodySmoke_EmitsOnlyDuringLiftAssistance_AndClearsOnReset()
+        {
+            host = new GameObject("body smoke test");
+            host.transform.position = Vector3.up * 20f;
+            var rocket = host.AddComponent<Rocket>();
+            SetField(rocket, "holdSeconds", 0f);
+            SetField(rocket, "assistedLiftSeconds", 0.1f);
+            SetField(rocket, "physicsBlendSeconds", 0.1f);
+            SetField(rocket, "assistedLiftHeight", 0.01f);
+            var engineObject = new GameObject("engine");
+            engineObject.transform.SetParent(host.transform, false);
+            engineObject.AddComponent<BoxCollider>();
+            var engine = engineObject.AddComponent<RocketPart>();
+            stats = EngineStatsSO.CreateRuntimeCopy(-1, null, 0, 100f, 1000f, 1200f, 100f);
+            engine.ApplyPreset(stats);
+            var body = new GameObject("RocketBody");
+            body.transform.SetParent(host.transform, false);
+            var smoke = body.AddComponent<ParticleSystem>();
+            smoke.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = smoke.main;
+            main.playOnAwake = false;
+            var controller = body.AddComponent<RocketLiftSmoke>();
+            SetField(controller, "smoke", smoke);
+            yield return null;
+            Assert.IsFalse(smoke.isEmitting);
+            rocket.Launch();
+            yield return null;
+            Assert.IsTrue(smoke.isEmitting);
+            yield return new WaitForSeconds(0.4f);
+            Assert.IsFalse(rocket.LiftAssistActive);
+            Assert.IsFalse(smoke.isEmitting);
+            rocket.ResetFlight(Vector3.up * 20f, Quaternion.identity);
+            yield return null;
+            Assert.AreEqual(0, smoke.particleCount);
+            rocket.Launch();
+            yield return null;
+            Assert.IsTrue(smoke.isEmitting);
+            rocket.StopFlight();
+            yield return null;
+            Assert.IsFalse(smoke.isEmitting);
+            body.SetActive(false);
+            Assert.AreEqual(0, smoke.particleCount);
+        }
+
         private static void SetField(object target, string name, object value)
         {
             target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(target, value);
