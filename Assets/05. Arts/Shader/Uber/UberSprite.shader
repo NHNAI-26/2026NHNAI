@@ -18,6 +18,10 @@ Shader "Shader/Uber/2D Sprite"
         [Title(SurfaceInputs, _)] [Tex(SurfaceInputs)] [PerRendererData] [MainTexture] _MainTex("Sprite Texture", 2D) = "white" {}
         [Sub(SurfaceInputs)] [MainColor] _BaseColor("Base Color", Color) = (1, 1, 1, 1)
         [Sub(SurfaceInputs)] _AlphaMultiplier("Alpha Multiplier", Range(0, 1)) = 1
+        [SubToggle(SurfaceInputs, _TINT_MASK_ON)] _TintMaskEnabled ("Use Tint Mask", Float) = 0
+        [Tex(SurfaceInputs_TINT_MASK_ON)] [NoScaleOffset] _TintMask ("Tint Mask (R)", 2D) = "white" {}
+        [Sub(SurfaceInputs_TINT_MASK_ON)] _TintMaskStrength ("Tint Strength", Range(0,1)) = 1
+        [SubToggle(SurfaceInputs_TINT_MASK_ON, _)] _TintMaskInvert ("Invert Tint Mask", Float) = 0
         [HideInInspector] [PerRendererData] _BaseSpriteUVRect("Base Sprite UV Rect", Vector) = (0, 0, 1, 1)
 
         [SubToggle(SurfaceInputs, _NORMALMAP)] _NormalMapEnabled("Normal Map", Float) = 0
@@ -40,6 +44,11 @@ Shader "Shader/Uber/2D Sprite"
         [Sub(ColorAdjust)] _Saturation("Saturation", Range(0, 2)) = 1
         [Sub(ColorAdjust)] _Brightness("Brightness", Range(0, 2)) = 1
         [Sub(ColorAdjust)] _Contrast("Contrast", Range(0, 2)) = 1
+
+        [Main(Grayscale, _GRAYSCALE_ON, on)] _GrayscaleEnabled ("Grayscale Mask", Float) = 0
+        [Title(Grayscale, _)] [Tex(Grayscale)] [NoScaleOffset] _GrayscaleMask ("Mask (R)", 2D) = "white" {}
+        [Sub(Grayscale)] _GrayscaleStrength ("Strength", Range(0,1)) = 1
+        [SubToggle(Grayscale, _)] _GrayscaleInvert ("Invert Mask", Float) = 0
 
         [Main(UVFade, _UV_FADE_ON, on)] _UVFadeEnabled("UV Fade", Float) = 0
         [Title(UVFade, _)] [KWEnum(UVFade, U, _, V, _)] _UVFadeAxis("Axis", Float) = 1
@@ -92,8 +101,8 @@ Shader "Shader/Uber/2D Sprite"
         [Sub(PixelOutline)] _PixelOutlineAlphaThreshold("Alpha Threshold", Range(0, 1)) = 0.5
 
         [Main(Emission, _EMISSION, on)] _EmissionEnabled("Emission", Float) = 0
-        [Title(Emission, _)] [Tex(Emission, _EmissionColor)] [NoScaleOffset] _EmissionMap("Emission Map", 2D) = "white" {}
-        [HideInInspector] [HDR] _EmissionColor("Emission Color", Color) = (0, 0, 0, 1)
+        [Title(Emission, _)] [Tex(Emission)] [NoScaleOffset] _EmissionMap("Emission Map", 2D) = "white" {}
+        [Sub(Emission)] [HDR] _EmissionColor("Emission Color", Color) = (0, 0, 0, 1)
         [Sub(Emission)] _EmissionIntensity("Intensity", Range(0, 16)) = 1
 
         [Main(Rim, _RIM_ON, on)] _RimEnabled("Fresnel Rim", Float) = 0
@@ -184,6 +193,8 @@ Shader "Shader/Uber/2D Sprite"
 
             #pragma shader_feature_local_fragment _ _SECONDARY_LAYER_ON
             #pragma shader_feature_local_fragment _ _COLOR_ADJUST_ON
+            #pragma shader_feature_local_fragment _ _GRAYSCALE_ON
+            #pragma shader_feature_local_fragment _ _TINT_MASK_ON
             #pragma shader_feature_local_fragment _ _UV_FADE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_RADIAL _DISSOLVE_SWIPE
@@ -248,6 +259,8 @@ Shader "Shader/Uber/2D Sprite"
 
             #pragma shader_feature_local_fragment _ _SECONDARY_LAYER_ON
             #pragma shader_feature_local_fragment _ _COLOR_ADJUST_ON
+            #pragma shader_feature_local_fragment _ _GRAYSCALE_ON
+            #pragma shader_feature_local_fragment _ _TINT_MASK_ON
             #pragma shader_feature_local_fragment _ _UV_FADE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_RADIAL _DISSOLVE_SWIPE

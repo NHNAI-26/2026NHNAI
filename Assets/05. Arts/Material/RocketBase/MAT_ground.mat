@@ -114,8 +114,8 @@ Material:
     - _BaseMapMapping: 1
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
-    - _BlendSmoothness: 0.424
-    - _BlendThreshold: 0.48
+    - _BlendSmoothness: 0.103
+    - _BlendThreshold: 0.89
     - _Brightness: 1
     - _BumpScale: 1
     - _CastShadows: 1

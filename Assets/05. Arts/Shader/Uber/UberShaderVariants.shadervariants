@@ -115,9 +115,15 @@ ShaderVariantCollection:
         passType: 13
       - keywords: _EMISSION
         passType: 13
+      - keywords: _EMISSION _GRAYSCALE_ON
+        passType: 13
+      - keywords: _EMISSION _GRAYSCALE_ON _TINT_MASK_ON
+        passType: 13
       - keywords: _GLITCH_ON
         passType: 13
       - keywords: _GLITCH_ON _HOLOGRAM_ON
+        passType: 13
+      - keywords: _GRAYSCALE_ON
         passType: 13
       - keywords: _HOLOGRAM_ON
         passType: 13
@@ -140,6 +146,8 @@ ShaderVariantCollection:
       - keywords: _RIM_ON
         passType: 13
       - keywords: _SECONDARY_LAYER_ON
+        passType: 13
+      - keywords: _TINT_MASK_ON
         passType: 13
       - keywords: _UV_FADE_ON
         passType: 13
@@ -164,9 +172,17 @@ ShaderVariantCollection:
         passType: 14
       - keywords: _DITHER_FADE_ON
         passType: 14
+      - keywords: _EMISSION
+        passType: 14
+      - keywords: _EMISSION _GRAYSCALE_ON
+        passType: 14
+      - keywords: _EMISSION _GRAYSCALE_ON _TINT_MASK_ON
+        passType: 14
       - keywords: _GLITCH_ON
         passType: 14
       - keywords: _GLITCH_ON _HOLOGRAM_ON
+        passType: 14
+      - keywords: _GRAYSCALE_ON
         passType: 14
       - keywords: _HOLOGRAM_ON
         passType: 14
@@ -187,6 +203,8 @@ ShaderVariantCollection:
       - keywords: _PIXEL_OUTLINE_ON _UV_FADE_ON
         passType: 14
       - keywords: _RGB_OVERRIDE_ON
+        passType: 14
+      - keywords: _TINT_MASK_ON
         passType: 14
       - keywords: _UV_FADE_ON
         passType: 14

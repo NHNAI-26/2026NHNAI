@@ -943,6 +943,7 @@ namespace Border.Rendering.Tests
                 "[Main(SurfaceInputs, _, on, off)] _SurfaceInputs(\"Surface Inputs\", Float) = 1",
                 "[Main(SecondaryLayer, _SECONDARY_LAYER_ON, on)] _SecondaryLayerEnabled(\"Secondary Layer\", Float) = 0",
                 "[Main(ColorAdjust, _COLOR_ADJUST_ON, on)] _ColorAdjustEnabled(\"Color Adjustment\", Float) = 0",
+                "[Main(Grayscale, _GRAYSCALE_ON, on)] _GrayscaleEnabled (\"Grayscale Mask\", Float) = 0",
                 "[Main(UVFade, _UV_FADE_ON, on)] _UVFadeEnabled(\"UV Fade\", Float) = 0",
                 "[Main(Dissolve, _DISSOLVE_ON, on)] _DissolveEnabled(\"Dissolve\", Float) = 0",
                 "[Main(LightSweep, _LIGHT_SWEEP_ON, on)] _LightSweepEnabled(\"Light Sweep\", Float) = 0",
@@ -954,7 +955,7 @@ namespace Border.Rendering.Tests
                 "[Main(Glitch, _GLITCH_ON, on)] _GlitchEnabled(\"Glitch\", Float) = 0",
             }, new[]
             {
-                "Surface", "SurfaceInputs", "SecondaryLayer", "ColorAdjust",
+                "Surface", "SurfaceInputs", "SecondaryLayer", "ColorAdjust", "Grayscale",
                 "UVFade", "Dissolve", "LightSweep", "DitherFade", "PixelOutline", "Emission",
                 "Rim", "Hologram", "Glitch",
             }, new[]
@@ -974,13 +975,15 @@ namespace Border.Rendering.Tests
                 "[KWEnum(LightSweep, Add, _, Multiply, _LIGHT_SWEEP_MULTIPLY)] _LightSweepBlendMode(\"Blend Mode\", Float) = 0",
                 "[UberVector2(LightSweep)] _LightSweepCenter(\"Center\", Vector) = (0.5, 0.5, 0, 0)",
                 "[UberMinMaxVector(LightSweep)] _LightSweepRange(\"Range\", Vector) = (-0.5, 0.5, 0, 0)",
-                "[Title(Emission, _)] [Tex(Emission, _EmissionColor)] [NoScaleOffset] _EmissionMap(\"Emission Map\", 2D) = \"white\" {}",
+                "[Title(Emission, _)] [Tex(Emission)] [NoScaleOffset] _EmissionMap(\"Emission Map\", 2D) = \"white\" {}",
             });
 
             AssertGroupedInspector(UberDirectory + "UberUI.shader", new[]
             {
                 "[Main(SurfaceInputs, _, on, off)] _SurfaceInputs (\"Surface Inputs\", Float) = 1",
                 "[Main(ColorAdjust, _COLOR_ADJUST_ON, on)] _ColorAdjustEnabled (\"Color Adjustment\", Float) = 0",
+                "[Main(Grayscale, _GRAYSCALE_ON, on)] _GrayscaleEnabled (\"Grayscale Mask\", Float) = 0",
+                "[Main(Emission, _EMISSION, on)] _EmissionEnabled (\"Emission\", Float) = 0",
                 "[Main(RGBOverride, _RGB_OVERRIDE_ON, on)] _RGBOverrideEnabled (\"RGB Override\", Float) = 0",
                 "[Main(UVFade, _UV_FADE_ON, on)] _UVFadeEnabled (\"UV Fade\", Float) = 0",
                 "[Main(Dissolve, _DISSOLVE_ON, on)] _DissolveEnabled (\"Dissolve\", Float) = 0",
@@ -992,7 +995,7 @@ namespace Border.Rendering.Tests
                 "[Main(StencilOptions, _, on, off)] _StencilOptions (\"Stencil / Mask\", Float) = 1",
             }, new[]
             {
-                "SurfaceInputs", "ColorAdjust", "RGBOverride", "UVFade",
+                "SurfaceInputs", "ColorAdjust", "Grayscale", "Emission", "RGBOverride", "UVFade",
                 "Dissolve", "LightSweep", "DitherFade", "PixelOutline", "Hologram", "Glitch",
                 "StencilOptions",
             }, new[]
@@ -1790,20 +1793,20 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
             UberShaderVariantManifest.ValidateRows(rows);
             UberShaderVariantCollectionGenerator.ValidateCollection(collection,
                 rows, "Reviewed live collection");
-            Assert.That(rows.Count, Is.EqualTo(103));
+            Assert.That(rows.Count, Is.EqualTo(112));
             UberShaderVariantSpec[] particleRows = rows.Where(item =>
                 item.ShaderName == ParticleShaderName).ToArray();
             Assert.That(particleRows.Length, Is.EqualTo(18));
-            Assert.That(rows.Count - particleRows.Length, Is.EqualTo(85));
+            Assert.That(rows.Count - particleRows.Length, Is.EqualTo(94));
             Assert.That(particleRows.All(item =>
                 item.PassType == PassType.ScriptableRenderPipeline), Is.True);
             Assert.That(particleRows.Select(item => string.Join(" ", item.Keywords))
                 .Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(18));
             Assert.That(rows.Count(item =>
-                item.PassType == PassType.ScriptableRenderPipeline), Is.EqualTo(68));
+                item.PassType == PassType.ScriptableRenderPipeline), Is.EqualTo(72));
             Assert.That(rows.Count(item =>
                 item.PassType == PassType.ScriptableRenderPipelineDefaultUnlit),
-                Is.EqualTo(24));
+                Is.EqualTo(29));
             Assert.That(rows.Count(item => item.PassType == PassType.Normal),
                 Is.EqualTo(11));
             Assert.That(rows.Any(item => item.PassType == PassType.ShadowCaster ||
@@ -1887,7 +1890,7 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
         public void VariantManifestGeneratorIsTransientFirstExplicitAndByteNoOp()
         {
             const string expectedCollectionHash =
-                "665033D3AA83BB2C56406B8B74686CDD9B5BFEB30339453E50BBE99C90536CE8";
+                "CA000C6743C3D5D3A6FFD43D0C45F43E7822CC71F11DB7CC691ABA7E9DD11D72";
             const string expectedMetaHash =
                 "C4AA07D520559A09F8246F5B8C539E2E5509D6B9777F01FDE56E9F00F1D48D31";
             IReadOnlyList<UberShaderVariantSpec> rows =
@@ -1912,7 +1915,7 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
                 UberShaderVariantCollectionGenerator.ValidateCollection(candidate,
                     rows, "Test transient candidate");
                 Assert.That(candidate.shaderCount, Is.EqualTo(5));
-                Assert.That(candidate.variantCount, Is.EqualTo(103));
+                Assert.That(candidate.variantCount, Is.EqualTo(112));
             }
             finally
             {

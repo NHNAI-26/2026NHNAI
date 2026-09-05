@@ -8,6 +8,15 @@
 // - Keep only stateless helpers used unchanged by at least two shader families.
 // - Keep textures, material buffers, surface structs, keywords, and effect order surface-owned.
 
+inline half3 UberApplyGrayscaleMask(half3 color, half mask, half strength,
+    half invertMask)
+{
+    half influence = saturate(strength) *
+        lerp(saturate(mask), 1.0h - saturate(mask), step(0.5h, invertMask));
+    half luminance = dot(color, half3(0.2126h, 0.7152h, 0.0722h));
+    return lerp(color, luminance.xxx, influence);
+}
+
 inline float UberSafeSignedRange(float range, float epsilon)
 {
     float safeEpsilon = max(abs(epsilon), 0.0000001);

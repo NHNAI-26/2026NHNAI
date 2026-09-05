@@ -6,6 +6,10 @@ Shader "Shader/Uber/UI"
         [Title(SurfaceInputs, _)] [Tex(SurfaceInputs)] [PerRendererData] [MainTexture] _MainTex ("Sprite Texture", 2D) = "white" {}
         [Sub(SurfaceInputs)] [MainColor] _Color ("Tint", Color) = (1,1,1,1)
         [Sub(SurfaceInputs)] _AlphaMultiplier ("Alpha Multiplier", Range(0,1)) = 1
+        [SubToggle(SurfaceInputs, _TINT_MASK_ON)] _TintMaskEnabled ("Use Tint Mask", Float) = 0
+        [Tex(SurfaceInputs_TINT_MASK_ON)] [NoScaleOffset] _TintMask ("Tint Mask (R)", 2D) = "white" {}
+        [Sub(SurfaceInputs_TINT_MASK_ON)] _TintMaskStrength ("Tint Strength", Range(0,1)) = 1
+        [SubToggle(SurfaceInputs_TINT_MASK_ON, _)] _TintMaskInvert ("Invert Tint Mask", Float) = 0
         [KWEnum(SurfaceInputs, High, _, Low, _UBER_QUALITY_LOW)] _UberQuality ("Effect Quality", Float) = 0
 
         [Main(ColorAdjust, _COLOR_ADJUST_ON, on)] _ColorAdjustEnabled ("Color Adjustment", Float) = 0
@@ -13,6 +17,16 @@ Shader "Shader/Uber/UI"
         [Sub(ColorAdjust)] _Saturation ("Saturation", Range(0,2)) = 1
         [Sub(ColorAdjust)] _Brightness ("Brightness", Range(0,2)) = 1
         [Sub(ColorAdjust)] _Contrast ("Contrast", Range(0,2)) = 1
+
+        [Main(Grayscale, _GRAYSCALE_ON, on)] _GrayscaleEnabled ("Grayscale Mask", Float) = 0
+        [Title(Grayscale, _)] [Tex(Grayscale)] [NoScaleOffset] _GrayscaleMask ("Mask (R)", 2D) = "white" {}
+        [Sub(Grayscale)] _GrayscaleStrength ("Strength", Range(0,1)) = 1
+        [SubToggle(Grayscale, _)] _GrayscaleInvert ("Invert Mask", Float) = 0
+
+        [Main(Emission, _EMISSION, on)] _EmissionEnabled ("Emission", Float) = 0
+        [Title(Emission, _)] [Tex(Emission)] [NoScaleOffset] _EmissionMap ("Emission Map", 2D) = "white" {}
+        [Sub(Emission)] [HDR] _EmissionColor ("Emission Color", Color) = (0,0,0,1)
+        [Sub(Emission)] _EmissionIntensity ("Intensity", Range(0,16)) = 1
 
         [Main(RGBOverride, _RGB_OVERRIDE_ON, on)] _RGBOverrideEnabled ("RGB Override", Float) = 0
         [Title(RGBOverride, _)] [Sub(RGBOverride)] [HDR] _RGBOverrideColor ("RGB Override Color", Color) = (1,1,1,1)
@@ -152,6 +166,9 @@ Shader "Shader/Uber/UI"
 
             // Optional visual modules and their submodes remain local features.
             #pragma shader_feature_local_fragment _COLOR_ADJUST_ON
+            #pragma shader_feature_local_fragment _ _GRAYSCALE_ON
+            #pragma shader_feature_local_fragment _ _TINT_MASK_ON
+            #pragma shader_feature_local_fragment _ _EMISSION
             #pragma shader_feature_local_fragment _RGB_OVERRIDE_ON
             #pragma shader_feature_local_fragment _UV_FADE_ON
             #pragma shader_feature_local_fragment _DISSOLVE_ON

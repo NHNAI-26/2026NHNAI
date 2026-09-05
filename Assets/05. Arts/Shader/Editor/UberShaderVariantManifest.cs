@@ -100,8 +100,11 @@ internal static class UberShaderVariantManifest
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_DITHER_FADE_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_DITHER_FADE_ON", "_UV_FADE_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_EMISSION"),
+        new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_EMISSION", "_GRAYSCALE_ON"),
+        new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_EMISSION", "_GRAYSCALE_ON", "_TINT_MASK_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_GLITCH_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_GLITCH_ON", "_HOLOGRAM_ON"),
+        new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_GRAYSCALE_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_HOLOGRAM_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_HOLOGRAM_ON", "_HOLOGRAM_SCREEN_SPACE"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_HOLOGRAM_ON", "_HOLOGRAM_WORLD_SPACE"),
@@ -113,6 +116,7 @@ internal static class UberShaderVariantManifest
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_RIM_MULTIPLY", "_RIM_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_RIM_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_SECONDARY_LAYER_ON"),
+        new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_TINT_MASK_ON"),
         new UberShaderVariantSpec(SpriteShaderName, PassType.ScriptableRenderPipeline, "_UV_FADE_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_COLOR_ADJUST_ON"),
@@ -123,8 +127,12 @@ internal static class UberShaderVariantManifest
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_DISSOLVE_ON", "_DISSOLVE_SWIPE"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_DISSOLVE_ON", "_DITHER_FADE_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_DITHER_FADE_ON"),
+        new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_EMISSION"),
+        new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_EMISSION", "_GRAYSCALE_ON"),
+        new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_EMISSION", "_GRAYSCALE_ON", "_TINT_MASK_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_GLITCH_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_GLITCH_ON", "_HOLOGRAM_ON"),
+        new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_GRAYSCALE_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_HOLOGRAM_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_HOLOGRAM_ON", "_HOLOGRAM_SCREEN_SPACE"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_HOLOGRAM_ON", "_HOLOGRAM_WORLD_SPACE"),
@@ -135,6 +143,7 @@ internal static class UberShaderVariantManifest
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_PIXEL_OUTLINE_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_PIXEL_OUTLINE_ON", "_UV_FADE_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_RGB_OVERRIDE_ON"),
+        new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_TINT_MASK_ON"),
         new UberShaderVariantSpec(UIShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_UV_FADE_ON"),
         new UberShaderVariantSpec(ParticleShaderName, PassType.ScriptableRenderPipeline),
         new UberShaderVariantSpec(ParticleShaderName, PassType.ScriptableRenderPipeline, "_COLOR_ADJUST_ON"),
@@ -160,8 +169,8 @@ internal static class UberShaderVariantManifest
     internal static IReadOnlyList<UberShaderVariantSpec> Rows => ReadOnlyRows;
     internal static void ValidateRows(IReadOnlyList<UberShaderVariantSpec> rows)
     {
-        if (rows == null || rows.Count != 103)
-            throw new InvalidOperationException("The Uber variant manifest must contain 103 rows.");
+        if (rows == null || rows.Count != 112)
+            throw new InvalidOperationException("The Uber variant manifest must contain 112 rows.");
         var uniqueRows = new HashSet<string>(StringComparer.Ordinal);
         int uncheckedCount = 0;
         for (int index = 0; index < rows.Count; ++index)
@@ -199,12 +208,12 @@ internal static class UberShaderVariantManifest
             throw new InvalidOperationException("Exactly one Particle row requires unchecked construction.");
     }
     private static string ExpectedShader(int index) => index < 11
-        ? PostShaderName : index < 37 ? ObjectShaderName : index < 63
-            ? SpriteShaderName : index < 85 ? UIShaderName : ParticleShaderName;
+        ? PostShaderName : index < 37 ? ObjectShaderName : index < 67
+            ? SpriteShaderName : index < 94 ? UIShaderName : ParticleShaderName;
     private static PassType ExpectedPass(int index)
     {
         if (index < 11) return PassType.Normal;
-        if (index < 35 || index >= 37 && index < 63 || index >= 85)
+        if (index < 35 || index >= 37 && index < 67 || index >= 94)
             return PassType.ScriptableRenderPipeline;
         return PassType.ScriptableRenderPipelineDefaultUnlit;
     }

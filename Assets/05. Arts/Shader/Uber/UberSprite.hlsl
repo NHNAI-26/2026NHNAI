@@ -19,6 +19,12 @@
 // This layout is deliberately unconditional so every local-keyword variant
 // remains compatible with the SRP Batcher.
 CBUFFER_START(UnityPerMaterial)
+    half _TintMaskEnabled;
+    half _TintMaskStrength;
+    half _TintMaskInvert;
+    half _GrayscaleEnabled;
+    half _GrayscaleStrength;
+    half _GrayscaleInvert;
     float4 _BaseSpriteUVRect;
     float4 _SecondaryUVRect;
     float4 _DissolveTilingOffset;
@@ -107,6 +113,10 @@ CBUFFER_START(UnityPerMaterial)
     half _SrcBlend, _DstBlend, _SrcBlendAlpha, _DstBlendAlpha, _ZWrite, _BlendModePreserveSpecular, _AlphaToMask, _QueueControl, _QueueOffset;
 CBUFFER_END
 
+TEXTURE2D(_TintMask);
+SAMPLER(sampler_TintMask);
+TEXTURE2D(_GrayscaleMask);
+SAMPLER(sampler_GrayscaleMask);
 TEXTURE2D(_MainTex);
 SAMPLER(sampler_MainTex);
 float4 _MainTex_TexelSize;
@@ -707,10 +717,26 @@ inline void UberEvaluateSpriteSurface(float2 rawUV, half4 vertexTint,
     layers = UberSpriteApplyGlitchRGBSplit(effectUV, layers,
         glitchActivation, glitchDirection);
     half3 albedo = layers.rgb * _BaseColor.rgb * vertexTint.rgb;
+#if defined(_TINT_MASK_ON)
+    float2 tintUV = saturate(UberNormalizeUV(effectUV, _BaseSpriteUVRect));
+    half tintMask = SAMPLE_TEXTURE2D(_TintMask, sampler_TintMask, tintUV).r;
+    half tintInfluence = saturate(_TintMaskStrength) *
+        lerp(saturate(tintMask), 1.0h - saturate(tintMask),
+            step(0.5h, _TintMaskInvert));
+    albedo = lerp(layers.rgb, albedo, tintInfluence);
+#endif
 
 #if defined(_COLOR_ADJUST_ON)
     albedo = UberAdjustColor(albedo, _HueShift, _Saturation, _Brightness,
         _Contrast);
+#endif
+
+#if defined(_GRAYSCALE_ON)
+    float2 grayscaleUV = saturate(UberNormalizeUV(effectUV, _BaseSpriteUVRect));
+    half grayscaleMask = SAMPLE_TEXTURE2D(_GrayscaleMask,
+        sampler_GrayscaleMask, grayscaleUV).r;
+    albedo = UberApplyGrayscaleMask(albedo, grayscaleMask,
+        _GrayscaleStrength, _GrayscaleInvert);
 #endif
 
     half outlineMask;

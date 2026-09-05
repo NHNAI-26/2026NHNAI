@@ -836,6 +836,8 @@ public sealed class UberShaderGUI : LWGUI.LWGUI
         new KeywordBinding("_MaskEnabled", "_MASK_ON", 1),
         new KeywordBinding("_UVDistortionEnabled", "_UV_DISTORTION_ON", 1),
         new KeywordBinding("_ColorAdjustEnabled", "_COLOR_ADJUST_ON", 1),
+        new KeywordBinding("_GrayscaleEnabled", "_GRAYSCALE_ON", 1),
+        new KeywordBinding("_TintMaskEnabled", "_TINT_MASK_ON", 1),
         new KeywordBinding("_RGBOverrideEnabled", "_RGB_OVERRIDE_ON", 1),
         new KeywordBinding("_UVFadeEnabled", "_UV_FADE_ON", 1),
         new KeywordBinding("_DissolveEnabled", "_DISSOLVE_ON", 1),

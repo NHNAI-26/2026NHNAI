@@ -18,6 +18,222 @@ namespace Border.Rendering.Tests
 {
     public sealed partial class UberShaderSuiteTests
     {
+        [TestCase(UIShaderName, 0)]
+        [TestCase(SpriteShaderName, 0)]
+        [TestCase(SpriteShaderName, 1)]
+        public void TintMaskLimitsRgbWithoutChangingAlpha(string shaderName, int passIndex)
+        {
+            const int size = 32;
+            var source = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true);
+            var mask = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true)
+                { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            var readback = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true);
+            var target = new RenderTexture(size, size, 0,
+                RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+            var material = new Material(Shader.Find(shaderName));
+            Vector4 previousSampleAdd = Shader.GetGlobalVector("_TextureSampleAdd");
+            try
+            {
+                Assert.That(target.Create(), Is.True);
+                Shader.SetGlobalVector("_TextureSampleAdd", Vector4.zero);
+                source.SetPixels(Enumerable.Repeat(new Color(0.8f, 0.4f, 0.2f, 0.75f),
+                    size * size).ToArray());
+                source.Apply();
+                mask.SetPixels(Enumerable.Range(0, size * size)
+                    .Select(i => i % size < size / 2 ? Color.black : Color.white).ToArray());
+                mask.Apply();
+                if (shaderName == SpriteShaderName)
+                {
+                    material.SetFloat("_LightingMode", 1f);
+                    material.SetFloat("_Surface", 1f);
+                }
+                string tintProperty = shaderName == UIShaderName ? "_Color" : "_BaseColor";
+                var inspector = new UberShaderGUI();
+                material.SetColor(tintProperty, new Color(1f, 1f, 1f, 0.5f));
+                inspector.ValidateMaterial(material);
+                Color[] original = RenderMaskedSurface(source, material, target, readback, passIndex);
+                // A zero component catches any attempt to recover RGB by dividing out tint.
+                material.SetColor(tintProperty, new Color(0f, 0.5f, 1f, 0.5f));
+                inspector.ValidateMaterial(material);
+                Color[] tinted = RenderMaskedSurface(source, material, target, readback, passIndex);
+                material.SetFloat("_TintMaskEnabled", 1f);
+                inspector.ValidateMaterial(material);
+                Assert.That(material.IsKeywordEnabled("_TINT_MASK_ON"), Is.True);
+                Assert.That(MaxRgbDifference(tinted,
+                    RenderMaskedSurface(source, material, target, readback, passIndex)), Is.LessThan(0.01f));
+                material.SetTexture("_TintMask", mask);
+                Color[] masked = RenderMaskedSurface(source, material, target, readback, passIndex);
+                int left = size * (size / 2) + size / 4;
+                int right = left + size / 2;
+                Assert.That(original[left].r, Is.GreaterThan(0.1f));
+                Assert.That(masked[left].r, Is.EqualTo(original[left].r).Within(0.01f));
+                Assert.That(masked[right].r, Is.EqualTo(tinted[right].r).Within(0.01f));
+                Assert.That(masked[right].g, Is.EqualTo(tinted[right].g).Within(0.01f));
+                material.SetFloat("_TintMaskInvert", 1f);
+                Color[] inverted = RenderMaskedSurface(source, material, target, readback, passIndex);
+                Assert.That(inverted[left].r, Is.EqualTo(tinted[left].r).Within(0.01f));
+                Assert.That(inverted[right].r, Is.EqualTo(original[right].r).Within(0.01f));
+                material.SetFloat("_TintMaskInvert", 0f);
+                material.SetFloat("_TintMaskStrength", 0.5f);
+                Color[] halfTint = RenderMaskedSurface(source, material, target, readback, passIndex);
+                Assert.That(halfTint[right].r,
+                    Is.EqualTo((original[right].r + tinted[right].r) * 0.5f).Within(0.01f));
+                material.SetFloat("_TintMaskStrength", 0f);
+                Assert.That(MaxRgbDifference(original,
+                    RenderMaskedSurface(source, material, target, readback, passIndex)), Is.LessThan(0.01f));
+                for (int i = 0; i < masked.Length; ++i)
+                {
+                    Assert.That(IsFinite(masked[i]), Is.True);
+                    Assert.That(masked[i].a, Is.EqualTo(tinted[i].a).Within(0.01f));
+                    Assert.That(inverted[i].a, Is.EqualTo(tinted[i].a).Within(0.01f));
+                }
+                material.SetFloat("_TintMaskEnabled", 0f);
+                inspector.ValidateMaterial(material);
+                Assert.That(material.IsKeywordEnabled("_TINT_MASK_ON"), Is.False);
+                Assert.That(MaxRgbDifference(tinted,
+                    RenderMaskedSurface(source, material, target, readback, passIndex)), Is.LessThan(0.01f));
+            }
+            finally
+            {
+                Shader.SetGlobalVector("_TextureSampleAdd", previousSampleAdd);
+                UnityEngine.Object.DestroyImmediate(material);
+                UnityEngine.Object.DestroyImmediate(target);
+                UnityEngine.Object.DestroyImmediate(readback);
+                UnityEngine.Object.DestroyImmediate(mask);
+                UnityEngine.Object.DestroyImmediate(source);
+            }
+        }
+
+        [TestCase(UIShaderName, 0)]
+        [TestCase(SpriteShaderName, 0)]
+        [TestCase(SpriteShaderName, 1)]
+        public void GrayscaleMaskAndEmissionPreserveCoverage(string shaderName, int passIndex)
+        {
+            const int size = 32;
+            var source = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true);
+            var mask = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true)
+                { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            var readback = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true);
+            var target = new RenderTexture(size, size, 0,
+                RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+            var material = new Material(Shader.Find(shaderName));
+            Vector4 previousSampleAdd = Shader.GetGlobalVector("_TextureSampleAdd");
+            try
+            {
+                Assert.That(target.Create(), Is.True);
+                Shader.SetGlobalVector("_TextureSampleAdd", Vector4.zero);
+                source.SetPixels(Enumerable.Repeat(new Color(0.8f, 0.2f, 0.1f, 1f),
+                    size * size).ToArray());
+                source.Apply();
+                mask.SetPixels(Enumerable.Range(0, size * size)
+                    .Select(i => i % size < size / 2 ? Color.black : Color.white).ToArray());
+                mask.Apply();
+                if (shaderName == SpriteShaderName)
+                {
+                    material.SetFloat("_LightingMode", 1f);
+                    material.SetFloat("_Surface", 1f);
+                }
+                var inspector = new UberShaderGUI();
+                inspector.ValidateMaterial(material);
+                Color[] baseline = RenderMaskedSurface(source, material, target, readback, passIndex);
+                material.SetTexture("_GrayscaleMask", mask);
+                material.SetFloat("_GrayscaleEnabled", 1f);
+                inspector.ValidateMaterial(material);
+                Assert.That(material.IsKeywordEnabled("_GRAYSCALE_ON"), Is.True);
+                Color[] gray = RenderMaskedSurface(source, material, target, readback, passIndex);
+                int left = size * (size / 2) + size / 4;
+                int right = left + size / 2;
+                Assert.That(gray[left].r, Is.EqualTo(baseline[left].r).Within(0.01f));
+                Assert.That(gray[right].r, Is.EqualTo(gray[right].g).Within(0.01f));
+                Assert.That(gray[right].g, Is.EqualTo(gray[right].b).Within(0.01f));
+                Assert.That(gray[right].r, Is.LessThan(baseline[right].r - 0.1f));
+                material.SetFloat("_GrayscaleInvert", 1f);
+                Color[] inverted = RenderMaskedSurface(source, material, target, readback, passIndex);
+                Assert.That(inverted[left].r, Is.EqualTo(inverted[left].g).Within(0.01f));
+                Assert.That(inverted[right].r, Is.EqualTo(baseline[right].r).Within(0.01f));
+                material.SetFloat("_GrayscaleStrength", 0f);
+                Assert.That(MaxRgbDifference(baseline,
+                    RenderMaskedSurface(source, material, target, readback, passIndex)), Is.LessThan(0.01f));
+
+                material.SetFloat("_GrayscaleStrength", 1f);
+                material.SetFloat("_GrayscaleInvert", 0f);
+                material.SetFloat("_EmissionEnabled", 1f);
+                material.SetColor("_EmissionColor", new Color(0f, 0f, 2f, 1f));
+                material.SetFloat("_EmissionIntensity", 2f);
+                material.SetTexture("_EmissionMap", mask);
+                inspector.ValidateMaterial(material);
+                Assert.That(material.IsKeywordEnabled("_EMISSION"), Is.True);
+                Color[] emitted = RenderMaskedSurface(source, material, target, readback, passIndex);
+                Assert.That(emitted[left].b, Is.EqualTo(gray[left].b).Within(0.01f));
+                Assert.That(emitted[right].b, Is.GreaterThan(3f));
+                for (int i = 0; i < emitted.Length; ++i)
+                    Assert.That(emitted[i].a, Is.EqualTo(baseline[i].a).Within(0.01f));
+
+                material.SetFloat("_GrayscaleEnabled", 0f);
+                material.SetFloat("_EmissionEnabled", 0f);
+                inspector.ValidateMaterial(material);
+                Assert.That(material.IsKeywordEnabled("_GRAYSCALE_ON"), Is.False);
+                Assert.That(material.IsKeywordEnabled("_EMISSION"), Is.False);
+                Assert.That(MaxRgbDifference(baseline,
+                    RenderMaskedSurface(source, material, target, readback, passIndex)), Is.LessThan(0.01f));
+
+                source.SetPixels(Enumerable.Repeat(Color.clear, size * size).ToArray());
+                source.Apply();
+                material.SetFloat("_EmissionEnabled", 1f);
+                inspector.ValidateMaterial(material);
+                Color[] transparent = RenderMaskedSurface(source, material, target, readback, passIndex);
+                Assert.That(transparent.Max(c => c.a), Is.LessThan(0.001f));
+                Assert.That(transparent.Max(c => c.b), Is.LessThan(0.001f));
+            }
+            finally
+            {
+                Shader.SetGlobalVector("_TextureSampleAdd", previousSampleAdd);
+                UnityEngine.Object.DestroyImmediate(material);
+                UnityEngine.Object.DestroyImmediate(target);
+                UnityEngine.Object.DestroyImmediate(readback);
+                UnityEngine.Object.DestroyImmediate(mask);
+                UnityEngine.Object.DestroyImmediate(source);
+            }
+        }
+
+        private static Color[] RenderMaskedSurface(Texture2D source,
+            Material material, RenderTexture target, Texture2D readback, int passIndex)
+        {
+            if (material.shader.name != SpriteShaderName)
+                return RenderSpriteDissolve(source, material, target, readback);
+
+            var sprite = Sprite.Create(source, new Rect(0, 0, source.width, source.height),
+                new Vector2(0.5f, 0.5f), source.width, 0, SpriteMeshType.FullRect);
+            var go = new GameObject("Grayscale emission test")
+                { hideFlags = HideFlags.HideAndDontSave };
+            var commands = new CommandBuffer();
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                var renderer = go.AddComponent<SpriteRenderer>();
+                renderer.sprite = sprite;
+                renderer.sharedMaterial = material;
+                commands.SetRenderTarget(target);
+                commands.ClearRenderTarget(true, true, Color.clear);
+                commands.SetViewProjectionMatrices(Matrix4x4.identity,
+                    GL.GetGPUProjectionMatrix(Matrix4x4.Ortho(-0.5f, 0.5f,
+                        -0.5f, 0.5f, -1f, 1f), true));
+                commands.DrawRenderer(renderer, material, 0, passIndex);
+                Graphics.ExecuteCommandBuffer(commands);
+                RenderTexture.active = target;
+                readback.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                readback.Apply();
+                return readback.GetPixels();
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                commands.Release();
+                UnityEngine.Object.DestroyImmediate(go);
+                UnityEngine.Object.DestroyImmediate(sprite);
+            }
+        }
+
         [Test]
         public void UiDissolveMatchesSpriteAtlasLocalModeRangeAndEdgeContract()
         {

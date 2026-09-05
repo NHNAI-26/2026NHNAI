@@ -3,6 +3,12 @@
 
 #include "UberCommon.hlsl"
 
+TEXTURE2D(_TintMask);
+SAMPLER(sampler_TintMask);
+TEXTURE2D(_GrayscaleMask);
+SAMPLER(sampler_GrayscaleMask);
+TEXTURE2D(_EmissionMap);
+SAMPLER(sampler_EmissionMap);
 TEXTURE2D(_MainTex);
 SAMPLER(sampler_MainTex);
 TEXTURE2D(_DissolveNoiseMap);
@@ -10,6 +16,15 @@ SAMPLER(sampler_DissolveNoiseMap);
 
 // Keep this layout unconditional so every local variant is SRP Batcher stable.
 CBUFFER_START(UnityPerMaterial)
+    half _TintMaskEnabled;
+    half _TintMaskStrength;
+    half _TintMaskInvert;
+    half _GrayscaleEnabled;
+    half _GrayscaleStrength;
+    half _GrayscaleInvert;
+    half _EmissionEnabled;
+    half4 _EmissionColor;
+    half _EmissionIntensity;
     half _SurfaceInputs;
     half4 _Color;
     half _AlphaMultiplier;
@@ -574,6 +589,14 @@ half4 UberUIFrag(UberUIVaryings input) : SV_Target
         glitchActivation, glitchDirection);
     half hologramEdge = UberUIEvaluateHologramEdge(effectUV, sprite.a);
     half4 color = sprite * input.color;
+#if defined(_TINT_MASK_ON)
+    float2 tintUV = saturate(UberNormalizeUV(effectUV, _BaseSpriteUVRect));
+    half tintMask = SAMPLE_TEXTURE2D(_TintMask, sampler_TintMask, tintUV).r;
+    half tintInfluence = saturate(_TintMaskStrength) *
+        lerp(saturate(tintMask), 1.0h - saturate(tintMask),
+            step(0.5h, _TintMaskInvert));
+    color.rgb = lerp(sprite.rgb, color.rgb, tintInfluence);
+#endif
     color.a *= saturate(_AlphaMultiplier);
 
 #if defined(_COLOR_ADJUST_ON)
@@ -588,6 +611,14 @@ half4 UberUIFrag(UberUIVaryings input) : SV_Target
     color.a *= lerp(1.0h, _RGBOverrideColor.a, overrideStrength);
 #endif
 
+#if defined(_GRAYSCALE_ON)
+    float2 grayscaleUV = saturate(UberNormalizeUV(effectUV, _BaseSpriteUVRect));
+    half grayscaleMask = SAMPLE_TEXTURE2D(_GrayscaleMask,
+        sampler_GrayscaleMask, grayscaleUV).r;
+    color.rgb = UberApplyGrayscaleMask(color.rgb, grayscaleMask,
+        _GrayscaleStrength, _GrayscaleInvert);
+#endif
+
     half silhouette = 1.0h;
 #if defined(_UV_FADE_ON)
     silhouette *= UberUIUVFade(input.uv);
@@ -597,6 +628,12 @@ half4 UberUIFrag(UberUIVaryings input) : SV_Target
     half dissolveEdge;
     UberUIDissolve(effectUV, dissolveEdge);
     color.rgb *= UberUIEvaluateDissolveEdgeMultiplier(dissolveEdge);
+#endif
+
+#if defined(_EMISSION)
+    float2 emissionUV = saturate(UberNormalizeUV(effectUV, _BaseSpriteUVRect));
+    color.rgb += SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap,
+        emissionUV).rgb * _EmissionColor.rgb * max(_EmissionIntensity, 0.0h);
 #endif
 
     half outline;
