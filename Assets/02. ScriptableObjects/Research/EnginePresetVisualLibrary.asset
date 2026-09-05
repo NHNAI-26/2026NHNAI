@@ -13,3 +13,14 @@ MonoBehaviour:
   m_Name: EnginePresetVisualLibrary
   m_EditorClassIdentifier: Border::Border.Research.EnginePresetVisualLibrarySO
   previewPrefabs: []
+  archetypePreviewPrefabs:
+  - Archetype: 0
+    Prefab: {fileID: 6276918602222369443, guid: bf659a175a87c44baadb75bfceaa6212, type: 3}
+  - Archetype: 1
+    Prefab: {fileID: 8120476766356243560, guid: 171a7a7514d484146b92e0e5202f7057, type: 3}
+  - Archetype: 2
+    Prefab: {fileID: 2716561207608003426, guid: 64db54ef2b9344fb4a76118709c87940, type: 3}
+  - Archetype: 3
+    Prefab: {fileID: 7472164660015043425, guid: 755f9ea7e86084ed9bc0a01f854c5328, type: 3}
+  - Archetype: 4
+    Prefab: {fileID: 1657872688873947142, guid: ab50528143d714125a08057676cc37f7, type: 3}

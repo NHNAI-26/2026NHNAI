@@ -71,6 +71,8 @@ namespace Border.Rendering.Tests
                 { "_BaseMap", "[Title(SurfaceInputs, _)] [UberGroup(SurfaceInputs)] [MainTexture] _BaseMap(\"Base Map\", 2D) = \"white\" {}" },
                 { "_BaseMapMapping", "[KWEnum(SurfaceInputs, UV, _, Triplanar, _BASE_MAP_TRIPLANAR)] _BaseMapMapping(\"Base Map Mapping\", Float) = 0" },
                 { "_BaseMap3DTiling", "[UberVector3(SurfaceInputs)] _BaseMap3DTiling(\"Base Map 3D Tiling\", Vector) = (1, 1, 1, 0)" },
+                { "_MetallicMap", "[Tex(SurfaceInputs_METALLICMAP)] [NoScaleOffset] _MetallicMap(\"Metallic Map (R)\", 2D) = \"white\" {}" },
+                { "_RoughnessMap", "[Tex(SurfaceInputs_ROUGHNESSMAP)] [NoScaleOffset] _RoughnessMap(\"Roughness Map (R)\", 2D) = \"black\" {}" },
                 { "_BumpMap", "[Tex(SurfaceInputs)] [Normal] [NoScaleOffset] _BumpMap(\"Normal Map\", 2D) = \"bump\" {}" },
                 { "_BlendMap", "[Title(TextureBlend, _)] [Tex(TextureBlend)] [NoScaleOffset] _BlendMap(\"Blend Map\", 2D) = \"white\" {}" },
                 { "_BlendTiling", "[UberVector2(TextureBlend)] _BlendTiling(\"Blend Tiling\", Vector) = (1, 1, 0, 0)" },
@@ -111,6 +113,7 @@ namespace Border.Rendering.Tests
                 {
                     "[Sub(" + owner + ")]", "[SubToggle(" + owner + ",",
                     "[KWEnum(" + owner + ",", "[Tex(" + owner + ")]",
+                    "[Tex(" + owner + "_",
                     "[UberGroup(" + owner + ")]",
                     "[UberVector2(" + owner + ")]",
                     "[UberVector3(" + owner + ")]",
@@ -155,6 +158,47 @@ namespace Border.Rendering.Tests
                 "EditorGUI.Vector3Field(position, label", gui);
             StringAssert.DoesNotContain(
                 "EditorGUI.MultiFloatField(valuePosition", gui);
+        }
+
+        [Test]
+        public void ObjectSurfaceMapVariantsCompileForWebGlGles3()
+        {
+            Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(
+                UberDirectory + "Uber3D.shader");
+            Assert.That(shader, Is.Not.Null);
+            ShaderData.Subshader subshader =
+                ShaderUtil.GetShaderData(shader).ActiveSubshader;
+            string[][] keywordRows =
+            {
+                new[] { "_METALLICMAP" },
+                new[] { "_ROUGHNESSMAP" },
+                new[] { "_METALLICMAP", "_ROUGHNESSMAP" },
+                new[] { "_BASE_MAP_TRIPLANAR", "_METALLICMAP" },
+                new[] { "_BASE_MAP_TRIPLANAR", "_ROUGHNESSMAP" },
+                new[]
+                {
+                    "_BASE_MAP_TRIPLANAR", "_METALLICMAP", "_ROUGHNESSMAP",
+                },
+            };
+
+            foreach (string passName in new[] { "UniversalForward", "Meta" })
+            foreach (string[] keywords in keywordRows)
+            {
+                ShaderData.Pass pass = Enumerable.Range(0, subshader.PassCount)
+                    .Select(subshader.GetPass)
+                    .Single(candidate => candidate.Name == passName);
+                var compiled = pass.CompileVariant(ShaderType.Fragment, keywords,
+                    ShaderCompilerPlatform.GLES3x, BuildTarget.WebGL);
+                string context = passName + " " + string.Join(" ", keywords);
+                string[] diagnostics = compiled.Messages.Where(message =>
+                        message.severity == ShaderCompilerMessageSeverity.Warning ||
+                        message.severity == ShaderCompilerMessageSeverity.Error)
+                    .Select(message => message.severity + ": " + message.message)
+                    .ToArray();
+                Assert.That(compiled.Success, Is.True,
+                    context + ": " + string.Join(" | ", diagnostics));
+                Assert.That(diagnostics, Is.Empty, context);
+            }
         }
 
         [Test]

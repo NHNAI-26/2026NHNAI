@@ -22,7 +22,11 @@ Shader "Shader/Uber/3D Object"
         [KWEnum(SurfaceInputs, UV, _, Triplanar, _BASE_MAP_TRIPLANAR)] _BaseMapMapping("Base Map Mapping", Float) = 0
         [UberVector3(SurfaceInputs)] _BaseMap3DTiling("Base Map 3D Tiling", Vector) = (1, 1, 1, 0)
         [Sub(SurfaceInputs)] _BaseMap3DBlendSharpness("Base Map 3D Blend Sharpness", Range(1, 16)) = 4
+        [SubToggle(SurfaceInputs, _METALLICMAP)] _MetallicMapEnabled("Use Metallic Map", Float) = 0
+        [Tex(SurfaceInputs_METALLICMAP)] [NoScaleOffset] _MetallicMap("Metallic Map (R)", 2D) = "white" {}
         [Sub(SurfaceInputs)] _Metallic("Metallic", Range(0, 1)) = 0
+        [SubToggle(SurfaceInputs, _ROUGHNESSMAP)] _RoughnessMapEnabled("Use Roughness Map", Float) = 0
+        [Tex(SurfaceInputs_ROUGHNESSMAP)] [NoScaleOffset] _RoughnessMap("Roughness Map (R)", 2D) = "black" {}
         [Sub(SurfaceInputs)] _Smoothness("Smoothness", Range(0, 1)) = 0.5
         [SubToggle(SurfaceInputs, _)] _NormalMapEnabled("Normal Map", Float) = 0
         [Tex(SurfaceInputs)] [Normal] [NoScaleOffset] _BumpMap("Normal Map", 2D) = "bump" {}
@@ -156,6 +160,8 @@ Shader "Shader/Uber/3D Object"
 
             #pragma multi_compile_local _ _NORMALMAP
             #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
+            #pragma multi_compile_local_fragment _ _METALLICMAP
+            #pragma multi_compile_local_fragment _ _ROUGHNESSMAP
             #pragma multi_compile_local_fragment _ _TEXTURE_BLEND_ON
             #pragma multi_compile_local_fragment _ _SURFACE_TYPE_TRANSPARENT
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
@@ -358,6 +364,8 @@ Shader "Shader/Uber/3D Object"
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
             #pragma multi_compile_local_fragment _ _UNLIT_ON
             #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
+            #pragma multi_compile_local_fragment _ _METALLICMAP
+            #pragma multi_compile_local_fragment _ _ROUGHNESSMAP
             #pragma multi_compile_local_fragment _ _TEXTURE_BLEND_ON
             #pragma shader_feature_local_fragment _ _COLOR_ADJUST_ON
             #pragma shader_feature_local_fragment _ _EMISSION

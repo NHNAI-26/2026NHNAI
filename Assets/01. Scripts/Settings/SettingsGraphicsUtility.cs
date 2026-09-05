@@ -14,22 +14,41 @@ namespace Border.Settings
         public const int WindowedModeIndex = 1;
         public const int BorderlessWindowModeIndex = 2;
 
-        private const int MinResolution = 1920;
+        private const int MinResolution = 1280;
         private const int MinRefreshRate = 30;
 
         public static List<Resolution> GetResolutionsList()
         {
-            List<Resolution> resolutions = Screen.resolutions
+            return BuildResolutionList(Screen.resolutions, Screen.currentResolution);
+        }
+
+        public static List<Resolution> BuildResolutionList(IEnumerable<Resolution> available, Resolution desktop)
+        {
+            var candidates = new List<Resolution>(available);
+            candidates.Add(desktop);
+            // Window sizes remain selectable even when the monitor reports only its native mode.
+            foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(1600, 900), new Vector2Int(1920, 1080), new Vector2Int(2560, 1440) })
+            {
+                if (size.x > desktop.width || size.y > desktop.height) continue;
+                Resolution option = desktop;
+                option.width = size.x;
+                option.height = size.y;
+                candidates.Add(option);
+            }
+
+            List<Resolution> resolutions = candidates
                 .Where(resolution =>
                     resolution.width >= MinResolution &&
-                    Mathf.RoundToInt((float)resolution.refreshRateRatio.value) >= MinRefreshRate)
-                .Distinct()
-                .Reverse()
+                    (resolution.refreshRateRatio.value == 0 || Mathf.RoundToInt((float)resolution.refreshRateRatio.value) >= MinRefreshRate))
+                .GroupBy(resolution => (resolution.width, resolution.height))
+                .Select(group => group.OrderByDescending(resolution => resolution.refreshRateRatio.value).First())
+                .OrderByDescending(resolution => resolution.width)
+                .ThenByDescending(resolution => resolution.height)
                 .ToList();
 
             if (resolutions.Count == 0)
             {
-                resolutions.Add(Screen.currentResolution);
+                resolutions.Add(desktop);
             }
 
             return resolutions;

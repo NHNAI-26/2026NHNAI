@@ -3,6 +3,7 @@
     "rootNamespace": "Border.Research.Tests",
     "references": [
         "Border",
+        "DOTween",
         "Unity.TextMeshPro",
         "UnityEngine.UI"
     ],

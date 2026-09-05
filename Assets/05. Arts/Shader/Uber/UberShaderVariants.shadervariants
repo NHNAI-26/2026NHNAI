@@ -74,7 +74,13 @@ ShaderVariantCollection:
         passType: 13
       - keywords: _HOLOGRAM_ON _HOLOGRAM_WORLD_SPACE
         passType: 13
+      - keywords: _METALLICMAP
+        passType: 13
+      - keywords: _METALLICMAP _ROUGHNESSMAP
+        passType: 13
       - keywords: _RIM_ON
+        passType: 13
+      - keywords: _ROUGHNESSMAP
         passType: 13
       - keywords: _TEXTURE_BLEND_ON
         passType: 13

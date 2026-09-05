@@ -3,12 +3,14 @@ using System.Collections.Generic;
 
 namespace Border.Research
 {
-    public enum LaunchStageId
+    public enum LaunchMissionId
     {
-        Engine,
-        Rocket,
-        Orbit,
-        Moon
+        StaticFire,
+        LowAltitude,
+        HighAltitude,
+        TargetZone,
+        ZoneHold,
+        LowPowerZoneHold
     }
 
     public enum EnginePresetId
@@ -52,7 +54,7 @@ namespace Border.Research
     public enum ResearchActionResult
     {
         Success,
-        LaunchTargetLocked,
+        MissionLocked,
         NotEnoughFunds,
         RequirementNotMet,
         DeadlineReached,
@@ -62,10 +64,18 @@ namespace Border.Research
         EnginePresetLimitReached
     }
 
-    [Serializable]
-    public sealed class LaunchStageState
+    public enum EngineRiskKind
     {
-        public LaunchStageId Id;
+        OutputShortage,
+        FuelExhaustion,
+        CoolingShortage,
+        IgnitionInstability
+    }
+
+    [Serializable]
+    public sealed class LaunchMissionState
+    {
+        public LaunchMissionId Id;
         public int AttemptCount;
         public ResearchGrade BestGrade;
         public bool HasBestGrade;
@@ -129,16 +139,39 @@ namespace Border.Research
     public readonly struct EnginePresetConfig
     {
         public EnginePresetConfig(EnginePresetId id, string displayName)
+            : this(
+                id,
+                displayName,
+                ResearchPrototypeModel.EngineNormalResearchCost,
+                ResearchPrototypeModel.EngineFocusedResearchCost,
+                ResearchPrototypeModel.EngineInstallCost,
+                ResearchPrototypeModel.InitialEngineStat,
+                ResearchPrototypeModel.InitialEngineStat,
+                ResearchPrototypeModel.InitialEngineStat,
+                ResearchPrototypeModel.InitialEngineStat)
+        {
+        }
+
+        public EnginePresetConfig(
+            EnginePresetId id,
+            string displayName,
+            int normalResearchCost,
+            int focusedResearchCost,
+            int installCost,
+            int initialFuelCapacity,
+            int initialCooling,
+            int initialMaxOutput,
+            int initialIgnitionReliability)
         {
             Id = id;
             DisplayName = displayName;
-            NormalResearchCost = ResearchPrototypeModel.EngineNormalResearchCost;
-            FocusedResearchCost = ResearchPrototypeModel.EngineFocusedResearchCost;
-            InstallCost = ResearchPrototypeModel.EngineInstallCost;
-            InitialFuelCapacity = ResearchPrototypeModel.InitialEngineStat;
-            InitialCooling = ResearchPrototypeModel.InitialEngineStat;
-            InitialMaxOutput = ResearchPrototypeModel.InitialEngineStat;
-            InitialIgnitionReliability = ResearchPrototypeModel.InitialEngineStat;
+            NormalResearchCost = normalResearchCost;
+            FocusedResearchCost = focusedResearchCost;
+            InstallCost = installCost;
+            InitialFuelCapacity = initialFuelCapacity;
+            InitialCooling = initialCooling;
+            InitialMaxOutput = initialMaxOutput;
+            InitialIgnitionReliability = initialIgnitionReliability;
         }
 
         public EnginePresetId Id { get; }
@@ -152,28 +185,324 @@ namespace Border.Research
         public int InitialIgnitionReliability { get; }
     }
 
-    public readonly struct LaunchStageConfig
+    public readonly struct LaunchMissionConfig
     {
-        public LaunchStageConfig(LaunchStageId id, string displayName, int launchCost, string requirementText)
+        public LaunchMissionConfig(LaunchMissionId id, string displayName, int launchCost, string requirementText, double engineWeight)
         {
             Id = id;
             DisplayName = displayName;
             LaunchCost = launchCost;
             TestCost = launchCost;
             RequirementText = requirementText;
+            EngineWeight = engineWeight;
         }
 
-        public LaunchStageId Id { get; }
+        public LaunchMissionId Id { get; }
         public string DisplayName { get; }
         public int LaunchCost { get; }
         public int TestCost { get; }
         public string RequirementText { get; }
+        public double EngineWeight { get; }
+    }
+
+    public readonly struct EngineRiskInfo
+    {
+        public EngineRiskInfo(EngineRiskKind kind, int severity, string displayName, string description)
+        {
+            Kind = kind;
+            Severity = severity;
+            DisplayName = displayName;
+            Description = description;
+        }
+
+        public EngineRiskKind Kind { get; }
+        public int Severity { get; }
+        public string DisplayName { get; }
+        public string Description { get; }
+    }
+
+    public readonly struct ResearchScoreRewardBand
+    {
+        public ResearchScoreRewardBand(int minScore, int gain)
+        {
+            MinScore = minScore;
+            Gain = gain;
+        }
+
+        public int MinScore { get; }
+        public int Gain { get; }
+    }
+
+    public readonly struct ResearchGradeReward
+    {
+        public ResearchGradeReward(ResearchGrade grade, int immediateFunding, int quarterlyFundingDelta)
+        {
+            Grade = grade;
+            ImmediateFunding = immediateFunding;
+            QuarterlyFundingDelta = quarterlyFundingDelta;
+        }
+
+        public ResearchGrade Grade { get; }
+        public int ImmediateFunding { get; }
+        public int QuarterlyFundingDelta { get; }
+    }
+
+    public sealed class ResearchBalanceConfig
+    {
+        public ResearchBalanceConfig(
+            int initialFunds,
+            int initialQuarterlyFunding,
+            int minQuarterlyFunding,
+            int maxQuarterlyFunding,
+            int researchCompletionGain,
+            int engineNormalResearchCost,
+            int engineFocusedResearchCost,
+            int newEnginePresetCost,
+            int engineInstallCost,
+            IReadOnlyList<LaunchMissionConfig> missionConfigs,
+            IReadOnlyList<ResearchScoreRewardBand> normalResearchStatRewards = null,
+            IReadOnlyList<ResearchScoreRewardBand> focusedResearchStatRewards = null,
+            IReadOnlyList<ResearchGradeReward> launchRewards = null,
+            int publicSuccessModifier = -10,
+            int privateSuccessModifier = 10,
+            int finalMissionSuccessModifier = 0,
+            double publicRewardMultiplier = 1.5d,
+            double privateRewardMultiplier = 0.5d,
+            double finalMissionRewardMultiplier = 1d,
+            int publicFailureQuarterlyFundingDelta = -150,
+            int privateFailureQuarterlyFundingDelta = -50,
+            int finalMissionFailureQuarterlyFundingDelta = -100)
+        {
+            InitialFunds = initialFunds;
+            InitialQuarterlyFunding = initialQuarterlyFunding;
+            MinQuarterlyFunding = minQuarterlyFunding;
+            MaxQuarterlyFunding = maxQuarterlyFunding;
+            ResearchCompletionGain = researchCompletionGain;
+            EngineNormalResearchCost = engineNormalResearchCost;
+            EngineFocusedResearchCost = engineFocusedResearchCost;
+            NewEnginePresetCost = newEnginePresetCost;
+            EngineInstallCost = engineInstallCost;
+            MissionConfigs = CopyMissionConfigs(missionConfigs);
+            NormalResearchStatRewards = CopyScoreRewardBands(normalResearchStatRewards, CreateDefaultNormalResearchStatRewards());
+            FocusedResearchStatRewards = CopyScoreRewardBands(focusedResearchStatRewards, CreateDefaultFocusedResearchStatRewards());
+            LaunchRewards = CopyGradeRewards(launchRewards, CreateDefaultLaunchRewards());
+            PublicSuccessModifier = publicSuccessModifier;
+            PrivateSuccessModifier = privateSuccessModifier;
+            FinalMissionSuccessModifier = finalMissionSuccessModifier;
+            PublicRewardMultiplier = publicRewardMultiplier;
+            PrivateRewardMultiplier = privateRewardMultiplier;
+            FinalMissionRewardMultiplier = finalMissionRewardMultiplier;
+            PublicFailureQuarterlyFundingDelta = publicFailureQuarterlyFundingDelta;
+            PrivateFailureQuarterlyFundingDelta = privateFailureQuarterlyFundingDelta;
+            FinalMissionFailureQuarterlyFundingDelta = finalMissionFailureQuarterlyFundingDelta;
+        }
+
+        public int InitialFunds { get; }
+        public int InitialQuarterlyFunding { get; }
+        public int MinQuarterlyFunding { get; }
+        public int MaxQuarterlyFunding { get; }
+        public int ResearchCompletionGain { get; }
+        public int EngineNormalResearchCost { get; }
+        public int EngineFocusedResearchCost { get; }
+        public int NewEnginePresetCost { get; }
+        public int EngineInstallCost { get; }
+        public LaunchMissionConfig[] MissionConfigs { get; }
+        public ResearchScoreRewardBand[] NormalResearchStatRewards { get; }
+        public ResearchScoreRewardBand[] FocusedResearchStatRewards { get; }
+        public ResearchGradeReward[] LaunchRewards { get; }
+        public int PublicSuccessModifier { get; }
+        public int PrivateSuccessModifier { get; }
+        public int FinalMissionSuccessModifier { get; }
+        public double PublicRewardMultiplier { get; }
+        public double PrivateRewardMultiplier { get; }
+        public double FinalMissionRewardMultiplier { get; }
+        public int PublicFailureQuarterlyFundingDelta { get; }
+        public int PrivateFailureQuarterlyFundingDelta { get; }
+        public int FinalMissionFailureQuarterlyFundingDelta { get; }
+
+        public static ResearchBalanceConfig CreateDefault()
+        {
+            return new ResearchBalanceConfig(
+                ResearchPrototypeModel.InitialFunds,
+                ResearchPrototypeModel.InitialQuarterlyFunding,
+                ResearchPrototypeModel.MinQuarterlyFunding,
+                ResearchPrototypeModel.MaxQuarterlyFunding,
+                ResearchPrototypeModel.ResearchCompletionGain,
+                ResearchPrototypeModel.EngineNormalResearchCost,
+                ResearchPrototypeModel.EngineFocusedResearchCost,
+                ResearchPrototypeModel.NewEnginePresetCost,
+                ResearchPrototypeModel.EngineInstallCost,
+                ResearchPrototypeModel.CreateDefaultMissionConfigs());
+        }
+
+        public int GetResearchStatGain(bool focused, int score)
+        {
+            ResearchScoreRewardBand[] bands = focused ? FocusedResearchStatRewards : NormalResearchStatRewards;
+            int clampedScore = ResearchPrototypeModel.ClampInt(score, 0, 100);
+            int gain = bands.Length > 0 ? bands[0].Gain : 0;
+            for (int i = 0; i < bands.Length; i++)
+            {
+                if (clampedScore >= bands[i].MinScore)
+                {
+                    gain = bands[i].Gain;
+                }
+            }
+
+            return gain;
+        }
+
+        public ResearchGradeReward GetLaunchReward(ResearchGrade grade)
+        {
+            for (int i = 0; i < LaunchRewards.Length; i++)
+            {
+                if (LaunchRewards[i].Grade == grade)
+                {
+                    return LaunchRewards[i];
+                }
+            }
+
+            return new ResearchGradeReward(grade, 0, -100);
+        }
+
+        public int GetVisibilitySuccessModifier(TestVisibility visibility)
+        {
+            switch (visibility)
+            {
+                case TestVisibility.Public:
+                    return PublicSuccessModifier;
+                case TestVisibility.Private:
+                    return PrivateSuccessModifier;
+                case TestVisibility.FinalMission:
+                    return FinalMissionSuccessModifier;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(visibility), visibility, null);
+            }
+        }
+
+        public double GetRewardMultiplier(TestVisibility visibility)
+        {
+            switch (visibility)
+            {
+                case TestVisibility.Public:
+                    return PublicRewardMultiplier;
+                case TestVisibility.Private:
+                    return PrivateRewardMultiplier;
+                case TestVisibility.FinalMission:
+                    return FinalMissionRewardMultiplier;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(visibility), visibility, null);
+            }
+        }
+
+        public int GetFailureQuarterlyFundingDelta(TestVisibility visibility)
+        {
+            switch (visibility)
+            {
+                case TestVisibility.Public:
+                    return PublicFailureQuarterlyFundingDelta;
+                case TestVisibility.Private:
+                    return PrivateFailureQuarterlyFundingDelta;
+                case TestVisibility.FinalMission:
+                    return FinalMissionFailureQuarterlyFundingDelta;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(visibility), visibility, null);
+            }
+        }
+
+        private static LaunchMissionConfig[] CopyMissionConfigs(IReadOnlyList<LaunchMissionConfig> source)
+        {
+            LaunchMissionConfig[] defaults = ResearchPrototypeModel.CreateDefaultMissionConfigs();
+            if (source == null || source.Count == 0)
+            {
+                return defaults;
+            }
+
+            var copy = new LaunchMissionConfig[defaults.Length];
+            Array.Copy(defaults, copy, defaults.Length);
+            int length = Math.Min(copy.Length, source.Count);
+            for (int i = 0; i < length; i++)
+            {
+                copy[(int)source[i].Id] = source[i];
+            }
+
+            return copy;
+        }
+
+        private static ResearchScoreRewardBand[] CreateDefaultNormalResearchStatRewards()
+        {
+            return new[]
+            {
+                new ResearchScoreRewardBand(0, 10),
+                new ResearchScoreRewardBand(50, 13),
+                new ResearchScoreRewardBand(80, 16),
+            };
+        }
+
+        private static ResearchScoreRewardBand[] CreateDefaultFocusedResearchStatRewards()
+        {
+            return new[]
+            {
+                new ResearchScoreRewardBand(0, 16),
+                new ResearchScoreRewardBand(50, 21),
+                new ResearchScoreRewardBand(80, 26),
+            };
+        }
+
+        private static ResearchGradeReward[] CreateDefaultLaunchRewards()
+        {
+            return new[]
+            {
+                new ResearchGradeReward(ResearchGrade.S, 900, 150),
+                new ResearchGradeReward(ResearchGrade.A, 600, 100),
+                new ResearchGradeReward(ResearchGrade.B, 400, 50),
+                new ResearchGradeReward(ResearchGrade.C, 150, 0),
+                new ResearchGradeReward(ResearchGrade.F, 0, -100),
+            };
+        }
+
+        private static ResearchScoreRewardBand[] CopyScoreRewardBands(IReadOnlyList<ResearchScoreRewardBand> source, ResearchScoreRewardBand[] defaults)
+        {
+            if (source == null || source.Count == 0)
+            {
+                return defaults;
+            }
+
+            var copy = new ResearchScoreRewardBand[source.Count];
+            for (int i = 0; i < source.Count; i++)
+            {
+                copy[i] = source[i];
+            }
+
+            Array.Sort(copy, (a, b) => a.MinScore.CompareTo(b.MinScore));
+            return copy;
+        }
+
+        private static ResearchGradeReward[] CopyGradeRewards(IReadOnlyList<ResearchGradeReward> source, ResearchGradeReward[] defaults)
+        {
+            var copy = new ResearchGradeReward[defaults.Length];
+            Array.Copy(defaults, copy, defaults.Length);
+            if (source == null || source.Count == 0)
+            {
+                return copy;
+            }
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                int index = Array.FindIndex(copy, reward => reward.Grade == source[i].Grade);
+                if (index >= 0)
+                {
+                    copy[index] = source[i];
+                }
+            }
+
+            return copy;
+        }
     }
 
     public readonly struct ResearchDesignEntryData
     {
         public ResearchDesignEntryData(
-            LaunchStageId stageId,
+            LaunchMissionId missionId,
             EnginePresetId selectedEnginePresetId,
             int year,
             int quarter,
@@ -191,7 +520,7 @@ namespace Border.Research
             int experienceBonus,
             bool launchCostPaid)
         {
-            StageId = stageId;
+            MissionId = missionId;
             SelectedEnginePresetId = selectedEnginePresetId;
             Year = year;
             Quarter = quarter;
@@ -210,7 +539,7 @@ namespace Border.Research
             LaunchCostPaid = launchCostPaid;
         }
 
-        public LaunchStageId StageId { get; }
+        public LaunchMissionId MissionId { get; }
         public EnginePresetId SelectedEnginePresetId { get; }
         public int Year { get; }
         public int Quarter { get; }
@@ -263,7 +592,7 @@ namespace Border.Research
     public readonly struct ResearchLaunchResultData
     {
         public ResearchLaunchResultData(
-            LaunchStageId stageId,
+            LaunchMissionId missionId,
             EnginePresetId selectedEnginePresetId,
             int year,
             int quarter,
@@ -280,10 +609,10 @@ namespace Border.Research
             ResearchGrade grade,
             int immediateFunding,
             int quarterlyFundingDelta,
-            bool moonMissionWon,
+            bool finalMissionWon,
             bool deadlineMissed)
         {
-            StageId = stageId;
+            MissionId = missionId;
             SelectedEnginePresetId = selectedEnginePresetId;
             Year = year;
             Quarter = quarter;
@@ -300,11 +629,11 @@ namespace Border.Research
             Grade = grade;
             ImmediateFunding = immediateFunding;
             QuarterlyFundingDelta = quarterlyFundingDelta;
-            MoonMissionWon = moonMissionWon;
+            FinalMissionWon = finalMissionWon;
             DeadlineMissed = deadlineMissed;
         }
 
-        public LaunchStageId StageId { get; }
+        public LaunchMissionId MissionId { get; }
         public EnginePresetId SelectedEnginePresetId { get; }
         public int Year { get; }
         public int Quarter { get; }
@@ -322,7 +651,7 @@ namespace Border.Research
         public ResearchGrade Grade { get; }
         public int ImmediateFunding { get; }
         public int QuarterlyFundingDelta { get; }
-        public bool MoonMissionWon { get; }
+        public bool FinalMissionWon { get; }
         public bool DeadlineMissed { get; }
     }
 
@@ -345,11 +674,12 @@ namespace Border.Research
         public const int InitialEngineStat = 40;
         public const int EngineNormalResearchCost = 350;
         public const int EngineFocusedResearchCost = 650;
+        public const int NewEnginePresetCost = 150;
         public const int EngineInstallCost = 350;
         public const int MinDesignFit = 0;
         public const int MaxDesignFit = 100;
 
-        private static readonly EnginePresetConfig[] EnginePresetConfigs =
+        private static readonly EnginePresetConfig[] DefaultEnginePresetConfigs =
         {
             new(EnginePresetId.Engine01, "엔진 01"),
             new(EnginePresetId.Engine02, "엔진 02"),
@@ -363,19 +693,16 @@ namespace Border.Research
             new(EnginePresetId.Engine10, "엔진 10"),
         };
 
-        private static readonly LaunchStageConfig[] StageConfigs =
-        {
-            new(LaunchStageId.Engine, "초기 목표", 600, "기본 해금"),
-            new(LaunchStageId.Rocket, "확장 목표", 900, "직전 목표 C 이상"),
-            new(LaunchStageId.Orbit, "궤도 목표", 1200, "직전 목표 C 이상"),
-            new(LaunchStageId.Moon, "달 착륙", 1800, "직전 목표 C 이상"),
-        };
+        private readonly ResearchBalanceConfig balanceConfig;
+        private readonly LaunchMissionConfig[] missionConfigs;
 
-        public ResearchPrototypeModel(int seed = 20260904)
+        public ResearchPrototypeModel(int seed = 20260904, ResearchBalanceConfig balanceConfig = null)
         {
             Seed = seed;
-            Stages = new LaunchStageState[StageConfigs.Length];
-            EnginePresets = new EnginePresetState[EnginePresetConfigs.Length];
+            this.balanceConfig = balanceConfig ?? ResearchBalanceConfig.CreateDefault();
+            missionConfigs = this.balanceConfig.MissionConfigs;
+            Missions = new LaunchMissionState[missionConfigs.Length];
+            EnginePresets = new EnginePresetState[DefaultEnginePresetConfigs.Length];
             Reset();
         }
 
@@ -387,8 +714,19 @@ namespace Border.Research
         public int QuarterlyFunding { get; private set; }
         public int CurrentTurnIndex => MaxTurns - RemainingTurns;
         public bool DeadlineReached => RemainingTurns <= 0;
+        public bool HasGameEnded { get; private set; }
+        public bool GameWon { get; private set; }
+        public int TotalLaunches { get; private set; }
+        public int FailedLaunches { get; private set; }
+        public int HighestQuarterlyFunding { get; private set; }
+        public int TotalSpentFunds { get; private set; }
+        public int ConfiguredResearchCompletionGain => balanceConfig.ResearchCompletionGain;
+        public int ConfiguredEngineNormalResearchCost => balanceConfig.EngineNormalResearchCost;
+        public int ConfiguredEngineFocusedResearchCost => balanceConfig.EngineFocusedResearchCost;
+        public int ConfiguredNewEnginePresetCost => balanceConfig.NewEnginePresetCost;
+        public int ConfiguredEngineInstallCost => balanceConfig.EngineInstallCost;
         public string LastMessage { get; private set; }
-        public LaunchStageState[] Stages { get; }
+        public LaunchMissionState[] Missions { get; }
         public EnginePresetState[] EnginePresets { get; }
         public int ActiveEnginePresetCount { get; private set; }
 
@@ -397,27 +735,33 @@ namespace Border.Research
             Year = StartYear;
             Quarter = StartQuarter;
             RemainingTurns = MaxTurns;
-            Funds = InitialFunds;
-            QuarterlyFunding = InitialQuarterlyFunding;
+            Funds = balanceConfig.InitialFunds;
+            QuarterlyFunding = balanceConfig.InitialQuarterlyFunding;
+            HighestQuarterlyFunding = QuarterlyFunding;
+            TotalLaunches = 0;
+            FailedLaunches = 0;
+            TotalSpentFunds = 0;
+            HasGameEnded = false;
+            GameWon = false;
             ActiveEnginePresetCount = 1;
             LastMessage = "2018 Q1. 첫 엔진 프리셋 연구 판단을 시작합니다.";
 
-            for (int i = 0; i < Stages.Length; i++)
+            for (int i = 0; i < Missions.Length; i++)
             {
-                LaunchStageConfig config = StageConfigs[i];
-                Stages[i] = new LaunchStageState
+                LaunchMissionConfig config = missionConfigs[i];
+                Missions[i] = new LaunchMissionState
                 {
                     Id = config.Id,
                     AttemptCount = 0,
                     BestGrade = ResearchGrade.F,
                     HasBestGrade = false,
-                    Unlocked = config.Id == LaunchStageId.Engine
+                    Unlocked = config.Id == LaunchMissionId.StaticFire
                 };
             }
 
             for (int i = 0; i < EnginePresets.Length; i++)
             {
-                EnginePresetConfig config = EnginePresetConfigs[i];
+                EnginePresetConfig config = DefaultEnginePresetConfigs[i];
                 EnginePresets[i] = new EnginePresetState
                 {
                     PresetId = config.Id,
@@ -434,49 +778,60 @@ namespace Border.Research
             }
         }
 
-        public static IReadOnlyList<LaunchStageConfig> GetStageConfigs()
+        public static LaunchMissionConfig[] CreateDefaultMissionConfigs()
         {
-            return StageConfigs;
+            return new[]
+            {
+                new LaunchMissionConfig(LaunchMissionId.StaticFire, "정적 연소 시험", 600, "기본 해금", 0d),
+                new LaunchMissionConfig(LaunchMissionId.LowAltitude, "낮은 고도 도달", 800, "정적 연소 시험 C 이상", 0.55d),
+                new LaunchMissionConfig(LaunchMissionId.HighAltitude, "높은 고도 도달", 900, "낮은 고도 도달 C 이상", 0.50d),
+                new LaunchMissionConfig(LaunchMissionId.TargetZone, "목표 구역 도달", 1100, "높은 고도 도달 C 이상", 0.45d),
+                new LaunchMissionConfig(LaunchMissionId.ZoneHold, "목표 구역 체류", 1300, "목표 구역 도달 C 이상", 0.42d),
+                new LaunchMissionConfig(LaunchMissionId.LowPowerZoneHold, "저전력 검증", 1500, "목표 구역 체류 C 이상", 0.40d),
+            };
+        }
+
+        public static IReadOnlyList<LaunchMissionConfig> GetMissionConfigs()
+        {
+            return ResearchBalanceConfig.CreateDefault().MissionConfigs;
         }
 
         public static IReadOnlyList<EnginePresetConfig> GetEnginePresetConfigs()
         {
-            return EnginePresetConfigs;
+            return DefaultEnginePresetConfigs;
         }
 
-        public static LaunchStageConfig GetStageConfig(LaunchStageId stageId)
+        public static LaunchMissionConfig GetMissionConfig(LaunchMissionId missionId)
         {
-            return StageConfigs[(int)stageId];
+            return CreateDefaultMissionConfigs()[(int)missionId];
+        }
+
+        public LaunchMissionConfig GetConfiguredMissionConfig(LaunchMissionId missionId)
+        {
+            return missionConfigs[(int)missionId];
         }
 
         public static EnginePresetConfig GetEnginePresetConfig(EnginePresetId presetId)
         {
-            return EnginePresetConfigs[(int)presetId];
+            return DefaultEnginePresetConfigs[(int)presetId];
         }
 
-        public LaunchStageState GetStage(LaunchStageId stageId)
+        public LaunchMissionState GetMission(LaunchMissionId missionId)
         {
-            return Stages[(int)stageId];
+            return Missions[(int)missionId];
         }
 
-        public LaunchStageId GetCurrentLaunchTarget()
+        public LaunchMissionId GetCurrentMission()
         {
-            if (GetStage(LaunchStageId.Moon).Unlocked)
+            for (int i = Missions.Length - 1; i >= 0; i--)
             {
-                return LaunchStageId.Moon;
+                if (Missions[i].Unlocked)
+                {
+                    return Missions[i].Id;
+                }
             }
 
-            if (GetStage(LaunchStageId.Orbit).Unlocked)
-            {
-                return LaunchStageId.Orbit;
-            }
-
-            if (GetStage(LaunchStageId.Rocket).Unlocked)
-            {
-                return LaunchStageId.Rocket;
-            }
-
-            return LaunchStageId.Engine;
+            return LaunchMissionId.StaticFire;
         }
 
         public EnginePresetState GetEnginePreset(EnginePresetId presetId)
@@ -509,19 +864,28 @@ namespace Border.Research
                 return ResearchActionResult.EnginePresetLimitReached;
             }
 
+            if (Funds < balanceConfig.NewEnginePresetCost)
+            {
+                LastMessage = $"예산 부족. 필요 {balanceConfig.NewEnginePresetCost}, 보유 {Funds}.";
+                return ResearchActionResult.NotEnoughFunds;
+            }
+
+            Funds -= balanceConfig.NewEnginePresetCost;
+            TotalSpentFunds += balanceConfig.NewEnginePresetCost;
             int index = ActiveEnginePresetCount;
             EnginePresets[index].Unlocked = true;
             ActiveEnginePresetCount++;
             presetId = EnginePresets[index].PresetId;
-            LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName} 개발 슬롯이 열렸습니다. 비용과 시간 대가는 아직 적용하지 않습니다.";
+            LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName} 개발 슬롯이 열렸습니다. 비용 {balanceConfig.NewEnginePresetCost}, 시간 소모 없음.";
             return ResearchActionResult.Success;
         }
 
 #if UNITY_EDITOR
-        public void PrepareDebugDesignEntryState(LaunchStageId stageId, EnginePresetId presetId = EnginePresetId.Engine01)
+        public void PrepareDebugDesignEntryState(LaunchMissionId missionId, EnginePresetId presetId = EnginePresetId.Engine01)
         {
             while (!IsEnginePresetUnlocked(presetId) && ActiveEnginePresetCount < MaxEnginePresetCount)
             {
+                Funds = Math.Max(Funds, balanceConfig.NewEnginePresetCost);
                 CreateNewEnginePreset(out _);
             }
 
@@ -532,16 +896,16 @@ namespace Border.Research
             preset.MaxOutput = Math.Max(preset.MaxOutput, 65);
             preset.IgnitionReliability = Math.Max(preset.IgnitionReliability, 65);
 
-            for (int i = 0; i <= (int)stageId; i++)
+            for (int i = 0; i <= (int)missionId; i++)
             {
-                Stages[i].Unlocked = true;
+                Missions[i].Unlocked = true;
             }
 
-            LaunchStageConfig config = GetStageConfig(stageId);
-            Funds = Math.Max(Funds, config.LaunchCost + EngineInstallCost * 2);
+            LaunchMissionConfig config = GetConfiguredMissionConfig(missionId);
+            Funds = Math.Max(Funds, config.LaunchCost + balanceConfig.EngineInstallCost * 2);
         }
-
 #endif
+
         public ResearchActionResult ExecuteEngineResearch(EnginePresetId presetId, EngineStatId statId, bool focused, int score)
         {
             if (DeadlineReached)
@@ -564,7 +928,7 @@ namespace Border.Research
             }
 
             EnginePresetConfig config = GetEnginePresetConfig(presetId);
-            int cost = focused ? config.FocusedResearchCost : config.NormalResearchCost;
+            int cost = focused ? balanceConfig.EngineFocusedResearchCost : balanceConfig.EngineNormalResearchCost;
             if (Funds < cost)
             {
                 LastMessage = $"예산 부족. 필요 {cost}, 보유 {Funds}.";
@@ -573,11 +937,12 @@ namespace Border.Research
 
             int oldStat = preset.GetStat(statId);
             int oldCompletion = preset.Completion;
-            int statGain = GetResearchStatGain(focused, score);
+            int statGain = CalculateResearchStatGain(focused, score);
 
             Funds -= cost;
+            TotalSpentFunds += cost;
             preset.SetStat(statId, oldStat + statGain);
-            preset.Completion = Math.Min(MaxEngineCompletion, preset.Completion + ResearchCompletionGain);
+            preset.Completion = Math.Min(MaxEngineCompletion, preset.Completion + balanceConfig.ResearchCompletionGain);
             AdvanceQuarter();
 
             LastMessage = $"{config.DisplayName} {GetStatDisplayName(statId)} {(focused ? "집중" : "일반")} 연구 완료. "
@@ -592,16 +957,16 @@ namespace Border.Research
             return DeadlineReached ? ResearchActionResult.DeadlineReached : ResearchActionResult.Success;
         }
 
-        public ResearchActionResult TryEnterDesign(LaunchStageId stageId, out ResearchDesignEntryData data)
+        public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, out ResearchDesignEntryData data)
         {
-            return TryEnterDesign(stageId, EnginePresetId.Engine01, out data);
+            return TryEnterDesign(missionId, EnginePresetId.Engine01, out data);
         }
 
-        public ResearchActionResult TryEnterDesign(LaunchStageId stageId, EnginePresetId presetId, out ResearchDesignEntryData data)
+        public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, out ResearchDesignEntryData data)
         {
             data = default;
-            LaunchStageState stage = GetStage(stageId);
-            LaunchStageConfig config = GetStageConfig(stageId);
+            LaunchMissionState mission = GetMission(missionId);
+            LaunchMissionConfig config = GetConfiguredMissionConfig(missionId);
             if (!IsEnginePresetUnlocked(presetId))
             {
                 LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName}은 아직 개발되지 않았습니다.";
@@ -614,10 +979,10 @@ namespace Border.Research
                 return ResearchActionResult.DeadlineReached;
             }
 
-            if (!stage.Unlocked)
+            if (!mission.Unlocked)
             {
-                LastMessage = $"{config.DisplayName} 단계는 아직 잠겨 있습니다.";
-                return ResearchActionResult.LaunchTargetLocked;
+                LastMessage = $"{config.DisplayName} 미션은 아직 잠겨 있습니다.";
+                return ResearchActionResult.MissionLocked;
             }
 
             if (Funds < config.LaunchCost)
@@ -627,62 +992,63 @@ namespace Border.Research
             }
 
             Funds -= config.LaunchCost;
-            data = CreateDesignEntry(stageId, presetId, CreateDefaultInstalledEngineCounts(stageId, presetId), 50, GetDefaultVisibility(stageId), true);
+            TotalSpentFunds += config.LaunchCost;
+            data = CreateDesignEntry(missionId, presetId, CreateDefaultInstalledEngineCounts(missionId, presetId), 50, GetDefaultVisibility(missionId), true);
             LastMessage = $"{config.DisplayName} 설계 진입. 예산 {config.LaunchCost} 지불.";
             return ResearchActionResult.Success;
         }
 
         public ResearchDesignEntryData CreateDesignEntry(
-            LaunchStageId stageId,
+            LaunchMissionId missionId,
             EnginePresetId presetId,
             int[] installedEngineCounts,
             int designFit,
             TestVisibility visibility,
             bool launchCostPaid = false)
         {
-            LaunchStageConfig stageConfig = GetStageConfig(stageId);
+            LaunchMissionConfig missionConfig = GetConfiguredMissionConfig(missionId);
             EnginePresetState selectedEngine = GetEnginePreset(presetId);
             int clampedFit = ClampInt(designFit, MinDesignFit, MaxDesignFit);
-            TestVisibility normalizedVisibility = stageId == LaunchStageId.Moon ? TestVisibility.FinalMission : visibility;
-            int mapSeed = CreateDesignMapSeed(stageId, presetId);
+            TestVisibility normalizedVisibility = missionId == LaunchMissionId.LowPowerZoneHold ? TestVisibility.FinalMission : visibility;
+            int mapSeed = CreateDesignMapSeed(missionId, presetId);
             int[] counts = CopyAndNormalizeEngineCounts(installedEngineCounts);
             ClearLockedEngineCounts(counts);
 
-            if (stageId == LaunchStageId.Engine)
+            if (missionId == LaunchMissionId.StaticFire)
             {
                 Array.Clear(counts, 0, counts.Length);
             }
 
-            int reservedInstallCost = stageId == LaunchStageId.Engine ? 0 : CalculateReservedInstallCost(counts);
-            int installedScore = stageId == LaunchStageId.Engine
+            int reservedInstallCost = missionId == LaunchMissionId.StaticFire ? 0 : CalculateReservedInstallCost(counts);
+            int installedScore = missionId == LaunchMissionId.StaticFire
                 ? CalculateEnginePerformanceScore(presetId)
                 : CalculateInstalledEngineScore(counts);
 
             return new ResearchDesignEntryData(
-                stageId,
+                missionId,
                 presetId,
                 Year,
                 Quarter,
                 mapSeed,
-                CreateTargetPathId(stageId, mapSeed),
+                CreateTargetPathId(missionId, mapSeed),
                 selectedEngine.Completion,
                 CalculateEnginePerformanceScore(presetId),
                 installedScore,
                 counts,
                 reservedInstallCost,
-                stageConfig.LaunchCost,
+                missionConfig.LaunchCost,
                 clampedFit,
                 normalizedVisibility,
-                GetPreviousCertificationBonus(stageId, presetId),
-                GetExperienceBonus(stageId),
+                GetPreviousCertificationBonus(missionId, presetId),
+                GetExperienceBonus(missionId),
                 launchCostPaid);
         }
 
         public ResearchActionResult CommitLaunch(ResearchDesignEntryData designEntry, out ResearchLaunchResultData result)
         {
             result = default;
-            LaunchStageConfig config = GetStageConfig(designEntry.StageId);
-            LaunchStageState stage = GetStage(designEntry.StageId);
+            LaunchMissionConfig config = GetConfiguredMissionConfig(designEntry.MissionId);
+            LaunchMissionState mission = GetMission(designEntry.MissionId);
 
             if (DeadlineReached)
             {
@@ -696,10 +1062,10 @@ namespace Border.Research
                 return ResearchActionResult.EnginePresetLocked;
             }
 
-            if (!stage.Unlocked)
+            if (!mission.Unlocked)
             {
-                LastMessage = $"{config.DisplayName} 단계는 아직 잠겨 있습니다.";
-                return ResearchActionResult.LaunchTargetLocked;
+                LastMessage = $"{config.DisplayName} 미션은 아직 잠겨 있습니다.";
+                return ResearchActionResult.MissionLocked;
             }
 
             int entryCost = designEntry.LaunchCostPaid ? 0 : designEntry.LaunchCost;
@@ -713,14 +1079,21 @@ namespace Border.Research
             int successChance = CalculateSuccessChance(designEntry);
             int partialChance = Math.Min(15, 95 - successChance);
             int failureChance = 100 - successChance - partialChance;
-            int roll = CreateLaunchRoll(designEntry, stage.AttemptCount);
+            int roll = CreateLaunchRoll(designEntry, mission.AttemptCount);
             ResearchGrade grade = DetermineGrade(successChance, roll);
             GetVisibilityAdjustedReward(grade, designEntry.Visibility, out int immediateFunding, out int quarterlyFundingDelta);
 
             Funds -= remainingCost;
-            stage.AttemptCount++;
-            ApplyBestGrade(stage, grade);
-            if (designEntry.StageId == LaunchStageId.Engine)
+            TotalSpentFunds += remainingCost;
+            TotalLaunches++;
+            if (grade == ResearchGrade.F)
+            {
+                FailedLaunches++;
+            }
+
+            mission.AttemptCount++;
+            ApplyBestGrade(mission, grade);
+            if (designEntry.MissionId == LaunchMissionId.StaticFire)
             {
                 EnginePresetState preset = GetEnginePreset(designEntry.SelectedEnginePresetId);
                 preset.AttemptCount++;
@@ -728,14 +1101,18 @@ namespace Border.Research
             }
 
             Funds += immediateFunding;
-            QuarterlyFunding = ClampInt(QuarterlyFunding + quarterlyFundingDelta, MinQuarterlyFunding, MaxQuarterlyFunding);
+            QuarterlyFunding = ClampInt(QuarterlyFunding + quarterlyFundingDelta, balanceConfig.MinQuarterlyFunding, balanceConfig.MaxQuarterlyFunding);
+            HighestQuarterlyFunding = Math.Max(HighestQuarterlyFunding, QuarterlyFunding);
             AdvanceQuarter();
             CheckUnlocks();
 
-            bool moonMissionWon = designEntry.StageId == LaunchStageId.Moon && grade <= ResearchGrade.B;
-            bool deadlineMissed = DeadlineReached && !moonMissionWon;
+            bool finalMissionWon = designEntry.MissionId == LaunchMissionId.LowPowerZoneHold && grade <= ResearchGrade.B;
+            bool deadlineMissed = DeadlineReached && !finalMissionWon;
+            HasGameEnded = finalMissionWon || deadlineMissed;
+            GameWon = finalMissionWon;
+
             result = new ResearchLaunchResultData(
-                designEntry.StageId,
+                designEntry.MissionId,
                 designEntry.SelectedEnginePresetId,
                 designEntry.Year,
                 designEntry.Quarter,
@@ -752,13 +1129,13 @@ namespace Border.Research
                 grade,
                 immediateFunding,
                 quarterlyFundingDelta,
-                moonMissionWon,
+                finalMissionWon,
                 deadlineMissed);
 
-            LastMessage = $"{config.DisplayName} 발사 결과 {grade}. 총 비용 {designEntry.LaunchCost + designEntry.ReservedInstallCost}, 지원금 +{immediateFunding}, 분기 예산 {quarterlyFundingDelta:+#;-#;0}.";
-            if (moonMissionWon)
+            LastMessage = $"{config.DisplayName} 결과 {grade}. 총 비용 {designEntry.LaunchCost + designEntry.ReservedInstallCost}, 지원금 +{immediateFunding}, 분기 예산 {quarterlyFundingDelta:+#;-#;0}.";
+            if (finalMissionWon)
             {
-                LastMessage += " 달 착륙 성공.";
+                LastMessage += " 최종 미션 성공.";
             }
             else if (deadlineMissed)
             {
@@ -768,20 +1145,20 @@ namespace Border.Research
             return ResearchActionResult.Success;
         }
 
-        public int CalculateSuccessChance(LaunchStageId stageId)
+        public int CalculateSuccessChance(LaunchMissionId missionId)
         {
             EnginePresetId presetId = GetDefaultCertifiedEnginePreset();
-            ResearchDesignEntryData designEntry = CreateDesignEntry(stageId, presetId, CreateDefaultInstalledEngineCounts(stageId, presetId), 50, GetDefaultVisibility(stageId));
+            ResearchDesignEntryData designEntry = CreateDesignEntry(missionId, presetId, CreateDefaultInstalledEngineCounts(missionId, presetId), 50, GetDefaultVisibility(missionId));
             return CalculateSuccessChance(designEntry);
         }
 
         public int CalculateSuccessChance(ResearchDesignEntryData designEntry)
         {
             int designFitModifier = CalculateDesignFitModifier(designEntry.DesignFit);
-            int visibilityModifier = GetVisibilitySuccessModifier(designEntry.Visibility);
+            int visibilityModifier = balanceConfig.GetVisibilitySuccessModifier(designEntry.Visibility);
             double raw;
 
-            if (designEntry.StageId == LaunchStageId.Engine)
+            if (designEntry.MissionId == LaunchMissionId.StaticFire)
             {
                 raw = 20
                     + designEntry.SelectedEngineScore * 0.8d
@@ -792,7 +1169,7 @@ namespace Border.Research
             else
             {
                 raw = 20
-                    + designEntry.InstalledEngineScore * GetStageEngineWeight(designEntry.StageId)
+                    + designEntry.InstalledEngineScore * GetMissionEngineWeight(designEntry.MissionId)
                     + designEntry.PreviousCertificationBonus
                     + designEntry.ExperienceBonus
                     + designFitModifier
@@ -811,6 +1188,16 @@ namespace Border.Research
             double penalty = CalculateEngineImbalancePenalty(preset);
             double score = quality * 0.6d - penalty;
             return ClampInt((int)Math.Round(score, MidpointRounding.AwayFromZero), 0, 100);
+        }
+
+        public int CalculateResearchStatGain(bool focused, int score)
+        {
+            return balanceConfig.GetResearchStatGain(focused, score);
+        }
+
+        public int GetConfiguredVisibilitySuccessModifier(TestVisibility visibility)
+        {
+            return balanceConfig.GetVisibilitySuccessModifier(visibility);
         }
 
         public int CalculateInstalledEngineScore(int[] installedEngineCounts)
@@ -836,36 +1223,53 @@ namespace Border.Research
             return ClampInt((int)Math.Round(average + countBonus - overweightPenalty, MidpointRounding.AwayFromZero), 0, 100);
         }
 
-        public bool CanUnlockNext(LaunchStageId stageId)
+        public EngineRiskInfo[] GetTopEngineRisks(EnginePresetId presetId, int count = 2)
         {
-            switch (stageId)
-            {
-                case LaunchStageId.Engine:
-                    return HasAnyCertifiedEngine();
-                case LaunchStageId.Rocket:
-                case LaunchStageId.Orbit:
-                    LaunchStageState stage = GetStage(stageId);
-                    return stage.HasBestGrade && stage.BestGrade <= ResearchGrade.C;
-                default:
-                    return false;
-            }
+            return GetTopEngineRisks(GetEnginePreset(presetId), count);
         }
 
-        public string GetUnlockConditionText(LaunchStageId stageId)
+        public static EngineRiskInfo[] GetTopEngineRisks(EnginePresetState engine, int count = 2)
         {
-            switch (stageId)
+            var risks = new[]
             {
-                case LaunchStageId.Engine:
-                    return "기본 해금";
-                case LaunchStageId.Rocket:
-                    return "필요: 직전 목표 C 이상";
-                case LaunchStageId.Orbit:
-                    return "필요: 직전 목표 C 이상";
-                case LaunchStageId.Moon:
-                    return "필요: 직전 목표 C 이상";
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(stageId), stageId, null);
-            }
+                new EngineRiskInfo(
+                    EngineRiskKind.OutputShortage,
+                    ClampInt(100 - engine.MaxOutput + Math.Max(0, engine.FuelCapacity - engine.MaxOutput) / 2, 0, 100),
+                    "출력 부족",
+                    "최대 출력이 낮으면 목표 고도와 구역 도달 여유가 줄어듭니다."),
+                new EngineRiskInfo(
+                    EngineRiskKind.FuelExhaustion,
+                    ClampInt(100 - engine.FuelCapacity + Math.Max(0, engine.MaxOutput - engine.FuelCapacity) / 2, 0, 100),
+                    "연료 소진",
+                    "연료량이 부족하면 장시간 연소와 체류 미션에서 먼저 무너집니다."),
+                new EngineRiskInfo(
+                    EngineRiskKind.CoolingShortage,
+                    ClampInt(100 - engine.Cooling + Math.Max(0, engine.MaxOutput - engine.Cooling), 0, 100),
+                    "냉각 부족",
+                    "냉각이 부족하면 고출력 연소 중 과열 위험이 커집니다."),
+                new EngineRiskInfo(
+                    EngineRiskKind.IgnitionInstability,
+                    ClampInt(100 - engine.IgnitionReliability + Math.Max(0, engine.MaxOutput - engine.IgnitionReliability) / 2, 0, 100),
+                    "점화 불안정",
+                    "점화 신뢰도가 낮으면 발사 초반 실패와 재시동 실패 가능성이 커집니다."),
+            };
+
+            Array.Sort(risks, (a, b) => b.Severity.CompareTo(a.Severity));
+            int length = ClampInt(count, 0, risks.Length);
+            var result = new EngineRiskInfo[length];
+            Array.Copy(risks, result, length);
+            return result;
+        }
+
+        public bool CanUnlockNext(LaunchMissionId missionId)
+        {
+            LaunchMissionId next = GetNextMission(missionId);
+            return next != missionId && GetMission(missionId).HasBestGrade && GetMission(missionId).BestGrade <= ResearchGrade.C;
+        }
+
+        public string GetUnlockConditionText(LaunchMissionId missionId)
+        {
+            return GetConfiguredMissionConfig(missionId).RequirementText;
         }
 
         public static string GetStatDisplayName(EngineStatId statId)
@@ -880,6 +1284,23 @@ namespace Border.Research
                     return "최대 출력";
                 case EngineStatId.IgnitionReliability:
                     return "점화 신뢰도";
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(statId), statId, null);
+            }
+        }
+
+        public static string GetStatInsightText(EngineStatId statId)
+        {
+            switch (statId)
+            {
+                case EngineStatId.FuelCapacity:
+                    return "연료량은 출력 지속 시간과 체류 여유를 받쳐줍니다.";
+                case EngineStatId.Cooling:
+                    return "냉각은 고출력 연소의 과열 위험을 낮춥니다.";
+                case EngineStatId.MaxOutput:
+                    return "최대 출력은 고도와 목표 구역 도달 가능성을 직접 밀어 올립니다.";
+                case EngineStatId.IgnitionReliability:
+                    return "점화 신뢰도는 발사 초반 실패와 재시동 불안을 줄입니다.";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(statId), statId, null);
             }
@@ -930,38 +1351,28 @@ namespace Border.Research
             return value > max ? max : value;
         }
 
+        public static LaunchMissionId GetNextMission(LaunchMissionId missionId)
+        {
+            int next = (int)missionId + 1;
+            return next < Enum.GetValues(typeof(LaunchMissionId)).Length ? (LaunchMissionId)next : missionId;
+        }
+
         private void CheckUnlocks()
         {
-            if (HasAnyCertifiedEngine())
-            {
-                GetStage(LaunchStageId.Rocket).Unlocked = true;
-            }
-
-            UnlockIfReady(LaunchStageId.Rocket, LaunchStageId.Orbit);
-            UnlockIfReady(LaunchStageId.Orbit, LaunchStageId.Moon);
+            UnlockIfReady(LaunchMissionId.StaticFire, LaunchMissionId.LowAltitude);
+            UnlockIfReady(LaunchMissionId.LowAltitude, LaunchMissionId.HighAltitude);
+            UnlockIfReady(LaunchMissionId.HighAltitude, LaunchMissionId.TargetZone);
+            UnlockIfReady(LaunchMissionId.TargetZone, LaunchMissionId.ZoneHold);
+            UnlockIfReady(LaunchMissionId.ZoneHold, LaunchMissionId.LowPowerZoneHold);
         }
 
-        private void UnlockIfReady(LaunchStageId current, LaunchStageId next)
+        private void UnlockIfReady(LaunchMissionId current, LaunchMissionId next)
         {
-            LaunchStageState currentStage = GetStage(current);
-            if (currentStage.HasBestGrade && currentStage.BestGrade <= ResearchGrade.C)
+            LaunchMissionState currentMission = GetMission(current);
+            if (currentMission.HasBestGrade && currentMission.BestGrade <= ResearchGrade.C)
             {
-                GetStage(next).Unlocked = true;
+                GetMission(next).Unlocked = true;
             }
-        }
-
-        private bool HasAnyCertifiedEngine()
-        {
-            for (int i = 0; i < EnginePresets.Length; i++)
-            {
-                EnginePresetState preset = EnginePresets[i];
-                if (preset.Unlocked && preset.HasBestGrade && preset.BestGrade <= ResearchGrade.C)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private void AdvanceQuarter()
@@ -985,32 +1396,36 @@ namespace Border.Research
             }
         }
 
-        private int GetPreviousCertificationBonus(LaunchStageId stageId, EnginePresetId presetId)
+        private int GetPreviousCertificationBonus(LaunchMissionId missionId, EnginePresetId presetId)
         {
-            switch (stageId)
+            switch (missionId)
             {
-                case LaunchStageId.Engine:
+                case LaunchMissionId.StaticFire:
                     return 0;
-                case LaunchStageId.Rocket:
+                case LaunchMissionId.LowAltitude:
                     EnginePresetState preset = GetEnginePreset(presetId);
                     return GetGradeBonus(preset.BestGrade, preset.HasBestGrade);
-                case LaunchStageId.Orbit:
-                    return GetGradeBonus(GetStage(LaunchStageId.Rocket));
-                case LaunchStageId.Moon:
-                    return GetGradeBonus(GetStage(LaunchStageId.Orbit));
+                case LaunchMissionId.HighAltitude:
+                    return GetGradeBonus(GetMission(LaunchMissionId.LowAltitude));
+                case LaunchMissionId.TargetZone:
+                    return GetGradeBonus(GetMission(LaunchMissionId.HighAltitude));
+                case LaunchMissionId.ZoneHold:
+                    return GetGradeBonus(GetMission(LaunchMissionId.TargetZone));
+                case LaunchMissionId.LowPowerZoneHold:
+                    return GetGradeBonus(GetMission(LaunchMissionId.ZoneHold));
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(stageId), stageId, null);
+                    throw new ArgumentOutOfRangeException(nameof(missionId), missionId, null);
             }
         }
 
-        private int GetExperienceBonus(LaunchStageId stageId)
+        private int GetExperienceBonus(LaunchMissionId missionId)
         {
-            return Math.Min(GetStage(stageId).AttemptCount * 3, 9);
+            return Math.Min(GetMission(missionId).AttemptCount * 3, 9);
         }
 
-        private static int GetGradeBonus(LaunchStageState stage)
+        private static int GetGradeBonus(LaunchMissionState mission)
         {
-            return GetGradeBonus(stage.BestGrade, stage.HasBestGrade);
+            return GetGradeBonus(mission.BestGrade, mission.HasBestGrade);
         }
 
         private static int GetGradeBonus(ResearchGrade grade, bool hasGrade)
@@ -1035,19 +1450,9 @@ namespace Border.Research
             }
         }
 
-        private double GetStageEngineWeight(LaunchStageId stageId)
+        private double GetMissionEngineWeight(LaunchMissionId missionId)
         {
-            switch (stageId)
-            {
-                case LaunchStageId.Rocket:
-                    return 0.55d;
-                case LaunchStageId.Orbit:
-                    return 0.45d;
-                case LaunchStageId.Moon:
-                    return 0.40d;
-                default:
-                    return 0d;
-            }
+            return GetConfiguredMissionConfig(missionId).EngineWeight;
         }
 
         private int CalculateReservedInstallCost(int[] installedEngineCounts)
@@ -1060,13 +1465,13 @@ namespace Border.Research
                 totalCount += counts[i];
             }
 
-            return totalCount * EngineInstallCost;
+            return totalCount * balanceConfig.EngineInstallCost;
         }
 
-        private int[] CreateDefaultInstalledEngineCounts(LaunchStageId stageId, EnginePresetId presetId)
+        private int[] CreateDefaultInstalledEngineCounts(LaunchMissionId missionId, EnginePresetId presetId)
         {
             var counts = new int[MaxEnginePresetCount];
-            if (stageId != LaunchStageId.Engine)
+            if (missionId != LaunchMissionId.StaticFire)
             {
                 counts[(int)presetId] = 1;
             }
@@ -1087,9 +1492,9 @@ namespace Border.Research
             return EnginePresetId.Engine01;
         }
 
-        private static TestVisibility GetDefaultVisibility(LaunchStageId stageId)
+        private static TestVisibility GetDefaultVisibility(LaunchMissionId missionId)
         {
-            return stageId == LaunchStageId.Moon ? TestVisibility.FinalMission : TestVisibility.Private;
+            return missionId == LaunchMissionId.LowPowerZoneHold ? TestVisibility.FinalMission : TestVisibility.Private;
         }
 
         private double CalculateEngineImbalancePenalty(EnginePresetState preset)
@@ -1103,28 +1508,12 @@ namespace Border.Research
             return Math.Min(35, tankOverweight + fuelShortage + coolingShortage + ignitionUnstable + minimumStatPenalty);
         }
 
-        private static int GetResearchStatGain(bool focused, int score)
+        private static void ApplyBestGrade(LaunchMissionState mission, ResearchGrade grade)
         {
-            int clampedScore = ClampInt(score, 0, 100);
-            if (clampedScore < 50)
+            if (!mission.HasBestGrade || grade < mission.BestGrade)
             {
-                return focused ? 16 : 10;
-            }
-
-            if (clampedScore < 80)
-            {
-                return focused ? 21 : 13;
-            }
-
-            return focused ? 26 : 16;
-        }
-
-        private static void ApplyBestGrade(LaunchStageState stage, ResearchGrade grade)
-        {
-            if (!stage.HasBestGrade || grade < stage.BestGrade)
-            {
-                stage.BestGrade = grade;
-                stage.HasBestGrade = true;
+                mission.BestGrade = grade;
+                mission.HasBestGrade = true;
             }
         }
 
@@ -1137,49 +1526,22 @@ namespace Border.Research
             }
         }
 
-        private static void GetVisibilityAdjustedReward(ResearchGrade grade, TestVisibility visibility, out int immediateFunding, out int quarterlyFundingDelta)
+        private void GetVisibilityAdjustedReward(ResearchGrade grade, TestVisibility visibility, out int immediateFunding, out int quarterlyFundingDelta)
         {
-            GetGradeReward(grade, out int baseImmediateFunding, out int baseQuarterlyFundingDelta);
+            ResearchGradeReward reward = balanceConfig.GetLaunchReward(grade);
             if (grade == ResearchGrade.F)
             {
                 immediateFunding = 0;
-                switch (visibility)
-                {
-                    case TestVisibility.Public:
-                        quarterlyFundingDelta = -150;
-                        break;
-                    case TestVisibility.Private:
-                        quarterlyFundingDelta = -50;
-                        break;
-                    default:
-                        quarterlyFundingDelta = -100;
-                        break;
-                }
-
+                quarterlyFundingDelta = balanceConfig.GetFailureQuarterlyFundingDelta(visibility);
                 return;
             }
 
-            double multiplier = GetRewardMultiplier(visibility);
-            immediateFunding = (int)Math.Round(baseImmediateFunding * multiplier, MidpointRounding.AwayFromZero);
-            quarterlyFundingDelta = (int)Math.Round(baseQuarterlyFundingDelta * multiplier, MidpointRounding.AwayFromZero);
+            double multiplier = balanceConfig.GetRewardMultiplier(visibility);
+            immediateFunding = (int)Math.Round(reward.ImmediateFunding * multiplier, MidpointRounding.AwayFromZero);
+            quarterlyFundingDelta = (int)Math.Round(reward.QuarterlyFundingDelta * multiplier, MidpointRounding.AwayFromZero);
         }
 
-        private static double GetRewardMultiplier(TestVisibility visibility)
-        {
-            switch (visibility)
-            {
-                case TestVisibility.Public:
-                    return 1.5d;
-                case TestVisibility.Private:
-                    return 0.5d;
-                case TestVisibility.FinalMission:
-                    return 1d;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(visibility), visibility, null);
-            }
-        }
-
-        private int CreateDesignMapSeed(LaunchStageId stageId, EnginePresetId presetId)
+        private int CreateDesignMapSeed(LaunchMissionId missionId, EnginePresetId presetId)
         {
             unchecked
             {
@@ -1187,16 +1549,16 @@ namespace Border.Research
                 hash = hash * 31 + Seed;
                 hash = hash * 31 + Year;
                 hash = hash * 31 + Quarter;
-                hash = hash * 31 + (int)stageId;
+                hash = hash * 31 + (int)missionId;
                 hash = hash * 31 + (int)presetId;
                 return hash == int.MinValue ? int.MaxValue : Math.Abs(hash);
             }
         }
 
-        private static string CreateTargetPathId(LaunchStageId stageId, int mapSeed)
+        private static string CreateTargetPathId(LaunchMissionId missionId, int mapSeed)
         {
             int pathIndex = mapSeed % 3 + 1;
-            return $"{stageId}_Path_{pathIndex}";
+            return $"{missionId}_Path_{pathIndex}";
         }
 
         private int CreateLaunchRoll(ResearchDesignEntryData designEntry, int attemptCount)
@@ -1208,7 +1570,7 @@ namespace Border.Research
                 hash = hash * 31 + designEntry.MapSeed;
                 hash = hash * 31 + designEntry.Year;
                 hash = hash * 31 + designEntry.Quarter;
-                hash = hash * 31 + (int)designEntry.StageId;
+                hash = hash * 31 + (int)designEntry.MissionId;
                 hash = hash * 31 + (int)designEntry.SelectedEnginePresetId;
                 for (int i = 0; i < designEntry.InstalledEngineCounts.Length; i++)
                 {
@@ -1243,33 +1605,6 @@ namespace Border.Research
             return roll <= Math.Min(successChance + 15, 95)
                 ? ResearchGrade.C
                 : ResearchGrade.F;
-        }
-
-        private static void GetGradeReward(ResearchGrade grade, out int immediateFunding, out int quarterlyFundingDelta)
-        {
-            switch (grade)
-            {
-                case ResearchGrade.S:
-                    immediateFunding = 900;
-                    quarterlyFundingDelta = 150;
-                    break;
-                case ResearchGrade.A:
-                    immediateFunding = 600;
-                    quarterlyFundingDelta = 100;
-                    break;
-                case ResearchGrade.B:
-                    immediateFunding = 400;
-                    quarterlyFundingDelta = 50;
-                    break;
-                case ResearchGrade.C:
-                    immediateFunding = 150;
-                    quarterlyFundingDelta = 0;
-                    break;
-                default:
-                    immediateFunding = 0;
-                    quarterlyFundingDelta = -100;
-                    break;
-            }
         }
 
         private static int[] CopyAndNormalizeEngineCounts(int[] source)

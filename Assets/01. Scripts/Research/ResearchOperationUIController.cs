@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -13,11 +14,17 @@ namespace Border.Research
         private const int EngineCount = ResearchPrototypeModel.MaxEnginePresetCount;
         private const string OperationScreenPrefabPath = "ResearchUI/ResearchOperationScreen";
         private const string EnginePresetCardPrefabPath = "ResearchUI/EnginePresetCard";
+        private const float DesignTransitionDelaySeconds = 1f;
+        private const string ResearchCinemachineCameraName = "Research Cinemachine Camera";
+        private const int ResearchCinemachineCameraPriority = 20;
 
         [SerializeField] private GameObject operationScreenPrefab;
         [SerializeField] private Button enginePresetCardPrefab;
         [SerializeField] private ResearchEnginePreviewController enginePreview;
         [SerializeField] private Transform researchLabRoot;
+        [SerializeField] private Transform researchCameraTransform;
+        [SerializeField, Min(0f)] private float cameraPitchDriftDegrees = 0.35f;
+        [SerializeField, Min(0.1f)] private float cameraPitchDriftCycleSeconds = 18f;
 
         private readonly EngineCardView[] engineCards = new EngineCardView[EngineCount];
 
@@ -25,19 +32,23 @@ namespace Border.Research
         private ResearchPrototypeModel model;
         private EnginePresetId selectedEnginePreset = EnginePresetId.Engine01;
         private EngineStatId selectedStat = EngineStatId.FuelCapacity;
-        private LaunchStageId selectedStage = LaunchStageId.Engine;
+        private LaunchMissionId selectedMission = LaunchMissionId.StaticFire;
         private bool initialized;
         private RectTransform canvasTransform;
+        private ResearchOperationTransitionAnimator operationTransitionAnimator;
         private ResearchDesignScreenController activeDesignController;
         private ResearchMiniGameController activeMiniGameController;
+        private Sequence designTransitionSequence;
+        private Tween researchCameraDriftTween;
+        private Quaternion researchCameraBaseLocalRotation;
+        private bool hasResearchCameraBaseLocalRotation;
+        private bool isTransitioningToDesign;
 
         private TMP_Text dateText;
         private TMP_Text remainingTurnsText;
         private TMP_Text fundsText;
         private TMP_Text quarterlyFundingText;
         private TMP_Text selectedEngineText;
-        private TMP_Text selectedStageText;
-        private TMP_Text selectedRequirementText;
         private TMP_Text designEntryText;
         private TMP_Text statusText;
         private Button normalResearchButton;
@@ -52,7 +63,7 @@ namespace Border.Research
         private TMP_Text waitButtonText;
 
         public ResearchPrototypeModel Model => model;
-        public LaunchStageId SelectedStage => selectedStage;
+        public LaunchMissionId SelectedMission => selectedMission;
         public EnginePresetId SelectedEnginePreset => selectedEnginePreset;
         public string RequestedScreenName { get; private set; } = ResearchFlowSession.ResearchScreenName;
 
@@ -81,6 +92,18 @@ namespace Border.Research
 
         private void OnEnable()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
+            if (!initialized || session == null || model == null)
+            {
+                initialized = false;
+                Initialize();
+                return;
+            }
+
             if (initialized)
             {
                 Refresh();
@@ -91,6 +114,8 @@ namespace Border.Research
         {
             if (initialized)
             {
+                KillDesignTransition();
+                KillResearchCameraDrift(resetRotation: true);
                 HideEnginePreview();
             }
         }
@@ -131,8 +156,14 @@ namespace Border.Research
                 return;
             }
 
+            if (Application.isPlaying)
+            {
+                EnsureResearchCameraRuntime();
+            }
+
             initialized = true;
             Refresh();
+            PlayResearchEntryAnimation();
         }
 
         private bool BuildInterface()
@@ -159,8 +190,18 @@ namespace Border.Research
                 return false;
             }
 
-            GameObject instance = Instantiate(prefab, transform);
-            instance.name = "ResearchOperationCanvas";
+            GameObject instance;
+            Transform existingCanvas = transform.Find("ResearchOperationCanvas");
+            if (existingCanvas != null)
+            {
+                instance = existingCanvas.gameObject;
+            }
+            else
+            {
+                instance = Instantiate(prefab, transform);
+                instance.name = "ResearchOperationCanvas";
+            }
+
             canvasTransform = instance.GetComponent<RectTransform>();
             if (canvasTransform == null)
             {
@@ -179,21 +220,16 @@ namespace Border.Research
             scaler.referenceResolution = new Vector2(1280f, 720f);
             scaler.matchWidthOrHeight = 0.5f;
 
+            operationTransitionAnimator = instance.GetComponent<ResearchOperationTransitionAnimator>() ?? instance.AddComponent<ResearchOperationTransitionAnimator>();
+            operationTransitionAnimator.Bind(canvasTransform);
+
             RectTransform engineColumn = FindChildRectTransform(canvasTransform, "EnginePresetCards")
                 ?? FindChildRectTransform(canvasTransform, "EnginePresetColumn");
-            RectTransform launchTargetColumn = FindChildRectTransform(canvasTransform, "LaunchTargetColumn");
-            if (launchTargetColumn != null)
-            {
-                launchTargetColumn.gameObject.SetActive(false);
-            }
-
             dateText = FindRequiredText(canvasTransform, "Date");
             remainingTurnsText = FindRequiredText(canvasTransform, "RemainingTurns");
             fundsText = FindRequiredText(canvasTransform, "Funds");
             quarterlyFundingText = FindRequiredText(canvasTransform, "QuarterlyFunding");
             selectedEngineText = FindRequiredText(canvasTransform, "SelectedEngineText");
-            selectedStageText = FindRequiredText(canvasTransform, "SelectedStageText");
-            selectedRequirementText = FindRequiredText(canvasTransform, "SelectedRequirementText");
             designEntryText = FindRequiredText(canvasTransform, "DesignEntryText");
             statusText = FindRequiredText(canvasTransform, "StatusText");
             normalResearchButton = FindRequiredButton(canvasTransform, "NormalResearchButton");
@@ -236,16 +272,6 @@ namespace Border.Research
             createEnginePresetButtonText = createEnginePresetButton.GetComponentInChildren<TMP_Text>(true);
             enterDesignButtonText = enterDesignButton.GetComponentInChildren<TMP_Text>(true);
             waitButtonText = waitButton.GetComponentInChildren<TMP_Text>(true);
-            if (selectedStageText != null)
-            {
-                selectedStageText.gameObject.SetActive(false);
-            }
-
-            if (selectedRequirementText != null)
-            {
-                selectedRequirementText.gameObject.SetActive(false);
-            }
-
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
                 engineCards[(int)config.Id] = CreateEngineCard(engineColumn, config);
@@ -260,7 +286,7 @@ namespace Border.Research
             {
                 session.ResetResearch();
                 selectedEnginePreset = EnginePresetId.Engine01;
-                selectedStage = model.GetCurrentLaunchTarget();
+                selectedMission = model.GetCurrentMission();
                 Refresh();
             });
             fuelCapacityButton.onClick.AddListener(() => SelectStat(EngineStatId.FuelCapacity));
@@ -291,6 +317,11 @@ namespace Border.Research
             EnginePresetId presetId = config.Id;
             button.onClick.AddListener(() =>
             {
+                if (isTransitioningToDesign)
+                {
+                    return;
+                }
+
                 selectedEnginePreset = presetId;
                 session.ClearPendingDesignEntry();
                 Refresh();
@@ -301,17 +332,32 @@ namespace Border.Research
 
         private void SelectStat(EngineStatId statId)
         {
+            if (isTransitioningToDesign)
+            {
+                return;
+            }
+
             selectedStat = statId;
             Refresh();
         }
 
         private void StartEngineResearch(bool focused)
         {
+            if (isTransitioningToDesign)
+            {
+                return;
+            }
+
             ShowMiniGame(focused);
         }
 
         private void CreateNewEnginePreset()
         {
+            if (isTransitioningToDesign)
+            {
+                return;
+            }
+
             ResearchActionResult result = model.CreateNewEnginePreset(out EnginePresetId newPresetId);
             if (result == ResearchActionResult.Success)
             {
@@ -330,7 +376,9 @@ namespace Border.Research
             }
 
             canvasTransform.gameObject.SetActive(false);
+            KillResearchCameraDrift(resetRotation: true);
             HideEnginePreview();
+            HideResearchLab();
             var host = new GameObject("Research Mini Game Controller");
             host.transform.SetParent(transform, false);
             activeMiniGameController = host.AddComponent<ResearchMiniGameController>();
@@ -348,15 +396,23 @@ namespace Border.Research
             model.ExecuteEngineResearch(result.PresetId, result.StatId, result.Focused, result.Score);
             session.ClearPendingDesignEntry();
             canvasTransform.gameObject.SetActive(true);
+            ShowResearchLab();
+            PlayResearchCameraDrift();
             Refresh();
+            PlayResearchEntryAnimation();
         }
 
         private void EnterDesign()
         {
-            selectedStage = model.GetCurrentLaunchTarget();
-            if (session.TryEnterDesign(selectedStage, selectedEnginePreset, out _) == ResearchActionResult.Success)
+            if (isTransitioningToDesign)
             {
-                ShowDesignScreen();
+                return;
+            }
+
+            selectedMission = model.GetCurrentMission();
+            if (session.TryEnterDesign(selectedMission, selectedEnginePreset, out _) == ResearchActionResult.Success)
+            {
+                BeginDesignTransition();
                 return;
             }
 
@@ -365,6 +421,11 @@ namespace Border.Research
 
         private void WaitQuarter()
         {
+            if (isTransitioningToDesign)
+            {
+                return;
+            }
+
             model.WaitQuarter();
             session.ClearPendingDesignEntry();
             Refresh();
@@ -373,8 +434,9 @@ namespace Border.Research
         private void Refresh()
         {
             EnsureSelectedEnginePresetUnlocked();
-            selectedStage = model.GetCurrentLaunchTarget();
+            selectedMission = model.GetCurrentMission();
             ShowResearchLab();
+            PlayResearchCameraDrift();
             ShowEnginePreview();
             dateText.text = $"날짜\n{model.Year} Q{model.Quarter}";
             remainingTurnsText.text = $"남은 분기\n{model.RemainingTurns}";
@@ -388,27 +450,30 @@ namespace Border.Research
 
             EnginePresetConfig selectedEngineConfig = ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset);
             EnginePresetState selectedEngine = model.GetEnginePreset(selectedEnginePreset);
-            LaunchStageConfig selectedStageConfig = ResearchPrototypeModel.GetStageConfig(selectedStage);
-            LaunchStageState selectedStageState = model.GetStage(selectedStage);
+            LaunchMissionConfig selectedMissionConfig = model.GetConfiguredMissionConfig(selectedMission);
+            LaunchMissionState selectedMissionState = model.GetMission(selectedMission);
 
             selectedEngineText.text = $"{selectedEngineConfig.DisplayName}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
                 + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {selectedEngineConfig.InstallCost}\n"
                 + $"연료량 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 최대 출력 {selectedEngine.MaxOutput} / 점화 신뢰도 {selectedEngine.IgnitionReliability}\n"
                 + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
-
-            normalResearchButtonText.text = $"일반 연구\n{selectedEngineConfig.NormalResearchCost} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
-            focusedResearchButtonText.text = $"집중 연구\n{selectedEngineConfig.FocusedResearchCost} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
+            normalResearchButtonText.text = $"일반 연구\n{model.ConfiguredEngineNormalResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
+            focusedResearchButtonText.text = $"집중 연구\n{model.ConfiguredEngineFocusedResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
             createEnginePresetButtonText.text = model.ActiveEnginePresetCount >= ResearchPrototypeModel.MaxEnginePresetCount
                 ? "새로운 엔진 개발\n최대 10개"
-                : $"새로운 엔진 개발\n현재 {model.ActiveEnginePresetCount}/{ResearchPrototypeModel.MaxEnginePresetCount}";
-            enterDesignButtonText.text = $"설계 진입\n예산 {selectedStageConfig.LaunchCost}";
+                : $"새로운 엔진 개발\n{model.ConfiguredNewEnginePresetCost} / 시간 0분기";
+            enterDesignButtonText.text = $"설계 진입\n예산 {selectedMissionConfig.LaunchCost}";
             waitButtonText.text = $"1분기 대기   예산 0 / 분기 예산 +{model.QuarterlyFunding}";
 
-            normalResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.NormalResearchCost);
-            focusedResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.FocusedResearchCost);
+            normalResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineNormalResearchCost);
+            focusedResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineFocusedResearchCost);
             createEnginePresetButton.interactable = !model.DeadlineReached && model.ActiveEnginePresetCount < ResearchPrototypeModel.MaxEnginePresetCount;
-            enterDesignButton.interactable = CanEnterDesign(selectedStageState, selectedStageConfig, selectedEngine);
+            enterDesignButton.interactable = CanEnterDesign(selectedMissionState, selectedMissionConfig, selectedEngine);
             waitButton.interactable = !model.DeadlineReached;
+            if (isTransitioningToDesign)
+            {
+                SetResearchControlsInteractable(false);
+            }
 
             if (session.HasPendingDesignEntry)
             {
@@ -447,11 +512,11 @@ namespace Border.Research
                 && model.Funds >= cost;
         }
 
-        private bool CanEnterDesign(LaunchStageState stage, LaunchStageConfig config, EnginePresetState engine)
+        private bool CanEnterDesign(LaunchMissionState mission, LaunchMissionConfig config, EnginePresetState engine)
         {
             return !model.DeadlineReached
                 && engine.Unlocked
-                && stage.Unlocked
+                && mission.Unlocked
                 && model.Funds >= config.LaunchCost;
         }
 
@@ -467,21 +532,27 @@ namespace Border.Research
 
         private string FormatDesignEntry(ResearchDesignEntryData data)
         {
-            return $"{data.StageId} / {ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId).DisplayName} / {data.Year} Q{data.Quarter}\n"
+            return $"{data.MissionId} / {ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId).DisplayName} / {data.Year} Q{data.Quarter}\n"
                 + $"지불한 예산 {data.LaunchCost}, 예약 설치비 {data.ReservedInstallCost}, 설계 적합도 {data.DesignFit}, {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)}";
         }
 
         private static string FormatLaunchResult(ResearchLaunchResultData result)
         {
-            return $"{result.StageId} 결과 {result.Grade} / 성공 {result.SuccessChance}% / 굴림 {result.Roll}\n"
+            return $"{result.MissionId} 결과 {result.Grade} / 성공 {result.SuccessChance}% / 굴림 {result.Roll}\n"
                 + $"총 비용 {result.TotalCost}, 지원금 +{result.ImmediateFunding}, 분기 예산 {result.QuarterlyFundingDelta:+#;-#;0}";
         }
 
         private void ShowDesignScreen()
         {
             RequestedScreenName = ResearchFlowSession.DesignScreenName;
+            isTransitioningToDesign = false;
+            KillResearchCameraDrift(resetRotation: true);
             HideEnginePreview();
             HideResearchLab();
+            if (canvasTransform != null)
+            {
+                canvasTransform.gameObject.SetActive(false);
+            }
 
             if (activeDesignController != null)
             {
@@ -494,10 +565,10 @@ namespace Border.Research
                 return;
             }
 
-            RequestedScreenName = ResearchFlowSession.ResearchScreenName;
-            ShowResearchLab();
-            statusText.text = "설계 단계 진입 실패. 시뮬레이션 설계 호스트를 찾을 수 없습니다.";
-            Refresh();
+            var host = new GameObject("Research Design Screen Controller");
+            host.transform.SetParent(transform, false);
+            activeDesignController = host.AddComponent<ResearchDesignScreenController>();
+            activeDesignController.Initialize(session, ReturnFromDesignScreen, ShowResultReport);
         }
 
         private void ReturnFromDesignScreen()
@@ -509,6 +580,7 @@ namespace Border.Research
             }
 
             RequestedScreenName = ResearchFlowSession.ResearchScreenName;
+            isTransitioningToDesign = false;
             if (canvasTransform != null)
             {
                 canvasTransform.gameObject.SetActive(true);
@@ -518,7 +590,55 @@ namespace Border.Research
             if (initialized)
             {
                 Refresh();
+                PlayResearchEntryAnimation();
             }
+        }
+
+        private void ShowResultReport(ResearchLaunchResultData result)
+        {
+            if (activeDesignController != null)
+            {
+                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController = null;
+            }
+
+            var host = new GameObject("Research Result Report Controller");
+            host.transform.SetParent(transform, false);
+            ResearchResultReportController report = host.AddComponent<ResearchResultReportController>();
+            report.Initialize(session, result, () =>
+            {
+                DestroyUnityObject(host);
+                if (model.HasGameEnded)
+                {
+                    ShowEndingScreen();
+                    return;
+                }
+
+                ReturnFromDesignScreen();
+            });
+        }
+
+        private void ShowEndingScreen()
+        {
+            RequestedScreenName = "Ending";
+            if (canvasTransform != null)
+            {
+                canvasTransform.gameObject.SetActive(false);
+            }
+
+            HideEnginePreview();
+            HideResearchLab();
+            var host = new GameObject("Research Ending Controller");
+            host.transform.SetParent(transform, false);
+            ResearchEndingController ending = host.AddComponent<ResearchEndingController>();
+            ending.Initialize(session, () =>
+            {
+                DestroyUnityObject(host);
+                session.ResetResearch();
+                selectedEnginePreset = EnginePresetId.Engine01;
+                selectedMission = model.GetCurrentMission();
+                ReturnFromDesignScreen();
+            });
         }
 
         public ResearchDesignScreenController GetActiveDesignControllerForTests()
@@ -542,12 +662,12 @@ namespace Border.Research
             Initialize();
             session.ResetResearch();
             selectedEnginePreset = EnginePresetId.Engine01;
-            selectedStage = model.GetCurrentLaunchTarget();
-            model.PrepareDebugDesignEntryState(selectedStage, selectedEnginePreset);
+            selectedMission = model.GetCurrentMission();
+            model.PrepareDebugDesignEntryState(selectedMission, selectedEnginePreset);
 
-            if (session.TryEnterDesign(selectedStage, selectedEnginePreset, out _) == ResearchActionResult.Success)
+            if (session.TryEnterDesign(selectedMission, selectedEnginePreset, out _) == ResearchActionResult.Success)
             {
-                ShowDesignScreen();
+                BeginDesignTransition();
             }
         }
 
@@ -575,7 +695,7 @@ namespace Border.Research
             ResolveEnginePreview();
             if (enginePreview != null)
             {
-                enginePreview.Show(selectedEnginePreset);
+                enginePreview.ShowHologram(selectedEnginePreset, GetSelectedEngineArchetype());
             }
         }
 
@@ -603,6 +723,192 @@ namespace Border.Research
             if (researchLabRoot != null)
             {
                 researchLabRoot.gameObject.SetActive(false);
+            }
+        }
+
+        private void BeginDesignTransition()
+        {
+            KillDesignTransition();
+            isTransitioningToDesign = true;
+            SetResearchControlsInteractable(false);
+            ShowResearchLab();
+            ResolveEnginePreview();
+            KillResearchCameraDrift(resetRotation: false);
+
+            EngineVisualArchetype archetype = GetSelectedEngineArchetype();
+            Sequence uiExitSequence = operationTransitionAnimator != null ? operationTransitionAnimator.PlayExit() : null;
+            int pendingAnimations = 0;
+            bool delayStarted = false;
+
+            void RegisterAnimation()
+            {
+                pendingAnimations++;
+            }
+
+            void CompleteAnimation()
+            {
+                pendingAnimations--;
+                if (pendingAnimations <= 0 && !delayStarted)
+                {
+                    delayStarted = true;
+                    PlayDesignOpenDelay();
+                }
+            }
+
+            if (uiExitSequence != null)
+            {
+                RegisterAnimation();
+                uiExitSequence.OnComplete(CompleteAnimation);
+            }
+
+            if (enginePreview != null)
+            {
+                RegisterAnimation();
+                enginePreview.PlayMaterialize(selectedEnginePreset, archetype, CompleteAnimation);
+            }
+
+            if (pendingAnimations == 0)
+            {
+                PlayDesignOpenDelay();
+            }
+        }
+
+        private void PlayDesignOpenDelay()
+        {
+            designTransitionSequence = DOTween.Sequence()
+                .SetTarget(this)
+                .AppendInterval(DesignTransitionDelaySeconds)
+                .OnComplete(() =>
+                {
+                    designTransitionSequence = null;
+                    ShowDesignScreen();
+                });
+        }
+
+        private void PlayResearchEntryAnimation()
+        {
+            if (operationTransitionAnimator == null || canvasTransform == null || !canvasTransform.gameObject.activeInHierarchy)
+            {
+                return;
+            }
+
+            operationTransitionAnimator.PlayEnter();
+        }
+
+        private void PlayResearchCameraDrift()
+        {
+            ResolveResearchCameraTransform();
+            if (researchCameraTransform == null || cameraPitchDriftDegrees <= 0f)
+            {
+                return;
+            }
+
+            if (researchCameraDriftTween != null && researchCameraDriftTween.IsActive())
+            {
+                return;
+            }
+
+            KillResearchCameraDrift(resetRotation: false);
+            researchCameraBaseLocalRotation = researchCameraTransform.localRotation;
+            hasResearchCameraBaseLocalRotation = true;
+            float pitchOffset = -cameraPitchDriftDegrees;
+            researchCameraTransform.localRotation = researchCameraBaseLocalRotation * Quaternion.Euler(pitchOffset, 0f, 0f);
+            researchCameraDriftTween = DOTween.To(
+                    () => pitchOffset,
+                    value =>
+                    {
+                        pitchOffset = value;
+                        if (researchCameraTransform != null)
+                        {
+                            researchCameraTransform.localRotation = researchCameraBaseLocalRotation * Quaternion.Euler(value, 0f, 0f);
+                        }
+                    },
+                    cameraPitchDriftDegrees,
+                    cameraPitchDriftCycleSeconds * 0.5f)
+                .SetEase(Ease.InOutSine)
+                .SetLoops(-1, LoopType.Yoyo)
+                .SetTarget(this);
+        }
+
+        private void KillResearchCameraDrift(bool resetRotation)
+        {
+            if (researchCameraDriftTween != null)
+            {
+                researchCameraDriftTween.Kill();
+                researchCameraDriftTween = null;
+            }
+
+            if (resetRotation && hasResearchCameraBaseLocalRotation && researchCameraTransform != null)
+            {
+                researchCameraTransform.localRotation = researchCameraBaseLocalRotation;
+            }
+        }
+
+        private EngineVisualArchetype GetSelectedEngineArchetype()
+        {
+            return model != null ? EngineVisualClassifier.Classify(model.GetEnginePreset(selectedEnginePreset)) : EngineVisualArchetype.Balanced;
+        }
+
+        private void KillDesignTransition()
+        {
+            if (designTransitionSequence == null)
+            {
+                return;
+            }
+
+            designTransitionSequence.Kill();
+            designTransitionSequence = null;
+        }
+
+        private void SetResearchControlsInteractable(bool interactable)
+        {
+            for (int i = 0; i < engineCards.Length; i++)
+            {
+                if (engineCards[i].Button != null)
+                {
+                    engineCards[i].Button.interactable = interactable;
+                }
+            }
+
+            if (normalResearchButton != null)
+            {
+                normalResearchButton.interactable = interactable;
+            }
+
+            if (focusedResearchButton != null)
+            {
+                focusedResearchButton.interactable = interactable;
+            }
+
+            if (createEnginePresetButton != null)
+            {
+                createEnginePresetButton.interactable = interactable;
+            }
+
+            if (enterDesignButton != null)
+            {
+                enterDesignButton.interactable = interactable;
+            }
+
+            if (waitButton != null)
+            {
+                waitButton.interactable = interactable;
+            }
+        }
+
+        public bool IsTransitioningToDesignForTests()
+        {
+            return isTransitioningToDesign;
+        }
+
+        public void CompleteDesignTransitionForTests()
+        {
+            operationTransitionAnimator?.CompleteActiveSequenceForTests();
+            enginePreview?.CompleteMaterializeForTests();
+
+            if (designTransitionSequence != null)
+            {
+                designTransitionSequence.Complete();
             }
         }
 
@@ -641,6 +947,116 @@ namespace Border.Research
                     return;
                 }
             }
+        }
+
+        private void ResolveResearchCameraTransform()
+        {
+            if (researchCameraTransform != null)
+            {
+                return;
+            }
+
+            foreach (Transform candidate in FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (candidate.name == ResearchCinemachineCameraName)
+                {
+                    researchCameraTransform = candidate;
+                    return;
+                }
+            }
+        }
+
+        private void EnsureResearchCameraRuntime()
+        {
+            ResolveResearchCameraTransform();
+            if (researchCameraTransform != null)
+            {
+                return;
+            }
+
+            Camera mainCamera = Camera.main;
+            if (mainCamera == null)
+            {
+                return;
+            }
+
+            Type brainType = Type.GetType("Unity.Cinemachine.CinemachineBrain, Unity.Cinemachine");
+            Type cameraType = Type.GetType("Unity.Cinemachine.CinemachineCamera, Unity.Cinemachine");
+            if (brainType == null || cameraType == null)
+            {
+                return;
+            }
+
+            if (mainCamera.GetComponent(brainType) == null)
+            {
+                mainCamera.gameObject.AddComponent(brainType);
+            }
+
+            var virtualCameraObject = new GameObject(ResearchCinemachineCameraName);
+            virtualCameraObject.transform.SetPositionAndRotation(mainCamera.transform.position, mainCamera.transform.rotation);
+            Component virtualCamera = virtualCameraObject.AddComponent(cameraType);
+            ConfigureRuntimeCinemachineCamera(virtualCamera, mainCamera);
+            researchCameraTransform = virtualCameraObject.transform;
+        }
+
+        private static void ConfigureRuntimeCinemachineCamera(Component virtualCamera, Camera sourceCamera)
+        {
+            if (virtualCamera == null || sourceCamera == null)
+            {
+                return;
+            }
+
+            FieldInfo priorityField = FindFieldInTypeHierarchy(virtualCamera.GetType(), "Priority");
+            if (priorityField != null)
+            {
+                object priority = priorityField.GetValue(virtualCamera);
+                SetFieldValue(priority, "Enabled", true);
+                SetFieldValue(priority, "m_Value", ResearchCinemachineCameraPriority);
+                priorityField.SetValue(virtualCamera, priority);
+            }
+
+            FieldInfo lensField = FindFieldInTypeHierarchy(virtualCamera.GetType(), "Lens");
+            if (lensField != null)
+            {
+                object lens = lensField.GetValue(virtualCamera);
+                SetFieldValue(lens, "FieldOfView", sourceCamera.fieldOfView);
+                SetFieldValue(lens, "NearClipPlane", sourceCamera.nearClipPlane);
+                SetFieldValue(lens, "FarClipPlane", sourceCamera.farClipPlane);
+                lensField.SetValue(virtualCamera, lens);
+            }
+        }
+
+        private static bool SetFieldValue(object target, string fieldName, object value)
+        {
+            if (target == null)
+            {
+                return false;
+            }
+
+            FieldInfo field = FindFieldInTypeHierarchy(target.GetType(), fieldName);
+            if (field == null)
+            {
+                return false;
+            }
+
+            field.SetValue(target, value);
+            return true;
+        }
+
+        private static FieldInfo FindFieldInTypeHierarchy(Type type, string fieldName)
+        {
+            while (type != null)
+            {
+                FieldInfo field = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    return field;
+                }
+
+                type = type.BaseType;
+            }
+
+            return null;
         }
 
         private static Button CreateCardButton(Button prefab, string name, Transform parent, float preferredHeight, out TMP_Text title, out TMP_Text detail)

@@ -78,6 +78,8 @@ CBUFFER_START(UnityPerMaterial)
     half _LightingMode;
     half _SurfaceInputs;
     half _BaseMapMapping;
+    half _MetallicMapEnabled;
+    half _RoughnessMapEnabled;
     half _NormalMapEnabled;
     half _TextureBlendEnabled;
     half _ReceiveShadows;
@@ -112,6 +114,10 @@ TEXTURE2D(_DissolveNoiseMap);
 SAMPLER(sampler_DissolveNoiseMap);
 TEXTURE2D(_BlendMap);
 SAMPLER(sampler_BlendMap);
+TEXTURE2D(_MetallicMap);
+SAMPLER(sampler_MetallicMap);
+TEXTURE2D(_RoughnessMap);
+SAMPLER(sampler_RoughnessMap);
 
 float3 _LightDirection;
 float3 _LightPosition;
@@ -145,6 +151,62 @@ inline half4 UberSampleBaseMapped(float2 rawUV, float3 positionWS,
         zSample * blendWeights.z;
 #else
     return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, surfaceUV);
+#endif
+}
+
+inline half UberSampleMetallicMapped(float2 surfaceUV, float3 positionWS,
+    half3 geometricNormalWS)
+{
+#if defined(_METALLICMAP)
+    #if defined(_BASE_MAP_TRIPLANAR)
+    half3 blendWeights = pow(abs(normalize(geometricNormalWS)),
+        max(_BaseMap3DBlendSharpness, 1.0h));
+    blendWeights /= max(blendWeights.x + blendWeights.y + blendWeights.z,
+        0.0001h);
+    float3 mappingPosition = positionWS *
+        max(abs(_BaseMap3DTiling.xyz), 0.0001);
+    half3 normalSign = sign(geometricNormalWS);
+    half xSample = SAMPLE_TEXTURE2D(_MetallicMap, sampler_MetallicMap,
+        mappingPosition.zy * float2(normalSign.x, 1.0)).r;
+    half ySample = SAMPLE_TEXTURE2D(_MetallicMap, sampler_MetallicMap,
+        mappingPosition.xz * float2(normalSign.y, 1.0)).r;
+    half zSample = SAMPLE_TEXTURE2D(_MetallicMap, sampler_MetallicMap,
+        mappingPosition.xy * float2(-normalSign.z, 1.0)).r;
+    return xSample * blendWeights.x + ySample * blendWeights.y +
+        zSample * blendWeights.z;
+    #else
+    return SAMPLE_TEXTURE2D(_MetallicMap, sampler_MetallicMap, surfaceUV).r;
+    #endif
+#else
+    return 1.0h;
+#endif
+}
+
+inline half UberSampleRoughnessMapped(float2 surfaceUV, float3 positionWS,
+    half3 geometricNormalWS)
+{
+#if defined(_ROUGHNESSMAP)
+    #if defined(_BASE_MAP_TRIPLANAR)
+    half3 blendWeights = pow(abs(normalize(geometricNormalWS)),
+        max(_BaseMap3DBlendSharpness, 1.0h));
+    blendWeights /= max(blendWeights.x + blendWeights.y + blendWeights.z,
+        0.0001h);
+    float3 mappingPosition = positionWS *
+        max(abs(_BaseMap3DTiling.xyz), 0.0001);
+    half3 normalSign = sign(geometricNormalWS);
+    half xSample = SAMPLE_TEXTURE2D(_RoughnessMap, sampler_RoughnessMap,
+        mappingPosition.zy * float2(normalSign.x, 1.0)).r;
+    half ySample = SAMPLE_TEXTURE2D(_RoughnessMap, sampler_RoughnessMap,
+        mappingPosition.xz * float2(normalSign.y, 1.0)).r;
+    half zSample = SAMPLE_TEXTURE2D(_RoughnessMap, sampler_RoughnessMap,
+        mappingPosition.xy * float2(-normalSign.z, 1.0)).r;
+    return xSample * blendWeights.x + ySample * blendWeights.y +
+        zSample * blendWeights.z;
+    #else
+    return SAMPLE_TEXTURE2D(_RoughnessMap, sampler_RoughnessMap, surfaceUV).r;
+    #endif
+#else
+    return 0.0h;
 #endif
 }
 
@@ -560,9 +622,13 @@ inline void UberInitializeSurface(float2 rawUV, float3 positionOS, float3 positi
     surfaceData = (SurfaceData)0;
     surfaceData.albedo = albedo;
     surfaceData.alpha = alpha;
-    surfaceData.metallic = saturate(_Metallic);
+    half metallicMask = UberSampleMetallicMapped(surfaceUV, positionWS,
+        geometricNormalWS);
+    half roughness = UberSampleRoughnessMapped(surfaceUV, positionWS,
+        geometricNormalWS);
+    surfaceData.metallic = saturate(_Metallic * metallicMask);
     surfaceData.specular = 0.0h;
-    surfaceData.smoothness = saturate(_Smoothness);
+    surfaceData.smoothness = saturate(_Smoothness * (1.0h - roughness));
     surfaceData.normalTS = SampleNormal(surfaceUV,
         TEXTURE2D_ARGS(_BumpMap, sampler_BumpMap), _BumpScale);
     surfaceData.occlusion = 1.0h;
@@ -1069,12 +1135,13 @@ UberMetaVaryings UberMetaVertex(UberMetaAttributes input)
 half4 UberMetaFragment(UberMetaVaryings input) : SV_Target
 {
     float2 surfaceUV;
-    half4 baseSample = UberSampleBaseMapped(input.rawUV,
 #if defined(_BASE_MAP_TRIPLANAR)
-        TransformObjectToWorld(input.positionOS),
+    float3 positionWS = TransformObjectToWorld(input.positionOS);
 #else
-        0.0,
+    float3 positionWS = 0.0;
 #endif
+    half4 baseSample = UberSampleBaseMapped(input.rawUV,
+        positionWS,
         input.normalWS, surfaceUV);
     half4 baseColor = baseSample * _BaseColor * input.color;
     half alpha = saturate(baseColor.a);
@@ -1091,9 +1158,13 @@ half4 UberMetaFragment(UberMetaVaryings input) : SV_Target
 #if defined(_UNLIT_ON)
     metaInput.Albedo = albedo;
 #else
+    half metallicMask = UberSampleMetallicMapped(surfaceUV, positionWS,
+        input.normalWS);
+    half roughness = UberSampleRoughnessMapped(surfaceUV, positionWS,
+        input.normalWS);
     BRDFData brdfData;
-    InitializeBRDFData(albedo, saturate(_Metallic), 0.0h,
-        saturate(_Smoothness), alpha, brdfData);
+    InitializeBRDFData(albedo, saturate(_Metallic * metallicMask), 0.0h,
+        saturate(_Smoothness * (1.0h - roughness)), alpha, brdfData);
     metaInput.Albedo = brdfData.diffuse + brdfData.specular *
         brdfData.roughness * 0.5h;
 #endif

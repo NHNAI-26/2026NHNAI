@@ -1,4 +1,5 @@
 using System;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -35,6 +36,8 @@ namespace Border.Research
         private const float GoodJudgementThreshold = 0.16f;
         private const int FuelAttemptCount = 3;
         private const int CoolingRoundCount = 4;
+        private const float CoolingPerfectReactionSeconds = 0.35f;
+        private const float CoolingReactionWindowSeconds = 0.9f;
         private const int OutputStageCount = 3;
         private const int IgnitionRoundCount = 3;
 
@@ -79,6 +82,7 @@ namespace Border.Research
         private float outputGaugeValue;
         private bool fuelFilling;
         private bool ignitionShowingSequence;
+        private Tween feedbackTween;
 
         private TMP_Text titleText;
         private TMP_Text instructionText;
@@ -142,6 +146,15 @@ namespace Border.Research
 
             StartStatGame();
             initialized = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (feedbackTween != null)
+            {
+                feedbackTween.Kill();
+                feedbackTween = null;
+            }
         }
 
         public void ConfigureScreenPrefabForTests(GameObject screenTemplate)
@@ -214,7 +227,7 @@ namespace Border.Research
 
         public static string FormatStateText(string baseText, bool showExample)
         {
-            return baseText;
+            return showExample ? $"{baseText}\n예시를 보고 같은 리듬으로 입력하세요." : baseText;
         }
 
         public static int CalculateFuelCapacityScore(params float[] normalizedErrors)
@@ -262,9 +275,11 @@ namespace Border.Research
 
         public static int CalculateCoolingScore(int correctCount, int wrongCount, float averageReactionSeconds)
         {
-            int accuracyScore = ResearchPrototypeModel.ClampInt(correctCount, 0, CoolingRoundCount) * 22;
-            int reactionScore = Mathf.RoundToInt(Mathf.Clamp01(1.25f - Mathf.Max(0f, averageReactionSeconds)) * 12f);
-            int penalty = Math.Max(0, wrongCount) * 12;
+            int correct = ResearchPrototypeModel.ClampInt(correctCount, 0, CoolingRoundCount);
+            int accuracyScore = correct * 15;
+            float reactionQuality = 1f - Mathf.InverseLerp(CoolingPerfectReactionSeconds, CoolingReactionWindowSeconds, averageReactionSeconds);
+            int reactionScore = Mathf.RoundToInt(reactionQuality * 40f * correct / CoolingRoundCount);
+            int penalty = Math.Max(0, wrongCount) * 18;
             return ResearchPrototypeModel.ClampInt(accuracyScore + reactionScore - penalty, 0, 100);
         }
 
@@ -763,7 +778,9 @@ namespace Border.Research
             if (fuelJudgementText != null)
             {
                 fuelJudgementText.text = GetFuelJudgementText(normalizedError);
+                fuelJudgementText.color = GetJudgementColor(fuelJudgementText.text);
                 fuelJudgementText.gameObject.SetActive(true);
+                PlayJudgementFeedback(fuelJudgementText);
             }
 
             SetStateText($"판정 {fuelAttemptIndex}/{FuelAttemptCount}", false);
@@ -864,7 +881,9 @@ namespace Border.Research
             if (outputJudgementText != null)
             {
                 outputJudgementText.text = GetOutputJudgementText(normalizedError);
+                outputJudgementText.color = GetJudgementColor(outputJudgementText.text);
                 outputJudgementText.gameObject.SetActive(true);
+                PlayJudgementFeedback(outputJudgementText);
             }
 
             SetStateText($"판정 {outputStageIndex}/{OutputStageCount}", false);
@@ -1003,7 +1022,8 @@ namespace Border.Research
             instructionText.text = "개발 결과를 확인하세요.";
             SetActiveGameGroup(resultGroup);
             resultScoreText.text = $"{ResearchPrototypeModel.GetStatDisplayName(statId)} 개발 {GetEvaluationText(pendingResult.Score)}";
-            resultDetailText.text = $"미니게임 점수 {pendingResult.Score}\n스탯 +{CalculateResearchStatGain(focused, pendingResult.Score)} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
+            resultDetailText.text = BuildResultDetailText();
+            PlayResultFeedback();
 
             stateText.text = "개발 완료. 곧 연구 화면으로 돌아갑니다.";
             primaryButton.gameObject.SetActive(true);
@@ -1027,7 +1047,62 @@ namespace Border.Research
 
         private void SetStateText(string text, bool showExample)
         {
-            stateText.text = FormatStateText(text, showExample);
+            stateText.text = FormatStateText(text, showExample || elapsedSeconds < 2f);
+        }
+
+        private string BuildResultDetailText()
+        {
+            ResearchPrototypeModel model = ResearchFlowSession.GetOrCreate().Model;
+            int gain = model.CalculateResearchStatGain(focused, pendingResult.Score);
+            EnginePresetState preset = model.GetEnginePreset(presetId);
+            int oldStat = preset.GetStat(statId);
+            int oldCompletion = preset.Completion;
+            int nextStat = ResearchPrototypeModel.ClampInt(oldStat + gain, 0, 100);
+            int completionGain = model.ConfiguredResearchCompletionGain;
+            int nextCompletion = Math.Min(ResearchPrototypeModel.MaxEngineCompletion, oldCompletion + completionGain);
+            return $"미니게임 점수 {pendingResult.Score}\n"
+                + $"스탯 {oldStat}->{nextStat} (+{gain})\n"
+                + $"완성도 {oldCompletion}->{nextCompletion} (+{completionGain})";
+        }
+
+        private void PlayJudgementFeedback(TMP_Text target)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            feedbackTween?.Kill();
+            target.alpha = 1f;
+            target.transform.localScale = Vector3.one * 1.18f;
+            feedbackTween = DOTween.Sequence()
+                .SetTarget(target)
+                .SetLink(target.gameObject)
+                .Append(target.transform.DOScale(Vector3.one, 0.18f).SetEase(Ease.OutBack))
+                .AppendInterval(0.35f)
+                .Append(DOTween.To(() => target.alpha, value => target.alpha = value, 0.2f, 0.55f).SetEase(Ease.OutCubic));
+        }
+
+        private void PlayResultFeedback()
+        {
+            if (resultGroup == null)
+            {
+                return;
+            }
+
+            feedbackTween?.Kill();
+            CanvasGroup canvasGroup = resultGroup.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = resultGroup.gameObject.AddComponent<CanvasGroup>();
+            }
+            canvasGroup.alpha = 0f;
+            resultGroup.localScale = Vector3.one * 0.96f;
+            feedbackTween = DOTween.Sequence()
+                .SetTarget(resultGroup)
+                .SetLink(resultGroup.gameObject)
+                .Append(DOTween.To(() => canvasGroup.alpha, value => canvasGroup.alpha = value, 1f, 0.2f))
+                .Join(resultGroup.DOScale(Vector3.one, 0.22f).SetEase(Ease.OutBack));
         }
 
         private void UpdateTimerText()
@@ -1053,22 +1128,6 @@ namespace Border.Research
             outputSafeZone.offsetMax = Vector2.zero;
         }
 
-        private static int CalculateResearchStatGain(bool focused, int score)
-        {
-            int clampedScore = ResearchPrototypeModel.ClampInt(score, 0, 100);
-            if (clampedScore < 50)
-            {
-                return focused ? 16 : 10;
-            }
-
-            if (clampedScore < 80)
-            {
-                return focused ? 21 : 13;
-            }
-
-            return focused ? 26 : 16;
-        }
-
         private static string GetEvaluationText(int score)
         {
             if (score < 50)
@@ -1077,6 +1136,21 @@ namespace Border.Research
             }
 
             return score < 80 ? "성공" : "훌륭한 개발";
+        }
+
+        private static Color GetJudgementColor(string judgement)
+        {
+            switch (judgement)
+            {
+                case "Perfect":
+                    return new Color(0.35f, 0.95f, 1f, 1f);
+                case "Great":
+                    return new Color(0.5f, 0.9f, 0.45f, 1f);
+                case "Good":
+                    return new Color(1f, 0.78f, 0.3f, 1f);
+                default:
+                    return new Color(1f, 0.36f, 0.32f, 1f);
+            }
         }
 
         private static int GetIgnitionRoundLength(int index)

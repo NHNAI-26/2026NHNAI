@@ -264,10 +264,41 @@ namespace Border.Rendering.Tests
             {
                 StringAssert.DoesNotContain(removedContract, allSurfaceSources);
             }
-            StringAssert.Contains("surfaceData.metallic = saturate(_Metallic);",
-                objectIncludeSource);
-            StringAssert.Contains("surfaceData.smoothness = saturate(_Smoothness);",
-                objectIncludeSource);
+            foreach (string contract in new[]
+                     {
+                         "[SubToggle(SurfaceInputs, _METALLICMAP)] " +
+                         "_MetallicMapEnabled(\"Use Metallic Map\", Float) = 0",
+                         "[Tex(SurfaceInputs_METALLICMAP)] [NoScaleOffset] " +
+                         "_MetallicMap(\"Metallic Map (R)\", 2D) = \"white\" {}",
+                         "[SubToggle(SurfaceInputs, _ROUGHNESSMAP)] " +
+                         "_RoughnessMapEnabled(\"Use Roughness Map\", Float) = 0",
+                         "[Tex(SurfaceInputs_ROUGHNESSMAP)] [NoScaleOffset] " +
+                         "_RoughnessMap(\"Roughness Map (R)\", 2D) = \"black\" {}",
+                     })
+            {
+                StringAssert.Contains(contract, objectShaderSource);
+            }
+            foreach (string keyword in new[] { "_METALLICMAP", "_ROUGHNESSMAP" })
+            {
+                string[] pragmas = PragmaRows(objectShaderSource, keyword);
+                Assert.That(pragmas.Length, Is.EqualTo(2), keyword);
+                Assert.That(pragmas.All(row =>
+                    row.Contains("multi_compile_local_fragment")), Is.True, keyword);
+            }
+            foreach (string contract in new[]
+                     {
+                         "TEXTURE2D(_MetallicMap);",
+                         "SAMPLER(sampler_MetallicMap);",
+                         "TEXTURE2D(_RoughnessMap);",
+                         "SAMPLER(sampler_RoughnessMap);",
+                         "surfaceData.metallic = saturate(_Metallic * metallicMask);",
+                         "surfaceData.smoothness = saturate(_Smoothness * (1.0h - roughness));",
+                         "InitializeBRDFData(albedo, saturate(_Metallic * metallicMask),",
+                         "saturate(_Smoothness * (1.0h - roughness)), alpha, brdfData);",
+                     })
+            {
+                StringAssert.Contains(contract, objectIncludeSource);
+            }
             StringAssert.Contains("surfaceData.occlusion = 1.0h;",
                 objectIncludeSource);
 
@@ -336,8 +367,39 @@ namespace Border.Rendering.Tests
                 "new KeywordBinding(\"_MetallicMapEnabled\", \"_METALLICMAP\", 1)",
                 guiSource);
             StringAssert.Contains(
+                "new KeywordBinding(\"_RoughnessMapEnabled\", \"_ROUGHNESSMAP\", 1)",
+                guiSource);
+            StringAssert.Contains(
                 "new KeywordBinding(\"_SmoothnessMapEnabled\", \"_SMOOTHNESSMAP\", 1)",
                 guiSource);
+
+            Material objectMaterial = new Material(Shader.Find(ObjectShaderName));
+            try
+            {
+                Assert.That(objectMaterial.HasProperty("_MetallicMapEnabled"), Is.True);
+                Assert.That(objectMaterial.HasProperty("_MetallicMap"), Is.True);
+                Assert.That(objectMaterial.HasProperty("_RoughnessMapEnabled"), Is.True);
+                Assert.That(objectMaterial.HasProperty("_RoughnessMap"), Is.True);
+                Assert.That(objectMaterial.GetFloat("_MetallicMapEnabled"), Is.Zero);
+                Assert.That(objectMaterial.GetFloat("_RoughnessMapEnabled"), Is.Zero);
+
+                objectMaterial.SetFloat("_MetallicMapEnabled", 1f);
+                objectMaterial.SetFloat("_RoughnessMapEnabled", 1f);
+                UberShaderGUI objectGui = new UberShaderGUI();
+                objectGui.ValidateMaterial(objectMaterial);
+                Assert.That(objectMaterial.IsKeywordEnabled("_METALLICMAP"), Is.True);
+                Assert.That(objectMaterial.IsKeywordEnabled("_ROUGHNESSMAP"), Is.True);
+
+                objectMaterial.SetFloat("_MetallicMapEnabled", 0f);
+                objectMaterial.SetFloat("_RoughnessMapEnabled", 0f);
+                objectGui.ValidateMaterial(objectMaterial);
+                Assert.That(objectMaterial.IsKeywordEnabled("_METALLICMAP"), Is.False);
+                Assert.That(objectMaterial.IsKeywordEnabled("_ROUGHNESSMAP"), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(objectMaterial);
+            }
 
             Material material = new Material(Shader.Find(SpriteShaderName));
             try
@@ -1728,17 +1790,17 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
             UberShaderVariantManifest.ValidateRows(rows);
             UberShaderVariantCollectionGenerator.ValidateCollection(collection,
                 rows, "Reviewed live collection");
-            Assert.That(rows.Count, Is.EqualTo(100));
+            Assert.That(rows.Count, Is.EqualTo(103));
             UberShaderVariantSpec[] particleRows = rows.Where(item =>
                 item.ShaderName == ParticleShaderName).ToArray();
             Assert.That(particleRows.Length, Is.EqualTo(18));
-            Assert.That(rows.Count - particleRows.Length, Is.EqualTo(82));
+            Assert.That(rows.Count - particleRows.Length, Is.EqualTo(85));
             Assert.That(particleRows.All(item =>
                 item.PassType == PassType.ScriptableRenderPipeline), Is.True);
             Assert.That(particleRows.Select(item => string.Join(" ", item.Keywords))
                 .Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(18));
             Assert.That(rows.Count(item =>
-                item.PassType == PassType.ScriptableRenderPipeline), Is.EqualTo(65));
+                item.PassType == PassType.ScriptableRenderPipeline), Is.EqualTo(68));
             Assert.That(rows.Count(item =>
                 item.PassType == PassType.ScriptableRenderPipelineDefaultUnlit),
                 Is.EqualTo(24));
@@ -1825,7 +1887,7 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
         public void VariantManifestGeneratorIsTransientFirstExplicitAndByteNoOp()
         {
             const string expectedCollectionHash =
-                "E1D6A5E91646389ED67E756C1DBAA213A53437A096F8D6B46E602E2AD878E457";
+                "665033D3AA83BB2C56406B8B74686CDD9B5BFEB30339453E50BBE99C90536CE8";
             const string expectedMetaHash =
                 "C4AA07D520559A09F8246F5B8C539E2E5509D6B9777F01FDE56E9F00F1D48D31";
             IReadOnlyList<UberShaderVariantSpec> rows =
@@ -1850,7 +1912,7 @@ return UberEvaluateGradient4Keys(time, _LifetimeGradientColor0,
                 UberShaderVariantCollectionGenerator.ValidateCollection(candidate,
                     rows, "Test transient candidate");
                 Assert.That(candidate.shaderCount, Is.EqualTo(5));
-                Assert.That(candidate.variantCount, Is.EqualTo(100));
+                Assert.That(candidate.variantCount, Is.EqualTo(103));
             }
             finally
             {

@@ -81,7 +81,10 @@ internal static class UberShaderVariantManifest
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_HOLOGRAM_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_HOLOGRAM_ON", "_HOLOGRAM_SCREEN_SPACE"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_HOLOGRAM_ON", "_HOLOGRAM_WORLD_SPACE"),
+        new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_METALLICMAP"),
+        new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_METALLICMAP", "_ROUGHNESSMAP"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_RIM_ON"),
+        new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_ROUGHNESSMAP"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipeline, "_TEXTURE_BLEND_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_DITHER_FADE_ON", "_STENCIL_OUTLINE_ON"),
         new UberShaderVariantSpec(ObjectShaderName, PassType.ScriptableRenderPipelineDefaultUnlit, "_STENCIL_OUTLINE_ON"),
@@ -157,8 +160,8 @@ internal static class UberShaderVariantManifest
     internal static IReadOnlyList<UberShaderVariantSpec> Rows => ReadOnlyRows;
     internal static void ValidateRows(IReadOnlyList<UberShaderVariantSpec> rows)
     {
-        if (rows == null || rows.Count != 100)
-            throw new InvalidOperationException("The Uber variant manifest must contain 100 rows.");
+        if (rows == null || rows.Count != 103)
+            throw new InvalidOperationException("The Uber variant manifest must contain 103 rows.");
         var uniqueRows = new HashSet<string>(StringComparer.Ordinal);
         int uncheckedCount = 0;
         for (int index = 0; index < rows.Count; ++index)
@@ -196,12 +199,12 @@ internal static class UberShaderVariantManifest
             throw new InvalidOperationException("Exactly one Particle row requires unchecked construction.");
     }
     private static string ExpectedShader(int index) => index < 11
-        ? PostShaderName : index < 34 ? ObjectShaderName : index < 60
-            ? SpriteShaderName : index < 82 ? UIShaderName : ParticleShaderName;
+        ? PostShaderName : index < 37 ? ObjectShaderName : index < 63
+            ? SpriteShaderName : index < 85 ? UIShaderName : ParticleShaderName;
     private static PassType ExpectedPass(int index)
     {
         if (index < 11) return PassType.Normal;
-        if (index < 32 || index >= 34 && index < 60 || index >= 82)
+        if (index < 35 || index >= 37 && index < 63 || index >= 85)
             return PassType.ScriptableRenderPipeline;
         return PassType.ScriptableRenderPipelineDefaultUnlit;
     }

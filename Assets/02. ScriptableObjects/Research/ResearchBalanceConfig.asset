@@ -1,0 +1,93 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6801c56ee69a4b43a98bb3ec1e65b884, type: 3}
+  m_Name: ResearchBalanceConfig
+  m_EditorClassIdentifier: 
+  initialFunds: 2200
+  initialQuarterlyFunding: 600
+  minQuarterlyFunding: 300
+  maxQuarterlyFunding: 1000
+  researchCompletionGain: 10
+  engineNormalResearchCost: 350
+  engineFocusedResearchCost: 650
+  newEnginePresetCost: 150
+  engineInstallCost: 350
+  normalResearchStatRewards:
+  - minScore: 0
+    gain: 10
+  - minScore: 50
+    gain: 13
+  - minScore: 80
+    gain: 16
+  focusedResearchStatRewards:
+  - minScore: 0
+    gain: 16
+  - minScore: 50
+    gain: 21
+  - minScore: 80
+    gain: 26
+  launchRewards:
+  - grade: 0
+    immediateFunding: 900
+    quarterlyFundingDelta: 150
+  - grade: 1
+    immediateFunding: 600
+    quarterlyFundingDelta: 100
+  - grade: 2
+    immediateFunding: 400
+    quarterlyFundingDelta: 50
+  - grade: 3
+    immediateFunding: 150
+    quarterlyFundingDelta: 0
+  - grade: 4
+    immediateFunding: 0
+    quarterlyFundingDelta: -100
+  publicSuccessModifier: -10
+  privateSuccessModifier: 10
+  finalMissionSuccessModifier: 0
+  publicRewardMultiplier: 1.5
+  privateRewardMultiplier: 0.5
+  finalMissionRewardMultiplier: 1
+  publicFailureQuarterlyFundingDelta: -150
+  privateFailureQuarterlyFundingDelta: -50
+  finalMissionFailureQuarterlyFundingDelta: -100
+  missions:
+  - id: 0
+    displayName: "\uC815\uC801 \uC5F0\uC18C \uC2DC\uD5D8"
+    launchCost: 600
+    requirementText: "\uAE30\uBCF8 \uD574\uAE08"
+    engineWeight: 0
+  - id: 1
+    displayName: "\uB0AE\uC740 \uACE0\uB3C4 \uB3C4\uB2EC"
+    launchCost: 800
+    requirementText: "\uC815\uC801 \uC5F0\uC18C \uC2DC\uD5D8 C \uC774\uC0C1"
+    engineWeight: 0.55
+  - id: 2
+    displayName: "\uB192\uC740 \uACE0\uB3C4 \uB3C4\uB2EC"
+    launchCost: 900
+    requirementText: "\uB0AE\uC740 \uACE0\uB3C4 \uB3C4\uB2EC C \uC774\uC0C1"
+    engineWeight: 0.5
+  - id: 3
+    displayName: "\uBAA9\uD45C \uAD6C\uC5ED \uB3C4\uB2EC"
+    launchCost: 1100
+    requirementText: "\uB192\uC740 \uACE0\uB3C4 \uB3C4\uB2EC C \uC774\uC0C1"
+    engineWeight: 0.45
+  - id: 4
+    displayName: "\uBAA9\uD45C \uAD6C\uC5ED \uCCB4\uB958"
+    launchCost: 1300
+    requirementText: "\uBAA9\uD45C \uAD6C\uC5ED \uB3C4\uB2EC C \uC774\uC0C1"
+    engineWeight: 0.42
+  - id: 5
+    displayName: "\uC800\uC804\uB825 \uAC80\uC99D"
+    launchCost: 1500
+    requirementText: "\uBAA9\uD45C \uAD6C\uC5ED \uCCB4\uB958 C \uC774\uC0C1"
+    engineWeight: 0.4

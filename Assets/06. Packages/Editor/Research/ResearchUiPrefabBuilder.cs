@@ -12,18 +12,58 @@ namespace Border.Research.Editor
         [InitializeOnLoadMethod]
         private static void RebuildMissingDefaultPrefabs()
         {
-            if (DefaultPrefabsAreCurrent())
+            EditorApplication.delayCall += UpdateDefaultPrefabs;
+        }
+
+        private static void UpdateDefaultPrefabs()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
+                EditorApplication.playModeStateChanged -= UpdatePrefabsAfterPlayMode;
+                EditorApplication.playModeStateChanged += UpdatePrefabsAfterPlayMode;
                 return;
             }
 
-            EditorApplication.delayCall += () =>
+            RemoveObsoleteOperationDetails();
+            if (!DefaultPrefabsAreCurrent())
             {
-                if (!DefaultPrefabsAreCurrent())
+                RebuildUiPrefabs();
+            }
+        }
+
+        private static void UpdatePrefabsAfterPlayMode(PlayModeStateChange state)
+        {
+            if (state != PlayModeStateChange.EnteredEditMode) return;
+            EditorApplication.playModeStateChanged -= UpdatePrefabsAfterPlayMode;
+            EditorApplication.delayCall += UpdateDefaultPrefabs;
+        }
+
+        public static void RemoveObsoleteOperationDetails()
+        {
+            string path = $"{ResourceFolder}/ResearchOperationScreen.prefab";
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (prefab == null || EditorApplication.isPlayingOrWillChangePlaymode) return;
+
+            string[] obsoleteNames = { "SelectedMissionText", "SelectedStageText", "SelectedRequirementText", "RiskText", "StatInsightText" };
+            bool needsUpdate = false;
+            foreach (string name in obsoleteNames)
+                needsUpdate |= FindChild(prefab.transform, name) != null;
+            if (!needsUpdate) return;
+
+            GameObject contents = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                foreach (string name in obsoleteNames)
                 {
-                    RebuildUiPrefabs();
+                    Transform child = FindChild(contents.transform, name);
+                    if (child != null) Object.DestroyImmediate(child.gameObject);
                 }
-            };
+                PrefabUtility.SaveAsPrefabAsset(contents, path);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
         }
 
         [MenuItem("Border/Research/Rebuild UI Prefabs")]
@@ -35,7 +75,6 @@ namespace Border.Research.Editor
             SavePrefab(CreateOperationScreen(), "ResearchOperationScreen");
             SavePrefab(CreateDesignScreen(), "ResearchDesignScreen");
             SavePrefab(CreateMiniGameScreen(), "ResearchMiniGameScreen");
-            AssetDatabase.DeleteAsset($"{ResourceFolder}/LaunchTargetCard.prefab");
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
         }
@@ -58,7 +97,6 @@ namespace Border.Research.Editor
                 && miniGameScreen != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/EnginePresetCard.prefab") != null
                 && AssetDatabase.LoadAssetAtPath<GameObject>($"{ResourceFolder}/DesignEnginePresetButton.prefab") != null
-                && FindChild(operationScreen.transform, "LaunchTargetColumn") == null
                 && FindChild(operationScreen.transform, "Background") == null
                 && FindChild(operationScreen.transform, "EnginePreviewReservedArea") != null
                 && FindChild(miniGameScreen.transform, "FuelOuterBand") != null
@@ -296,7 +334,7 @@ namespace Border.Research.Editor
         {
             RectTransform selectedPanel = CreatePanel("SelectedPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
             AddVerticalLayout(selectedPanel, 12f, 12f, 10f, 7f);
-            selectedPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 154f;
+            selectedPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 238f;
             CreateText("SelectedEngineText", selectedPanel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
 
             RectTransform statRow = CreateGroup("StatButtons", selectedPanel);
@@ -321,7 +359,7 @@ namespace Border.Research.Editor
             RectTransform designPanel = CreatePanel("DesignEntryPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
             AddVerticalLayout(designPanel, 12f, 12f, 10f, 6f);
             designPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 102f;
-            CreateText("DesignEntryTitle", designPanel, 17, FontStyles.Bold, TextAlignmentOptions.Left, "설계/발사 결과");
+            CreateText("DesignEntryTitle", designPanel, 17, FontStyles.Bold, TextAlignmentOptions.Left, "미션 결과 요약");
             CreateText("DesignEntryText", designPanel, 13, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
 
             RectTransform statusPanel = CreatePanel("StatusPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
