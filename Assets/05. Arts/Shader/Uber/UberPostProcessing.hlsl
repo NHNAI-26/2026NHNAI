@@ -70,6 +70,8 @@ CBUFFER_START(UnityPerMaterial)
     float _CRTAnimationSpeed;
     float _CRTPowerOffAmount;
     float _CRTPowerBloomIntensity;
+    float _CRTBloomIntensity;
+    float _CRTBloomThreshold;
 CBUFFER_END
 
 inline float2 UberPostPixelGridUV(float2 uv)
@@ -318,6 +320,35 @@ inline float3 UberPostAscii(float2 uv)
     return lerp(_AsciiBackgroundColor.rgb, foreground, glyph);
 }
 
+// Standing phosphor glow. Two rings of six taps, the outer ring rotated half a step so the
+// gaps of the inner one are covered; each tap is bright-passed so only what rises above the
+// threshold bleeds. Offsets are constants and nothing reads _Time, because the suite renders
+// the same frame at two different times and demands they match. Unrolled rather than looped
+// over an array so the GLES3 and WebGL variants compile the same way.
+inline float3 UberPostCRTBrightTap(float2 uv, float2 offset, float threshold)
+{
+    return max(UberPostSampleLinear(uv + offset).rgb - threshold, 0.0);
+}
+
+inline float3 UberPostCRTBloom(float2 uv, float2 texelSize, float threshold)
+{
+    float2 inner = texelSize * 2.5;
+    float2 outer = texelSize * 6.0;
+    float3 sum = UberPostCRTBrightTap(uv, float2(1.0, 0.0) * inner, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(0.5, 0.86602540378) * inner, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(-0.5, 0.86602540378) * inner, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(-1.0, 0.0) * inner, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(-0.5, -0.86602540378) * inner, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(0.5, -0.86602540378) * inner, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(0.86602540378, 0.5) * outer, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(0.0, 1.0) * outer, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(-0.86602540378, 0.5) * outer, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(-0.86602540378, -0.5) * outer, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(0.0, -1.0) * outer, threshold);
+    sum += UberPostCRTBrightTap(uv, float2(0.86602540378, -0.5) * outer, threshold);
+    return sum * 0.08333333333;
+}
+
 inline float3 UberPostCRT(float2 uv, float2 pixelPosition, float3 sourceColor)
 {
     float strength = _CRTStrength == _CRTStrength ? saturate(_CRTStrength) : 0.0;
@@ -354,15 +385,18 @@ inline float3 UberPostCRT(float2 uv, float2 pixelPosition, float3 sourceColor)
     float rawTime = _Time.y * speed;
     float finiteTime = rawTime == rawTime && abs(rawTime) < 1.0e20 ? rawTime : 0.0;
     float time = fmod(finiteTime, 3600.0);
+    // Overall Strength scales every knob that moves pixels off their original position
+    // (jitter, curvature, aberration). Fading the filter without fading the warp leaves
+    // the frame displaced at low strength, which reads as a second, sharper copy.
     float jitterStrength = _CRTHorizontalJitter == _CRTHorizontalJitter
-        ? clamp(abs(_CRTHorizontalJitter), 0.0, 4.0) : 0.0;
+        ? clamp(abs(_CRTHorizontalJitter), 0.0, 4.0) * strength : 0.0;
     float jitterLine = floor(saturate(powerUV.y) * height * 0.25);
     float jitterFrame = floor(time * 60.0);
     float jitter = (UberPostHash21(float2(jitterLine, jitterFrame)) * 2.0 - 1.0) *
         jitterStrength * texelSize.x;
 
     float curvature = _CRTCurvature == _CRTCurvature
-        ? clamp(abs(_CRTCurvature), 0.0, 0.5) : 0.0;
+        ? clamp(abs(_CRTCurvature), 0.0, 0.5) * strength : 0.0;
     float2 centered = powerUV * 2.0 - 1.0;
     float2 axisSquared = centered * centered;
     centered *= 1.0 + curvature * axisSquared.yx;
@@ -374,12 +408,13 @@ inline float3 UberPostCRT(float2 uv, float2 pixelPosition, float3 sourceColor)
     float insideMask = boundary.x * boundary.y;
 
     float chromatic = _CRTChromaticAberration == _CRTChromaticAberration
-        ? clamp(abs(_CRTChromaticAberration), 0.0, 8.0) : 0.0;
+        ? clamp(abs(_CRTChromaticAberration), 0.0, 8.0) * strength : 0.0;
     float2 chromaticDirection = centered / max(length(centered), 0.0001);
     float2 chromaticOffset = chromaticDirection * texelSize * chromatic;
+    float3 warpedSource = UberPostSampleLinear(warpedUV).rgb;
     float3 color = float3(
         UberPostSampleLinear(warpedUV + chromaticOffset).r,
-        UberPostSampleLinear(warpedUV).g,
+        warpedSource.g,
         UberPostSampleLinear(warpedUV - chromaticOffset).b);
 
     float density = _CRTScanlineDensity == _CRTScanlineDensity
@@ -431,9 +466,29 @@ inline float3 UberPostCRT(float2 uv, float2 pixelPosition, float3 sourceColor)
     float powerBloomIntensity = _CRTPowerBloomIntensity == _CRTPowerBloomIntensity
         ? clamp(abs(_CRTPowerBloomIntensity), 0.0, 8.0) : 0.0;
     float powerBloom = powerTransition * powerBloomIntensity;
-    float3 poweredColor = (saturate(color + powerFlash) + powerBloom) * insideMask *
-        powerMask * powerVisibility;
-    return lerp(sourceColor, poweredColor, strength);
+
+    // The glow that is on the whole time the display is, separate from the power flash above.
+    // Sampled from the warped frame *before* the scanlines and phosphor mask multiply it down,
+    // so the bleed is smooth instead of striped, and scaled by strength like every other knob.
+    float bloomIntensity = _CRTBloomIntensity == _CRTBloomIntensity
+        ? clamp(abs(_CRTBloomIntensity), 0.0, 4.0) * strength : 0.0;
+    float bloomThreshold = _CRTBloomThreshold == _CRTBloomThreshold
+        ? saturate(_CRTBloomThreshold) : 0.0;
+    float3 screenBloom = 0.0;
+    if (bloomIntensity > 0.0)
+        screenBloom = UberPostCRTBloom(warpedUV, texelSize, bloomThreshold) * bloomIntensity;
+
+    // Fade the filter against the *warped* frame, never against the untouched source:
+    // the two geometries differ, so blending them double-images every edge. The power
+    // collapse and its masks stay at full weight — the screen must reach black at any
+    // strength, or the power-off animation stops short of turning the display off.
+    float3 filtered = lerp(warpedSource, color, strength);
+    // Both blooms land outside the saturate so they can push past 1.0 - inside it a glow just
+    // clips to white - and inside the mask multiply so the tube edge and the power-off collapse
+    // still reach true black.
+    float3 poweredColor = (saturate(filtered + powerFlash) + powerBloom + screenBloom) *
+        insideMask * powerMask * powerVisibility;
+    return poweredColor;
 }
 
 float4 UberPostFragment(Varyings input) : SV_Target

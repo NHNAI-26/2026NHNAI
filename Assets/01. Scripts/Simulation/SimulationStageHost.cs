@@ -37,6 +37,7 @@ namespace Simulation
         private bool busy;
         private LaunchMissionController mission;
         private LaunchPhotoCapture photoCapture;
+        private SimulationCrtScreen crt;
         public string LaunchMessage { get; private set; }
 
         public static bool OpenDesignStage()
@@ -90,6 +91,11 @@ namespace Simulation
         {
             busy = true;
 
+            // 화면부터 덮는다 — 연구 화면이 꺼지고 시뮬레이션 씬이 올라오는 사이가 그대로 보이면
+            // CRT 가 켜지기도 전에 화면이 한 번 튄다.
+            if (crt == null) crt = gameObject.AddComponent<SimulationCrtScreen>();
+            crt.Cover();
+
             research = FindFirstObjectByType<ResearchOperationUIController>();
             // 캔버스가 아니라 루트를 끈다 — 미니게임·설계 화면 컨트롤러가 캔버스의 형제로 붙어 있어서
             // 캔버스만 끄면 그것들이 시뮬레이션 위에 남는다.
@@ -135,6 +141,11 @@ namespace Simulation
             // 설계 UI 는 SimulationTest 씬에 프리팹 인스턴스로 놓여 있다 — 씬과 함께 들어오고 나간다.
             designUI = FindFirstObjectByType<RocketDesignUI>();
 
+            // 합성 경로를 세운 뒤 베젤을 밑에서 들어 올리고, 안착한 다음 브라운관을 켜고, 마지막에
+            // 베젤을 확대해 화면 밖으로 밀어낸다.
+            if (designUI != null) crt.Begin(mainCamera, simulationCamera, designUI);
+            yield return crt.PowerOnRoutine();
+
             loaded = true;
             busy = false;
         }
@@ -143,6 +154,10 @@ namespace Simulation
         {
             busy = true;
             while (photoCapture != null && photoCapture.IsCapturing) yield return null;
+
+            // 진입의 역순으로(베젤 축소 → 소등 → 베젤 하강) 덮는다. 합성 경로가 시뮬레이션 씬의 카메라와 캔버스를 물고 있어서
+            // 씬을 내리기 전에 풀어야 한다.
+            if (crt != null) yield return crt.PowerOffRoutine();
 
             // 씬을 내리면 UI 도 같이 사라진다 — 따로 파괴하지 않는다.
             designUI = null;
@@ -159,8 +174,16 @@ namespace Simulation
             if (research != null)
             {
                 research.gameObject.SetActive(true);
+                // 여기서 연구 화면의 등장 애니메이션(PlayEnter(Hub), 0.55초)이 시작된다.
                 research.ReturnFromDesignScreen();
             }
+
+            // 복귀한 화면이 한 프레임 제자리를 잡은 뒤 덮개를 걷는다. 같은 프레임에 걷으면 아직 갱신되지
+            // 않은 화면이 한 장 스치고, 슬라이드로 걷으면 등장 애니메이션이 그 검은 판 밑에서 다 소모된다.
+            // 결과 UI 는 씬을 내리기 전에 이미 닫혔으므로 결과 이벤트를 여기서 다시 발행하지 않는다.
+            yield return null;
+            if (crt != null) crt.Uncover();
+
             ResearchFlowSession.GetOrCreate().ClearPendingDesignEntry();
             mission = null;
             photoCapture = null;
@@ -215,7 +238,49 @@ namespace Simulation
             // Keep the result and photograph until the player dismisses its newspaper.
             // 등급은 여기서만 확정된다 — 발사 정보 패널이 스스로 알 수 없으므로 건네준다.
             if (designUI != null) designUI.ShowLaunchResult(result.Grade);
+            // 최종 미션을 통과한 발사만 여기서 갈린다. 낙하산 6초와 결과 신문을 건너뛰고 곧바로
+            // 해피엔딩으로 들어간다 — 신문은 엔딩의 마지막 비트에서 한 번만 나온다.
+            // docs/specs/happy-ending-cinematic-spec.md (UD-004, R-014)
+            if (result.FinalMissionWon && research != null)
+            {
+                StartCoroutine(HappyEndingRoutine(result));
+                return;
+            }
             StartCoroutine(HoldThenUnload(succeeded));
+        }
+
+        /// <summary>
+        /// 시뮬레이션 씬을 내리되 연구 화면을 되살리지 않고 엔딩에 넘긴다. 로켓의 시각 계층은
+        /// 언로드 <b>전에</b> 복제해 둔다 — 파트 배치는 직렬화되지 않아 씬과 함께 사라진다.
+        /// </summary>
+        private IEnumerator HappyEndingRoutine(ResearchLaunchResultData result)
+        {
+            busy = true;
+            while (photoCapture != null && photoCapture.IsCapturing) yield return null;
+
+            GameObject rocketVisual = HappyEndingSequence.PreserveRocket(FindFirstObjectByType<Rocket>());
+
+            if (crt != null) yield return crt.PowerOffRoutine();
+            designUI = null;
+
+            Scene scene = SceneManager.GetSceneByName(SimulationSceneName);
+            if (scene.isLoaded) yield return SceneManager.UnloadSceneAsync(scene);
+
+            if (mainCamera != null)
+            {
+                mainCamera.tag = MainCameraTag;
+                mainCamera.cullingMask = mainCameraCullingMask;
+                mainCamera.clearFlags = mainCameraClearFlags;
+            }
+
+            ResearchFlowSession.GetOrCreate().ClearPendingDesignEntry();
+            mission = null;
+            photoCapture = null;
+            loaded = false;
+            busy = false;
+
+            // 커튼은 걷지 않는다 — 엔딩이 자기 검은 화면을 세운 뒤 직접 걷는다.
+            HappyEndingSequence.Play(rocketVisual, research, result, crt);
         }
 
         /// <summary>

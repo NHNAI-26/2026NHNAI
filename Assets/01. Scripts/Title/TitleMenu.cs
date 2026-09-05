@@ -10,6 +10,7 @@ namespace Border.Title
     {
         [SerializeField] private Button newGameButton;
         [SerializeField] private Button settingsButton;
+        [SerializeField] private Button quitButton;
         [SerializeField] private SimpleSettingsMenuController settingsMenu;
         [SerializeField] private string mainSceneName = "01_Main";
 
@@ -23,7 +24,8 @@ namespace Border.Title
                 Instantiate(soundManagerPrefab);
             if (newGameButton != null) newGameButton.onClick.AddListener(NewGame);
             if (settingsButton != null) settingsButton.onClick.AddListener(OpenSettings);
-            if (newGameButton == null || settingsButton == null || settingsMenu == null)
+            if (quitButton != null) quitButton.onClick.AddListener(QuitGame);
+            if (newGameButton == null || settingsButton == null || quitButton == null || settingsMenu == null)
                 Debug.LogError("TitleScreen prefab has missing menu references.", this);
         }
 
@@ -31,6 +33,7 @@ namespace Border.Title
         {
             if (newGameButton != null) newGameButton.onClick.RemoveListener(NewGame);
             if (settingsButton != null) settingsButton.onClick.RemoveListener(OpenSettings);
+            if (quitButton != null) quitButton.onClick.RemoveListener(QuitGame);
         }
 
         public void NewGame()
@@ -44,6 +47,19 @@ namespace Border.Title
         private void OpenSettings()
         {
             if (!loading && settingsMenu != null) settingsMenu.Open();
+        }
+
+        // PauseMenuController.QuitGame 과 같은 관용구다. 에디터에서 Application.Quit 은 무동작이라
+        // 플레이 모드를 직접 내려야 종료가 확인된다.
+        private void QuitGame()
+        {
+            if (loading) return;
+            loading = true;
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
     }
 }

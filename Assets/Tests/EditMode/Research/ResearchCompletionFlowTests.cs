@@ -286,6 +286,38 @@ namespace Border.Research.Tests
             Assert.That(operation.Model.Funds, Is.EqualTo(funds));
         }
 
+        /// <summary>
+        /// 해피엔딩 시네마틱이 결과 신문을 마지막 비트로 쓰기 위해 기대는 자리다. 신문을 닫는 경로가
+        /// 전부 모이는 엔딩 화면 호출을 가로채, 기존 MISSION COMPLETE 패널 대신 넘겨받은 쪽이
+        /// 마무리를 가져간다. docs/specs/happy-ending-cinematic-spec.md
+        /// </summary>
+        [Test]
+        public void EndingOverride_TakesOverInsteadOfShowingEndingScreen()
+        {
+            CreateOperation();
+            operation.Model.CreateNewEnginePreset(out _);
+            WaitUntilLastQuarter(operation.Model);
+            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
+            session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
+            session.CommitPendingDesignLaunch(out var result);
+
+            int takeovers = 0;
+            operation.SetEndingOverride(() => takeovers++);
+            // 리플렉션 헬퍼 Invoke 는 ShowResultReport 오버로드 둘 사이에서 갈리므로 공개 진입점을 쓴다.
+            operation.ShowLaunchResultOverlay(result, null);
+            Invoke(report, "Respond");
+            Invoke(report, "Respond");
+            Invoke(report, "Respond");
+
+            Assert.That(takeovers, Is.EqualTo(1));
+            Assert.That(ending.gameObject.activeSelf, Is.False);
+
+            // 한 번 쓰면 풀린다 — 다음 마무리는 원래대로 엔딩 화면이 가져간다.
+            operation.ReturnFromDesignScreen();
+            Assert.That(ending.gameObject.activeSelf, Is.True);
+            Assert.That(takeovers, Is.EqualTo(1));
+        }
+
         [Test]
         public void LaunchResultOverlay_WaitsForDismissalBeforeInvokingStageContinuation()
         {

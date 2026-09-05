@@ -41,6 +41,8 @@ Material:
     - _BlendStrength: 0
     - _Brightness: 1
     - _CRTAnimationSpeed: 1
+    - _CRTBloomIntensity: 0.82
+    - _CRTBloomThreshold: 0.12
     - _CRTChromaticAberration: 1
     - _CRTCurvature: 0.12
     - _CRTHorizontalJitter: 0.5
@@ -52,7 +54,7 @@ Material:
     - _CRTScanlineDensity: 480
     - _CRTScanlineStrength: 0.25
     - _CRTSignalNoise: 0.03
-    - _CRTStrength: 1
+    - _CRTStrength: 0.28
     - _CRTVignetteStrength: 0.35
     - _ColorLevels: 16
     - _Contrast: 1

@@ -74,6 +74,8 @@ namespace Simulation
         private TMP_Text fundsText;
         private readonly int[] installedPresetCounts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
         private TMP_Text missionText;
+        private RectTransform taskPanel;
+        private TMP_Text taskText;
         private RectTransform stageStrip;
         private Image[] stageDots;
         private Image[] stageLines;
@@ -92,6 +94,10 @@ namespace Simulation
 
         private RocketBuilder builder;
         private Canvas canvas;
+
+        /// <summary><see cref="SimulationCrtScreen"/> 이 렌더 모드를 잠시 바꿔 쓴다.</summary>
+        internal Canvas Canvas => canvas;
+
         private RectTransform canvasRect;
         private RectTransform presetPanel;
 
@@ -380,9 +386,10 @@ namespace Simulation
         }
 
         /// <summary>
-        /// 뷰포트 RectTransform 을 카메라의 정규화 사각형으로 옮긴다. 오버레이 캔버스의
-        /// <see cref="RectTransform.GetWorldCorners"/> 는 화면 픽셀이라(StatBox 도 같은 가정) 화면 크기로
-        /// 나누기만 하면 된다. 창 크기나 화면 비율이 바뀌어도 한 프레임 뒤에 따라온다.
+        /// 뷰포트 RectTransform 을 카메라의 정규화 사각형으로 옮긴다. 창 크기나 화면 비율이 바뀌어도
+        /// 한 프레임 뒤에 따라온다. <see cref="RectTransform.GetWorldCorners"/> 는 오버레이 캔버스에서만
+        /// 화면 픽셀이라(StatBox 도 같은 가정), CRT 화면이 캔버스를 Screen Space - Camera 로 돌려놓는
+        /// 동안에는 <see cref="SimulationCrtScreen"/> 이 물려 준 카메라로 환산해야 한다.
         /// </summary>
         private void UpdateViewportRect()
         {
@@ -399,11 +406,16 @@ namespace Simulation
 
             viewport.GetWorldCorners(viewportCorners);
 
+            // 오버레이 모드에서는 카메라가 null 이고 이 호출이 월드 좌표를 그대로 돌려준다 — 예전과 같은 값이다.
+            Camera uiCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            Vector2 min = RectTransformUtility.WorldToScreenPoint(uiCamera, viewportCorners[0]);
+            Vector2 max = RectTransformUtility.WorldToScreenPoint(uiCamera, viewportCorners[2]);
+
             var rect = new Rect(
-                viewportCorners[0].x / Screen.width,
-                viewportCorners[0].y / Screen.height,
-                (viewportCorners[2].x - viewportCorners[0].x) / Screen.width,
-                (viewportCorners[2].y - viewportCorners[0].y) / Screen.height);
+                min.x / Screen.width,
+                min.y / Screen.height,
+                (max.x - min.x) / Screen.width,
+                (max.y - min.y) / Screen.height);
 
             // rect 대입은 URP 렌더 타깃 재할당을 부른다 — 값이 그대로면 건드리지 않는다.
             if (builder.Cam.rect != rect) builder.Cam.rect = rect;
@@ -466,11 +478,28 @@ namespace Simulation
             dateText.text = $"{model.Year}.Q{model.Quarter} / 남은 분기 : {model.RemainingTurns}";
             fundsText.text = $"보유 자금 : {model.Funds:N0} $\n설치 : {installed:N0} $";
 
+            // 목표는 뷰 안 상단 TASK 패널이 맡는다. 번호는 LaunchMissionId 값 그대로다 —
+            // StaticFire=0 은 직렬화 호환용 죽은 값이라 실제 미션은 1부터 시작한다.
+            LaunchMissionId missionId = session.HasPendingDesignEntry
+                ? session.PendingDesignEntry.MissionId
+                : model.GetCurrentMission();
+            bool hasObjective = mission != null && !string.IsNullOrEmpty(mission.Objective);
+            taskPanel.gameObject.SetActive(hasObjective);
+            if (hasObjective) taskText.text = $"TASK {(int)missionId} : {mission.Objective}";
+
+            // 하단 바는 발사 전에는 남은 이벤트 효과와 발사 거부 사유를, 발사 뒤에는 비행 상태를 쓴다.
+            // 셋은 서로 다른 시점에만 나와 자리를 다투지 않는다. 거부 사유만은 다음 발사 시도까지
+            // 지워지지 않으므로 이벤트 아래에 붙인다 — 위에 두면 한 번 거부당한 뒤로 이벤트가 영영 가린다.
             missionText.text = launched && mission != null
-                ? mission.Objective + "\n" + mission.Status
-                : stageHost != null && !string.IsNullOrEmpty(stageHost.LaunchMessage)
-                    ? stageHost.LaunchMessage
-                    : mission != null ? mission.Objective : string.Empty;
+                ? mission.Status
+                : JoinLines(model.PendingLaunchEffectsText, stageHost != null ? stageHost.LaunchMessage : null);
+        }
+
+        private static string JoinLines(string first, string second)
+        {
+            if (string.IsNullOrEmpty(first)) return second ?? string.Empty;
+            if (string.IsNullOrEmpty(second)) return first;
+            return first + "\n" + second;
         }
 
         /// <summary>
@@ -690,6 +719,8 @@ namespace Simulation
             fundsText = topBar.Find("FundsCell/Funds").GetComponent<TMP_Text>();
 
             viewport = (RectTransform)canvasRect.Find("Viewport");
+            taskPanel = (RectTransform)viewport.Find("taskPanel");
+            taskText = taskPanel.GetComponentInChildren<TMP_Text>(true);
 
             stageStrip = (RectTransform)canvasRect.Find("StageStrip");
             int count = LaunchMissionEvaluator.StageNames.Length;

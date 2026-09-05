@@ -1409,10 +1409,22 @@ UI 도 같이 들어오고, 내리면 같이 나간다 — 코드가 스폰하�
 TopBar          가로 전체, 높이 64   [ARTEMIS CONTROL] [연.Q분기 / 남은 분기] [보유 자금 · 설치]  ← 칸마다 패널
 PresetPanel     좌측 폭 200, 두 바 사이                    발사 전
 FlightInfoPanel 좌측 폭 200, PresetPanel 과 같은 자리       발사 후
-Viewport        200 .. 오른쪽 끝, 스테퍼 위 .. 상단 바 아래   (LaunchPip 이 그 안 우하단)
+Viewport        200 .. 오른쪽 끝, 스테퍼 위 .. 상단 바 아래   (taskPanel 그 안 상단, LaunchPip 우하단)
 StageStrip      Viewport 와 같은 가로, 높이 32              점화 ─ 이륙 ─ 상승 ─ 목표 구역 ─ 체류
-BottomBar       가로 전체, 높이 64   현재 미션 문구 │ [연구 화면] [발사 / 자폭]
+BottomBar       가로 전체, 높이 64   남은 이벤트 효과 / 비행 상태 │ [연구실로] [발사 / 자폭]
 ```
+
+**목표는 `taskPanel`, 상황은 하단 바.** 뷰포트 안 상단의 `taskPanel/txttask` 가
+`TASK {번호} : {목표}` 한 줄을 든다. 번호는 `LaunchMissionId` 값 그대로다 — `StaticFire = 0` 은
+직렬화 호환용 죽은 값이라 실제 미션이 1부터 시작해서 그대로 쓸 수 있다. 목표 문구는
+`LaunchMissionController.Objective`(= `LaunchMissionEvaluator.GetObjectiveDescription`)에서 오고,
+미션 컨트롤러가 아직 없으면 패널을 끈다.
+
+하단 바 `Mission` 은 세 가지를 시점으로 나눠 쓴다. 발사 전에는 **남은 이벤트 효과**
+(`ResearchPrototypeModel.PendingLaunchEffectsText` — 이전 발사 결과 이벤트가 다음 행동까지 끌고 가는
+효과들), 발사 뒤에는 `LaunchMissionController.Status`. 셋이 같은 시점에 겹치지 않아 자리를 다투지 않는다.
+예외는 발사 거부 사유(`SimulationStageHost.LaunchMessage`)인데, 한 번 설정되면 다음 발사 시도까지
+지워지지 않으므로 이벤트 효과 **아래** 줄에 붙인다 — 위에 두면 한 번 거부당한 뒤로 이벤트가 영영 가린다.
 
 **상단 바는 칸마다 패널을 따로 깐다.** `TopBar` 자체는 Graphic 이 없는 껍데기고 `TitleCell`/`DateCell`/
 `FundsCell` 세 개가 각자 패널 스프라이트를 쓴다(`CellGap` 4 만큼 벌린다). 패널 한 장 위에 글자만 셋 얹으면
@@ -1576,6 +1588,128 @@ UI Controller` 의 자식이 아니라 별개 루트라 진입할 때 같이 꺼
 
 설치 가격 합계는 캐시하지 않고 매 프레임 다시 센다. `RocketBuilder.Changed`는 **부착 때 발생하지 않아서**
 (`EndDrag`가 `Attach`만 부른다) 이벤트로 캐시하면 낡은 값이 남는다.
+
+## CRT 화면: 설계 단계 전체를 브라운관 안에 넣는다
+
+설계·발사 화면이 떠 있는 동안 화면 전체가 CRT 모니터로 보인다. 3D 뿐 아니라 **UI 도 같이** 필터를 받는
+것이 요구사항이라, 어디에 포스트 프로세싱을 거느냐가 이 기능의 전부다. `SimulationCrtScreen` 이 그 배선을
+들고, `SimulationStageHost` 가 진입·퇴장 시점에 세 번 부른다.
+
+**카메라 스택은 쓸 수 없다.** URP 스택은 Base 카메라의 뷰포트 사각형을 스택 전체가 공유하는데, 이 화면의
+시뮬레이션 카메라는 `RocketDesignUI.UpdateViewportRect` 가 화면 가운데 사각형으로 잡아 준다. Overlay UI
+카메라를 얹으면 UI 가 그 사각형 안으로 찌그러지고, 반대로 시뮬레이션 카메라를 Overlay 로 돌리면 사각형이
+무시돼 3D 프레이밍이 통째로 바뀐다. Screen Space - Overlay 캔버스는 애초에 SRP 루프 밖에서 백버퍼에 직접
+그려지므로 어떤 injection point 로도 닿지 못한다.
+
+**그래서 합성한다.** 화면 크기 `RenderTexture` 한 장에 3D 카메라 둘(`01_Main` 의 클리어 전용 카메라와
+시뮬레이션 카메라)을 그대로 그리고, 그 결과를 설계 UI 캔버스 맨 뒤에 깐 `RawImage` 로 되돌린다. 캔버스는
+그동안만 `Screen Space - Camera` 가 되어 전용 CRT 카메라에 물린다. 최종 화면을 그리는 카메라가 그 하나뿐이라
+UI 든 3D 든 빠짐없이 **한 번씩만** 필터를 받는다.
+
+**`Camera.rect` 는 건드리지 않는다.** RenderTexture 가 화면과 정확히 같은 크기라 `Camera.pixelRect` 가
+지금과 같은 값으로 남고, `RocketBuilder` 의 `ScreenPointToRay`·`WorldToScreenPoint` 열 몇 곳이 손댈 것
+없이 그대로 맞는다. 이 문서가 앞에서 RenderTexture 를 피한 이유(좌표계 붕괴)가 여기서는 걸리지 않는다.
+바뀐 곳은 `UpdateViewportRect` 한 군데뿐인데, 오버레이 캔버스에서만 성립하던
+`GetWorldCorners` → 화면 픽셀 가정을 `RectTransformUtility.WorldToScreenPoint` 로 바꿔 두 모드 모두에서
+같은 값이 나오게 했다(오버레이일 때 카메라는 `null` 이고 예전과 같은 결과다).
+
+**필터는 전용 렌더러에만 매단다.** `Assets/Settings/CRT_Renderer.asset` 은 `MAT_CRT.mat` 을 쓰는
+`FullScreenPassRendererFeature`("CRT Screen") 하나만 가진 URP 렌더러고, PC/Mobile 파이프라인 에셋의
+렌더러 목록에 붙어 있다. CRT 카메라만 `SetRenderer` 로 이 렌더러를 고른다 — 기존 `PC_Renderer` 의
+"Uber Post Processing"(필터 None)은 그대로 두고, 합성용 카메라 둘은 기본 렌더러를 쓰므로 필터가 두 번
+걸리는 일이 없다.
+
+런타임에 `MAT_CRT` 의 **복제본을 꽂지 않는다.** `passMaterial` 은 피처(ScriptableObject)의 직렬화
+필드라, 플레이 중 에셋이 하나라도 다시 임포트되면 디스크의 원본으로 되돌아간다 — 복제본을 꽂아 두면
+그 순간 연출이 끊기고, 인스펙터로 값을 만져도 화면에 반영되지 않는다(복제본은 원본을 안 본다).
+그래서 에셋을 직접 몬다. 대신 플레이 중에는 `_CRTPowerOffAmount` 가 에셋 위에서 움직이는데,
+저장된 값이 0 이고 퇴장할 때 0 으로 되돌리므로 남지 않는다. 인스펙터로 CRT 값을 실시간 튜닝할 수 있는
+것도 이 덕분이다.
+
+**전원 값의 방향.** `_CRTPowerOffAmount` 는 `Range(0, 1)` 이고 **1 이 꺼진 화면**이다(0→0.5 수직 붕괴,
+0.5→1 수평 붕괴). 그래서 진입은 `1 → 0`(켜짐), 결과 이벤트 직전은 `0 → 1`(꺼짐)이다. 값을 100 까지
+올리는 것이 아니다. 붕괴 순간의 흰 섬광 세기는 `MAT_CRT` 의 `_CRTPowerBloomIntensity`(2.7) 가 정하는
+아트 값이다.
+
+**`_CRTStrength` 는 휜 프레임 안에서 페이드한다.** 원래 `UberPostCRT` 는 마지막에
+`lerp(sourceColor, poweredColor, strength)` 로 **왜곡되지 않은 원본**과 크로스페이드했다. CRT 결과는
+`_CRTCurvature`·`_CRTChromaticAberration`·`_CRTHorizontalJitter` 로 픽셀을 원래 자리에서 밀어내므로,
+서로 다른 두 기하를 섞으면 강도를 1 미만으로 낮추는 순간 화면 전체가 어긋난 채 겹쳐 보인다 —
+UI 가 선명한 한 장 + 중심으로 당겨진 한 장으로 두 번 나온다. 적용 지점(렌더러 피처·RT 블릿·카메라 스택)을
+무엇으로 바꿔도 같으므로 셰이더에서 고쳤다:
+
+- 픽셀을 미는 세 값에 `strength` 를 곱한다 — 강도가 낮아지면 왜곡도 같이 0 으로 간다(0 에서 연속).
+- 페이드 상대를 색수차 없는 **같은 `warpedUV` 샘플**(`warpedSource`)로 바꿔 두 항의 기하를 일치시킨다.
+  이미 뜨던 중앙 탭을 재사용하므로 샘플 수는 셋 그대로다.
+- 전원 붕괴와 그 마스크(`insideMask`·`powerMask`·`powerVisibility`)는 강도와 무관하게 **온전히** 건다.
+  강도에 비례해 약해지면 낮은 강도에서 화면이 끝까지 검어지지 않아 전원 끄기 연출이 성립하지 않는다.
+
+`_CRTStrength` 가 1 이면 출력은 이전과 완전히 동일하다. 이 결정은
+`UberShaderSuiteTests.PostProcessing.cs` 의 `CrtFilterUsesReviewedPropertiesAndProceduralSourceContract`
+가 문자열로 잠근다 — 예전 `lerp(sourceColor, ...)` 로 되돌리면 실패한다.
+
+**블룸은 둘이다.** `_CRTPowerBloomIntensity` 는 `powerTransition` 에 곱해져 있어 **전원 붕괴 순간에만**
+터지는 섬광이고, `_CRTBloomIntensity` / `_CRTBloomThreshold` 는 화면이 켜져 있는 **내내** 도는 인광체
+번짐이다. Threshold 를 0 으로 내리면 화면 전체가 뿌옇게 발광하고, 올리면 밝은 곳만 번진다 — 한 구현이
+두 연출을 덮는다. 기본값은 강도 0 이라 켜기 전까지 룩이 바뀌지 않는다.
+
+`UberPostCRTBloom` 은 고정 2링 12탭 커널이다. 시간도 해시도 읽지 않는데, 애니메이션을 끈 상태에서 서로
+다른 `_Time` 두 값이 같은 프레임을 내야 한다는 검사가 있어서다. 배열 인덱싱과 루프 대신 탭을 펼쳐 쓴
+것은 GLES3·WebGL 배리언트까지 같은 방식으로 컴파일시키기 위해서다. 반경은 상수다 — 브라운관 번짐은
+짧은 거리라 아트가 만질 일이 적다. 필요해지면 `_CRTBloomRadius` 를 한 줄 더해 노출하면 된다.
+
+합성 지점에 제약이 둘 있고, 둘 다 테스트가 잡는다. **`saturate` 밖**이어야 한다 — 안에 넣으면 1 로 잘려
+발광이 성립하지 않는다(그래서 두 블룸 모두 밖에 있다). 그리고 **`insideMask * powerMask *
+powerVisibility` 곱 안**이어야 한다 — 밖으로 빠지면 브라운관 모서리와 전원이 꺼진 화면이 검은색에
+도달하지 못한다. `CrtFilterPreservesAlphaBlendsBoundaryAndFreezesAnimation` 이 블룸을 최대로 켠 채
+네 모서리가 여전히 검은지 확인한다.
+
+**전환 연출: 모니터를 손으로 들어 올린다.** 덮개(`DontDestroyOnLoad` 가 아니라 `SimulationStageHost` 에
+붙은 최상위 오버레이 캔버스)는 씬 교체 순간을 가린다. 진입에서 덮는 동작은 **즉시**다 —
+`ResearchOperationUIController.ShowDesignScreen` 이 이미 연구 화면을 꺼 놓고 호스트를 부르기 때문에,
+덮는 데 시간을 쓰면 그만큼 빈 방이 노출된다.
+
+진입 연출은 세 단계고 **겹치지 않는다**(0.5 + 0.6 + 0.5초). 겹치면 검은 화면이 서서히 밝아지는
+페이드처럼 읽혀 물리적인 모니터라는 인상이 사라진다.
+
+1. **상승** — 가운데가 뚫린 16:9 베젤 메시(`Resources/displayFrame`)가 화면 아래에서 올라와 화면을
+   채운다. 이징은 OutBack(살짝 지나쳤다 안착) — 손으로 들어 올려 탁 놓는 느낌이 여기서 나온다.
+   덮개는 이때 알파 0 이 되지만 살아 있는다. 전원 값이 1 이라 화면은 어차피 검고, `raycastTarget` 이
+   남아 있어야 연출 중 클릭이 뒤로 새지 않는다.
+2. **점등** — 전원 값 `1 → 0`. 베젤이 이미 제자리에 있으므로 뚫린 가운데에서 화면이 켜지는 것으로 보인다.
+3. **확대** — 베젤을 `ZoomScale`(1.8, 눈으로 맞추는 아트 값) 배로 키워 화면 밖으로 밀어낸다. 결과적으로
+   베젤은 사라지고 화면만 남는다. 파괴하지 않고 카메라만 꺼 둔다 — 퇴장에서 역방향으로 다시 쓴다.
+
+퇴장은 정확한 역순이다: 축소 → 소등 → 베젤 하강. 내릴 때는 오버슛을 쓰지 않는다(smoothstep). 그다음
+덮개가 다시 검어져 씬 교체를 가리고, 연구 화면이 돌아온 **한 프레임 뒤에 그 자리에서 걷힌다**
+(`SimulationCrtScreen.Uncover`).
+
+**덮개는 슬라이드로 걷지 않는다.** 예전에는 0.4초에 걸쳐 아래로 내려가며 걷혔는데 두 가지가 겹쳤다.
+하나는 베젤이 내려가는 동작과 나란히 검은 판이 하나 더 따라 내려오는 것처럼 보이는 것이고, 다른 하나는
+연구 화면의 등장 애니메이션이 그 밑에서 소모되는 것이다 —
+`ResearchOperationUIController.ReturnFromDesignScreen` 이 `PlayResearchEntryAnimation(PanelGroup.Hub)`
+로 0.55초짜리 `PlayEnter` 를 시작하는데, 아래에서 올라오는 `HubActionBar` 는 덮개가 다 걷히는 0.4초
+시점에 이미 이동의 98%(OutCubic)를 끝내 놓아 등장이 보이지 않았다. 즉시 걷으면 0.55초가 온전히 보인다.
+한 프레임을 기다리는 이유는 복귀 직후 아직 갱신되지 않은 화면이 한 장 스치는 것을 막기 위해서다.
+
+**베젤은 CRT 필터를 먹으면 안 된다.** 필터는 `CRT_Renderer` 의 풀스크린 패스(`injectionPoint: 550`)라
+그 카메라가 그리는 것은 전부 스캔라인과 곡률을 받는다. 그래서 베젤은 전용 카메라(`CRT Frame Camera`)가
+그리고, 그 카메라를 CRT 카메라의 **Overlay 스택**에 넣는다. Overlay 는 Base 의 렌더러 피처가 끝난 뒤에
+그려지므로 베젤은 선명하고 뚫린 가운데로는 필터를 먹은 화면이 그대로 비친다. 앞에서 "카메라 스택은 쓸 수
+없다"고 한 이유(Base 의 뷰포트 사각형을 공유한다)는 여기 걸리지 않는다 — 베젤은 시뮬레이션 카메라와 달리
+자기 사각형을 요구하지 않고 전체 화면을 그대로 쓴다.
+
+베젤 카메라도 CRT 카메라처럼 씬에서 멀리(`(0, 200000, 0)`) 주차한다. 두 카메라의 `farClipPlane` 이 100
+이라 서로를 보지 못하므로 레이어를 새로 파거나 컬링 마스크를 손댈 필요가 없다. 크기는 메시의 경계 상자를
+읽어 **바깥 테두리가 화면을 덮도록** `orthographicSize = min(높이, 너비 / aspect) / 2` 로 잡는다 —
+16:9 창이면 딱 맞고 다른 비율에서도 틈이 안 생긴다. FBX 가 어느 축으로 누워 있는지는 경계 상자로 판단해
+필요하면 세운다.
+
+**결과 이벤트와의 순서.** `CompleteLaunch` 가 `designUI.ShowLaunchResult(grade)` 로 결과를 화면에 남기고,
+`HoldThenUnload` 가 `launchResultHoldSeconds`(기본 3초) 를 기다린 뒤 `UnloadRoutine` 으로 넘어간다.
+CRT 를 끄고 씬을 내리는 것이 전부 끝난 **다음에** `PublishPendingLaunchOutcome()` 이 불린다 — 신문이
+덮개 뒤에서 뜨면 등장 연출을 통째로 놓친다. 그만큼(축소 0.5 + 전원 0.5 + 하강 0.5초) 결과 이벤트가
+늦어진다.
 
 ## 테스트
 

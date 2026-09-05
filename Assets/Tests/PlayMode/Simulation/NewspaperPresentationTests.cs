@@ -182,11 +182,13 @@ namespace Simulation.Tests
                 newspaper.Hide();
                 Assert.That(newspaper.IsShowing, Is.True);
                 Assert.That(closed, Is.Zero);
-                for (int i = 0; i < 60 && newspaper.IsAnimating; i++) yield return null;
+                float revealDeadline = Time.realtimeSinceStartup + 3f;
+                while (newspaper.IsAnimating && Time.realtimeSinceStartup < revealDeadline) yield return null;
                 Assert.That(newspaper.IsAnimating, Is.False);
                 newspaper.Hide();
                 newspaper.Hide();
-                for (int i = 0; i < 60 && newspaper.IsAnimating; i++) yield return null;
+                float hideDeadline = Time.realtimeSinceStartup + 3f;
+                while (newspaper.IsAnimating && Time.realtimeSinceStartup < hideDeadline) yield return null;
                 yield return null;
                 Assert.That(closed, Is.EqualTo(1));
                 Assert.That(session.HasUnacknowledgedLaunchResult, Is.False);
