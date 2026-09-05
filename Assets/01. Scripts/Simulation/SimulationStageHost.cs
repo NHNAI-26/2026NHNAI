@@ -294,7 +294,7 @@ namespace Simulation
             var presentation = succeeded && mission != null
                 ? mission.GetComponentInChildren<MissionSuccessPresentation>() : null;
             Camera camera = FindSceneCamera(SceneManager.GetSceneByName(SimulationSceneName));
-            if (presentation != null && presentation.Begin(camera))
+            if (presentation != null && presentation.Begin(camera, mission.CompletionVelocity))
             {
                 try
                 {

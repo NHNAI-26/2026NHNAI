@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Border.Audio;
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.Animations;
 using UnityEngine.Playables;
@@ -9,12 +11,19 @@ namespace Simulation
     [DisallowMultipleComponent]
     public sealed class MissionSuccessPresentation : MonoBehaviour
     {
-        public const float Duration = 6f;
+        public const float CameraReleaseDuration = 1f;
+        public const float DescentDuration = 6f;
+        public const float Duration = CameraReleaseDuration + DescentDuration;
         [SerializeField] private GameObject parachutePrefab;
         [SerializeField] private AnimationClip swayClip;
+        [SerializeField] private string parachuteSoundId = "parachute";
+        [SerializeField, Min(0f)] private float parachuteSoundLeadSeconds = 0.15f;
 
         private GameObject rig;
+        private Camera sourceCamera;
         private Camera presentationCamera;
+        private Transform socket;
+        private Animator animator;
         private Transform descent;
         private Transform rocketTransform;
         private Transform originalParent;
@@ -23,6 +32,11 @@ namespace Simulation
         private Vector3 originalScale;
         private Vector3 startPosition;
         private Vector3 endPosition;
+        private Vector3 releasePosition;
+        private Vector3 releaseVelocity;
+        private bool descentStarted;
+        private bool parachuteSoundPlayed;
+        private SoundHandle parachuteSound;
         private PlayableGraph graph;
         private AnimationClipPlayable sway;
         private readonly List<Behaviour> suspended = new();
@@ -31,7 +45,7 @@ namespace Simulation
         public bool IsPlaying { get; private set; }
         public Camera PresentationCamera => presentationCamera;
 
-        public bool Begin(Camera sourceCamera)
+        public bool Begin(Camera sourceCamera, Vector3 flightVelocity = default)
         {
             if (IsPlaying) return true;
             Rocket rocket = GetComponentInParent<Rocket>();
@@ -41,18 +55,21 @@ namespace Simulation
                 return false;
             }
 
+            this.sourceCamera = sourceCamera;
             rocketTransform = rocket.transform;
             originalParent = rocketTransform.parent;
             originalPosition = rocketTransform.localPosition;
             originalRotation = rocketTransform.localRotation;
             originalScale = rocketTransform.localScale;
+            releasePosition = rocketTransform.position;
+            releaseVelocity = flightVelocity;
             rocket.StopFlight();
 
             rig = Instantiate(parachutePrefab, rocketTransform.position, Quaternion.identity);
             SceneManager.MoveGameObjectToScene(rig, gameObject.scene);
             descent = rig.transform.Find("DescentRoot");
-            Transform socket = rig.transform.Find("DescentRoot/SwayPivot/RocketSwingPivot/RocketSocket");
-            Animator animator = descent != null ? descent.GetComponent<Animator>() : null;
+            socket = rig.transform.Find("DescentRoot/SwayPivot/RocketSwingPivot/RocketSocket");
+            animator = descent != null ? descent.GetComponent<Animator>() : null;
             if (socket == null || animator == null)
             {
                 Debug.LogWarning("Mission success parachute has no socket or animator.", this);
@@ -61,9 +78,27 @@ namespace Simulation
                 return false;
             }
 
+            rig.SetActive(false);
+            descentStarted = false;
+            parachuteSoundPlayed = false;
+            foreach (GameObject root in gameObject.scene.GetRootGameObjects())
+            {
+                foreach (RocketBuilder builder in root.GetComponentsInChildren<RocketBuilder>()) Suspend(builder);
+                foreach (CinemachineBrain brain in root.GetComponentsInChildren<CinemachineBrain>()) Suspend(brain);
+                foreach (SkyEnvironment sky in root.GetComponentsInChildren<SkyEnvironment>()) Suspend(sky);
+            }
             IsPlaying = true;
+            SoundManager.Instance?.PlayBgm("parachuteBGM", 0.25f);
+            return true;
+        }
+
+        private void BeginDescent()
+        {
+            descentStarted = true;
+            rig.transform.position = rocketTransform.position;
+            rig.SetActive(true);
             rocketTransform.rotation = Quaternion.identity;
-            Bounds body = CalculateBounds(rocket.gameObject, true);
+            Bounds body = CalculateBounds(rocketTransform.gameObject, true);
             Vector3 attachment = new Vector3(body.center.x, body.max.y, body.center.z);
             rocketTransform.SetParent(socket, true);
             rocketTransform.position += socket.position - attachment;
@@ -97,8 +132,6 @@ namespace Simulation
                 foreach (Camera camera in root.GetComponentsInChildren<Camera>())
                     if (camera != presentationCamera) Suspend(camera);
                 foreach (Canvas canvas in root.GetComponentsInChildren<Canvas>()) Suspend(canvas);
-                foreach (RocketBuilder builder in root.GetComponentsInChildren<RocketBuilder>()) Suspend(builder);
-                foreach (SkyEnvironment sky in root.GetComponentsInChildren<SkyEnvironment>()) Suspend(sky);
                 foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>())
                 {
                     if (!renderer.enabled || renderer.transform.IsChildOf(rig.transform)) continue;
@@ -113,23 +146,48 @@ namespace Simulation
             var output = AnimationPlayableOutput.Create(graph, "Parachute", animator);
             output.SetSourcePlayable(sway);
             graph.Play();
-            Evaluate(0f);
-            return true;
         }
 
         public void Evaluate(float elapsedSeconds)
         {
             if (!IsPlaying) return;
             float elapsed = Mathf.Clamp(elapsedSeconds, 0f, Duration);
+            if (!descentStarted)
+            {
+                rocketTransform.position = releasePosition + releaseVelocity * Mathf.Min(elapsed, CameraReleaseDuration);
+                if (elapsed < CameraReleaseDuration) return;
+                BeginDescent();
+            }
+
+            float descentElapsed = Mathf.Max(0f, elapsed - CameraReleaseDuration);
+            if (!parachuteSoundPlayed && descentElapsed > 0f)
+            {
+                // Sample the approaching rocket so the cue follows its size and sway, even with attached engines.
+                EvaluateDescent(Mathf.Min(DescentDuration, descentElapsed + parachuteSoundLeadSeconds));
+                Bounds rocketBounds = CalculateBounds(rocketTransform.gameObject, false);
+                if (presentationCamera.WorldToViewportPoint(rocketBounds.min).y <= 1f)
+                {
+                    parachuteSoundPlayed = true;
+                    if (SoundManager.Instance != null && !string.IsNullOrEmpty(parachuteSoundId))
+                        parachuteSound = SoundManager.Instance.PlaySfx(parachuteSoundId);
+                }
+            }
+            EvaluateDescent(descentElapsed);
+        }
+
+        private void EvaluateDescent(float elapsed)
+        {
             sway.SetTime(elapsed % Mathf.Max(0.001f, swayClip.length));
             graph.Evaluate(0f);
-            descent.localPosition = Vector3.Lerp(startPosition, endPosition, elapsed / Duration);
+            descent.localPosition = Vector3.Lerp(startPosition, endPosition, elapsed / DescentDuration);
         }
 
         public void End()
         {
             if (!IsPlaying) return;
             IsPlaying = false;
+            parachuteSound.Stop();
+            parachuteSound = SoundHandle.Invalid;
             if (graph.IsValid()) graph.Destroy();
             // Detach the existing rocket before destroying the rig that temporarily owns it.
             if (rocketTransform != null)
@@ -151,6 +209,7 @@ namespace Simulation
             }
             if (rig != null) Destroy(rig);
             presentationCamera = null;
+            sourceCamera = null;
             rig = null;
         }
 

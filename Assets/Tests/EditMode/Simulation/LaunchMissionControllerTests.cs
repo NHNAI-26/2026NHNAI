@@ -164,6 +164,8 @@ namespace Simulation.Tests
         public void ReachingObjective_CompletesSuccessfullyOnceWithoutExplosion()
         {
             _rocket.Launch();
+            Vector3 velocity = new Vector3(4f, 25f, -2f);
+            _body.linearVelocity = velocity;
             _object.transform.position = Vector3.up * 100f;
             Invoke(_controller, "FixedUpdate");
             Invoke(_controller, "FixedUpdate");
@@ -172,6 +174,7 @@ namespace Simulation.Tests
 
             Assert.That(_results, Is.EqualTo(new[] { true }));
             Assert.That(_rocket.FlightStopped, Is.True);
+            Assert.That(_controller.CompletionVelocity, Is.EqualTo(velocity));
             Assert.That(_explosions, Is.Zero);
             Assert.That(_controller.CanSelfDestruct, Is.False);
         }
