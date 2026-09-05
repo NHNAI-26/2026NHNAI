@@ -155,14 +155,14 @@ namespace Simulation
                 material.SetFloat(SurfaceId, 1f);
                 material.EnableKeyword(TransparentKeyword);
             }
-            if (material.HasProperty(BlendId)) material.SetFloat(BlendId, 2f);
+            if (material.HasProperty(BlendId)) material.SetFloat(BlendId, 0f);
             if (material.HasProperty(LightingModeId))
             {
                 material.SetFloat(LightingModeId, 1f);
                 material.EnableKeyword(UnlitKeyword);
             }
             if (material.HasProperty(SrcBlendId)) material.SetFloat(SrcBlendId, (float)BlendMode.SrcAlpha);
-            if (material.HasProperty(DstBlendId)) material.SetFloat(DstBlendId, (float)BlendMode.One);
+            if (material.HasProperty(DstBlendId)) material.SetFloat(DstBlendId, (float)BlendMode.OneMinusSrcAlpha);
             if (material.HasProperty(SrcBlendAlphaId)) material.SetFloat(SrcBlendAlphaId, (float)BlendMode.One);
             if (material.HasProperty(DstBlendAlphaId)) material.SetFloat(DstBlendAlphaId, (float)BlendMode.OneMinusSrcAlpha);
             if (material.HasProperty(ZWriteId)) material.SetFloat(ZWriteId, 0f);
@@ -237,7 +237,7 @@ namespace Simulation
                     Mathf.Min(color.b * 1.1f, 2f),
                     1f));
             }
-            if (material.HasProperty(HologramOpacityId)) material.SetFloat(HologramOpacityId, Mathf.Clamp01(color.a * 0.68f));
+            if (material.HasProperty(HologramOpacityId)) material.SetFloat(HologramOpacityId, 1f);
         }
 
         private static Mesh CreateArrowMesh()

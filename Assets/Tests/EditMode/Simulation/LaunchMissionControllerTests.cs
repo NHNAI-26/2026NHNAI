@@ -3,6 +3,7 @@ using System.Reflection;
 using Border.Research;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Simulation.Tests
 {
@@ -190,6 +191,10 @@ namespace Simulation.Tests
             Assert.That(guide.TargetMaterial.shader.name, Is.EqualTo("Shader/Uber/3D Object"));
             Assert.That(guide.TargetMaterial.GetFloat("_HologramEnabled"), Is.EqualTo(1f));
             Assert.That(guide.TargetMaterial.GetFloat("_Surface"), Is.EqualTo(1f));
+            Assert.That(guide.TargetMaterial.GetFloat("_Blend"), Is.EqualTo(0f));
+            Assert.That(guide.TargetMaterial.GetFloat("_SrcBlend"), Is.EqualTo((float)BlendMode.SrcAlpha));
+            Assert.That(guide.TargetMaterial.GetFloat("_DstBlend"), Is.EqualTo((float)BlendMode.OneMinusSrcAlpha));
+            Assert.That(guide.TargetMaterial.GetFloat("_HologramOpacity"), Is.EqualTo(1f));
             Assert.That(guide.TargetMaterial.renderQueue, Is.EqualTo((int)UnityEngine.Rendering.RenderQueue.Transparent));
             Assert.That(guide.TargetMaterial.GetColor("_BaseColor").r, Is.GreaterThan(0.9f));
             Assert.That(guide.TargetMaterial.GetColor("_BaseColor").g, Is.GreaterThan(0.7f));
