@@ -64,6 +64,8 @@ namespace Simulation
                 return;
             }
 
+            if (ResearchFlowSession.GetOrCreate().HasActiveLaunch) return;
+
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
             if (!session.HasPendingDesignEntry)
             {

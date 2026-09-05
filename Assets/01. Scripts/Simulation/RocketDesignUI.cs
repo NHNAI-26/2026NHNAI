@@ -35,6 +35,11 @@ namespace Simulation
         private Rocket rocket;
         private RectTransform viewport;
         private TMP_Text topBarText;
+        private TMP_Text missionText;
+        private RectTransform missionPanel;
+        private Button launchButton;
+        private Button destructButton;
+        private LaunchMissionController mission;
         private readonly List<RocketPart> placedParts = new();
         private readonly Vector3[] viewportCorners = new Vector3[4];
 
@@ -162,6 +167,29 @@ namespace Simulation
         /// </summary>
         private void BuildMissionControl(RectTransform canvasTransform)
         {
+            mission = rocket != null ? rocket.GetComponent<LaunchMissionController>() : null;
+            missionPanel = CreatePanel("MissionPanel", canvasTransform, PanelColor);
+            missionPanel.anchorMin = Vector2.zero;
+            missionPanel.anchorMax = new Vector2(0f, 1f);
+            missionPanel.offsetMin = new Vector2(16f, 16f);
+            missionPanel.offsetMax = new Vector2(216f, -16f);
+            missionPanel.SetAsFirstSibling();
+            missionText = CreateText("Mission", missionPanel, 16, FontStyles.Normal, "");
+            Fill((RectTransform)missionText.transform, 12f);
+            launchButton = CreateButton("LaunchButton", canvasTransform, "발사", out _);
+            var launchRect = (RectTransform)launchButton.transform;
+            launchRect.anchorMin = launchRect.anchorMax = Vector2.zero;
+            launchRect.pivot = Vector2.zero;
+            launchRect.anchoredPosition = new Vector2(240f, 24f);
+            launchRect.sizeDelta = new Vector2(120f, 44f);
+            launchButton.onClick.AddListener(builder.RequestLaunch);
+            destructButton = CreateButton("SelfDestructButton", canvasTransform, "자폭", out _);
+            var destructRect = (RectTransform)destructButton.transform;
+            destructRect.anchorMin = destructRect.anchorMax = Vector2.zero;
+            destructRect.pivot = Vector2.zero;
+            destructRect.anchoredPosition = new Vector2(240f, 24f);
+            destructRect.sizeDelta = new Vector2(120f, 44f);
+            destructButton.onClick.AddListener(() => mission?.SelfDestruct());
             RectTransform topBar = CreatePanel("TopBar", canvasTransform, PanelColor);
             topBar.anchorMin = new Vector2(0f, 1f);
             topBar.anchorMax = Vector2.one;
@@ -365,6 +393,12 @@ namespace Simulation
 
         private void UpdateTopBar()
         {
+            bool launched = rocket != null && rocket.Launched;
+            launchButton.gameObject.SetActive(!launched);
+            missionPanel.gameObject.SetActive(launched);
+            destructButton.gameObject.SetActive(launched);
+            destructButton.interactable = mission != null && mission.CanSelfDestruct;
+            if (mission != null) missionText.text = mission.Objective + "\n\n" + mission.Status;
             // builder.Changed 는 부착 때 발생하지 않으므로(EndDrag 가 Attach 만 부른다) 캐시하면
             // 낡은 값이 남는다. 부품 몇 개짜리 합이라 매 프레임 다시 세는 편이 싸다.
             int installed = 0;
@@ -379,7 +413,8 @@ namespace Simulation
 
             ResearchPrototypeModel model = ResearchFlowSession.GetOrCreate().Model;
             topBarText.text =
-                $"{model.Year}년 {model.Quarter}분기      예산 {model.Funds:N0}      설치 비용 {installed:N0}";
+                $"{model.Year}년 {model.Quarter}분기      예산 {model.Funds:N0}      설치 비용 {installed:N0}\n"
+                + (launched ? "발사 진행" : FindFirstObjectByType<SimulationStageHost>()?.LaunchMessage ?? mission?.Objective);
         }
 
         private void RebuildPresetPanel()
@@ -513,6 +548,18 @@ namespace Simulation
             label.color = Color.white;
             label.textWrappingMode = TextWrappingModes.Normal;
             return label;
+        }
+
+        private static Button CreateButton(string name, Transform parent, string text, out TMP_Text label)
+        {
+            RectTransform rect = CreatePanel(name, parent, EntryColor);
+            var button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = rect.GetComponent<Image>();
+            label = CreateText("Label", rect, 16, FontStyles.Bold, text);
+            label.alignment = TextAlignmentOptions.Center;
+            label.raycastTarget = false;
+            Fill((RectTransform)label.transform, 0f);
+            return button;
         }
 
         private static Button CreateButton(string name, Transform parent, Sprite icon)

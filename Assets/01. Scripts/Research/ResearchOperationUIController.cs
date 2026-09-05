@@ -20,6 +20,8 @@ namespace Border.Research
 
         [SerializeField] private GameObject operationScreenPrefab;
         [SerializeField] private Button enginePresetCardPrefab;
+        [SerializeField] private ResearchResultReportController resultReport;
+        [SerializeField] private ResearchEndingController endingScreen;
         [SerializeField] private ResearchEnginePreviewController enginePreview;
         [SerializeField] private Transform researchLabRoot;
         [SerializeField] private Transform researchCameraTransform;
@@ -32,7 +34,7 @@ namespace Border.Research
         private ResearchPrototypeModel model;
         private EnginePresetId selectedEnginePreset = EnginePresetId.Engine01;
         private EngineStatId selectedStat = EngineStatId.FuelCapacity;
-        private LaunchMissionId selectedMission = LaunchMissionId.StaticFire;
+        private LaunchMissionId selectedMission = LaunchMissionId.LowAltitude;
         private bool initialized;
         private RectTransform canvasTransform;
         private ResearchOperationTransitionAnimator operationTransitionAnimator;
@@ -284,9 +286,7 @@ namespace Border.Research
             waitButton.onClick.AddListener(WaitQuarter);
             resetButton.onClick.AddListener(() =>
             {
-                session.ResetResearch();
-                selectedEnginePreset = EnginePresetId.Engine01;
-                selectedMission = model.GetCurrentMission();
+                ResetResearchState();
                 Refresh();
             });
             fuelCapacityButton.onClick.AddListener(() => SelectStat(EngineStatId.FuelCapacity));
@@ -343,7 +343,7 @@ namespace Border.Research
 
         private void StartEngineResearch(bool focused)
         {
-            if (isTransitioningToDesign)
+            if (isTransitioningToDesign || model.HasGameEnded)
             {
                 return;
             }
@@ -395,6 +395,11 @@ namespace Border.Research
 
             model.ExecuteEngineResearch(result.PresetId, result.StatId, result.Focused, result.Score);
             session.ClearPendingDesignEntry();
+            if (model.HasGameEnded)
+            {
+                ShowEndingScreen();
+                return;
+            }
             canvasTransform.gameObject.SetActive(true);
             ShowResearchLab();
             PlayResearchCameraDrift();
@@ -433,6 +438,17 @@ namespace Border.Research
 
         private void Refresh()
         {
+            if (resultReport != null && resultReport.gameObject.activeSelf) return;
+            if (session.HasUnacknowledgedLaunchResult)
+            {
+                ShowResultReport(session.LastLaunchResult);
+                return;
+            }
+            if (model.HasGameEnded)
+            {
+                ShowEndingScreen();
+                return;
+            }
             EnsureSelectedEnginePresetUnlocked();
             selectedMission = model.GetCurrentMission();
             ShowResearchLab();
@@ -454,7 +470,7 @@ namespace Border.Research
             LaunchMissionState selectedMissionState = model.GetMission(selectedMission);
 
             selectedEngineText.text = $"{selectedEngineConfig.DisplayName}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
-                + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {selectedEngineConfig.InstallCost}\n"
+                + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {model.ConfiguredEngineInstallCost}\n"
                 + $"연료량 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 최대 출력 {selectedEngine.MaxOutput} / 점화 신뢰도 {selectedEngine.IgnitionReliability}\n"
                 + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
             normalResearchButtonText.text = $"일반 연구\n{model.ConfiguredEngineNormalResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
@@ -571,12 +587,23 @@ namespace Border.Research
             activeDesignController.Initialize(session, ReturnFromDesignScreen, ShowResultReport);
         }
 
-        private void ReturnFromDesignScreen()
+        public void ReturnFromDesignScreen()
         {
             if (activeDesignController != null)
             {
                 DestroyUnityObject(activeDesignController.gameObject);
                 activeDesignController = null;
+            }
+
+            if (session.HasUnacknowledgedLaunchResult)
+            {
+                ShowResultReport(session.LastLaunchResult);
+                return;
+            }
+            if (model.HasGameEnded)
+            {
+                ShowEndingScreen();
+                return;
             }
 
             RequestedScreenName = ResearchFlowSession.ResearchScreenName;
@@ -596,18 +623,26 @@ namespace Border.Research
 
         private void ShowResultReport(ResearchLaunchResultData result)
         {
+            if (resultReport == null)
+            {
+                Debug.LogError("Research result report prefab must be assigned in the scene.", this);
+                return;
+            }
+            if (resultReport.gameObject.activeSelf) return;
             if (activeDesignController != null)
             {
                 DestroyUnityObject(activeDesignController.gameObject);
                 activeDesignController = null;
             }
 
-            var host = new GameObject("Research Result Report Controller");
-            host.transform.SetParent(transform, false);
-            ResearchResultReportController report = host.AddComponent<ResearchResultReportController>();
-            report.Initialize(session, result, () =>
+            RequestedScreenName = "ResultReport";
+            if (canvasTransform != null) canvasTransform.gameObject.SetActive(false);
+            HideEnginePreview();
+            HideResearchLab();
+            KillResearchCameraDrift(resetRotation: true);
+            resultReport.Initialize(session, result, () =>
             {
-                DestroyUnityObject(host);
+                session.AcknowledgeLaunchResult();
                 if (model.HasGameEnded)
                 {
                     ShowEndingScreen();
@@ -620,6 +655,12 @@ namespace Border.Research
 
         private void ShowEndingScreen()
         {
+            if (endingScreen == null)
+            {
+                Debug.LogError("Research ending prefab must be assigned in the scene.", this);
+                return;
+            }
+            if (endingScreen.gameObject.activeSelf) return;
             RequestedScreenName = "Ending";
             if (canvasTransform != null)
             {
@@ -628,17 +669,25 @@ namespace Border.Research
 
             HideEnginePreview();
             HideResearchLab();
-            var host = new GameObject("Research Ending Controller");
-            host.transform.SetParent(transform, false);
-            ResearchEndingController ending = host.AddComponent<ResearchEndingController>();
-            ending.Initialize(session, () =>
+            KillResearchCameraDrift(resetRotation: true);
+            endingScreen.Initialize(session, () =>
             {
-                DestroyUnityObject(host);
-                session.ResetResearch();
-                selectedEnginePreset = EnginePresetId.Engine01;
-                selectedMission = model.GetCurrentMission();
+                ResetResearchState();
                 ReturnFromDesignScreen();
             });
+        }
+
+        private void ResetResearchState()
+        {
+            KillDesignTransition();
+            isTransitioningToDesign = false;
+            resultReport?.Hide();
+            endingScreen?.Hide();
+            session.ResetResearch();
+            model = session.Model;
+            selectedEnginePreset = EnginePresetId.Engine01;
+            selectedStat = EngineStatId.FuelCapacity;
+            selectedMission = model.GetCurrentMission();
         }
 
         public ResearchDesignScreenController GetActiveDesignControllerForTests()
@@ -660,9 +709,7 @@ namespace Border.Research
         public void EnterDesignDebugForEditor()
         {
             Initialize();
-            session.ResetResearch();
-            selectedEnginePreset = EnginePresetId.Engine01;
-            selectedMission = model.GetCurrentMission();
+            ResetResearchState();
             model.PrepareDebugDesignEntryState(selectedMission, selectedEnginePreset);
 
             if (session.TryEnterDesign(selectedMission, selectedEnginePreset, out _) == ResearchActionResult.Success)

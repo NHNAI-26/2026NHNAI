@@ -47,12 +47,11 @@ namespace Border.Research
         [SerializeField] private int finalMissionFailureQuarterlyFundingDelta = -100;
         [SerializeField] private MissionBalanceEntry[] missions =
         {
-            new(LaunchMissionId.StaticFire, "정적 연소 시험", 600, "기본 해금", 0f),
-            new(LaunchMissionId.LowAltitude, "낮은 고도 도달", 800, "정적 연소 시험 C 이상", 0.55f),
-            new(LaunchMissionId.HighAltitude, "높은 고도 도달", 900, "낮은 고도 도달 C 이상", 0.50f),
-            new(LaunchMissionId.TargetZone, "목표 구역 도달", 1100, "높은 고도 도달 C 이상", 0.45f),
-            new(LaunchMissionId.ZoneHold, "목표 구역 체류", 1300, "목표 구역 도달 C 이상", 0.42f),
-            new(LaunchMissionId.LowPowerZoneHold, "저전력 검증", 1500, "목표 구역 체류 C 이상", 0.40f),
+            new(LaunchMissionId.LowAltitude, "낮은 고도 도달", 800, "기본 해금", 0.55f),
+            new(LaunchMissionId.HighAltitude, "높은 고도 도달", 900, "낮은 고도 도달 성공", 0.50f),
+            new(LaunchMissionId.TargetZone, "목표 구역 도달", 1100, "높은 고도 도달 성공", 0.45f),
+            new(LaunchMissionId.ZoneHold, "목표 구역 체류", 1300, "목표 구역 도달 성공", 0.42f),
+            new(LaunchMissionId.LowPowerZoneHold, "저전력 검증", 1500, "목표 구역 체류 성공", 0.40f),
         };
 
         public ResearchBalanceConfig ToRuntimeConfig()

@@ -28,6 +28,59 @@ namespace Border.Editor.Research
         private const string VisualLibraryAssetPath = VisualLibraryFolderPath + "/EnginePresetVisualLibrary.asset";
         private static readonly Vector3 DefaultPreviewLocalPosition = new(-0.81f, 0.65f, 0f);
 
+        [MenuItem("Border/Research/Install Session and Result Screens")]
+        public static void InstallSessionAndResultScreens()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                throw new InvalidOperationException("Install research session and screens in Edit Mode only.");
+
+            ResearchBalanceConfigSO balance = AssetDatabase.LoadAssetAtPath<ResearchBalanceConfigSO>("Assets/02. ScriptableObjects/Research/ResearchBalanceConfig.asset");
+            GameObject reportPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/ResearchResultReport.prefab");
+            GameObject endingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/ResearchEnding.prefab");
+            if (balance == null || reportPrefab == null || endingPrefab == null)
+                throw new InvalidOperationException("Research balance and outcome prefabs must exist before installation.");
+
+            Scene activeScene = SceneManager.GetActiveScene();
+            Scene scene = SceneManager.GetSceneByPath(MainScenePath);
+            bool opened = !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(MainScenePath, OpenSceneMode.Additive);
+            try
+            {
+                ResearchOperationUIController controller = FindComponentInScene<ResearchOperationUIController>(scene);
+                if (controller == null) throw new InvalidOperationException("Main scene has no research operation controller.");
+                ResearchFlowSession session = FindComponentInScene<ResearchFlowSession>(scene);
+                if (session == null)
+                {
+                    var host = new GameObject("Research Flow Session");
+                    SceneManager.MoveGameObjectToScene(host, scene);
+                    session = host.AddComponent<ResearchFlowSession>();
+                }
+                var sessionData = new SerializedObject(session);
+                sessionData.FindProperty("balanceConfig").objectReferenceValue = balance;
+                sessionData.ApplyModifiedPropertiesWithoutUndo();
+
+                ResearchResultReportController report = FindComponentInScene<ResearchResultReportController>(scene);
+                if (report == null)
+                    report = ((GameObject)PrefabUtility.InstantiatePrefab(reportPrefab, scene)).GetComponent<ResearchResultReportController>();
+                ResearchEndingController ending = FindComponentInScene<ResearchEndingController>(scene);
+                if (ending == null)
+                    ending = ((GameObject)PrefabUtility.InstantiatePrefab(endingPrefab, scene)).GetComponent<ResearchEndingController>();
+                report.Hide();
+                ending.Hide();
+                var controllerData = new SerializedObject(controller);
+                controllerData.FindProperty("resultReport").objectReferenceValue = report;
+                controllerData.FindProperty("endingScreen").objectReferenceValue = ending;
+                controllerData.ApplyModifiedPropertiesWithoutUndo();
+                EditorSceneManager.MarkSceneDirty(scene);
+                if (!EditorSceneManager.SaveScene(scene)) throw new InvalidOperationException("Could not save research scene connections.");
+            }
+            finally
+            {
+                if (opened) EditorSceneManager.CloseScene(scene, true);
+                if (activeScene.IsValid() && activeScene.isLoaded) SceneManager.SetActiveScene(activeScene);
+            }
+        }
+
         static ResearchPrototypeSceneBootstrap()
         {
             EditorApplication.delayCall += TryInstallInActiveScene;

@@ -22,6 +22,8 @@ namespace Border.Research
         public ResearchPrototypeModel Model => model ??= CreateModel();
         public bool HasPendingDesignEntry => hasPendingDesignEntry;
         public bool HasLastLaunchResult => hasLastLaunchResult;
+        public bool HasUnacknowledgedLaunchResult { get; private set; }
+        public bool HasActiveLaunch => Model.HasActiveLaunch;
 
         public ResearchDesignEntryData PendingDesignEntry
         {
@@ -97,6 +99,31 @@ namespace Border.Research
             StoreDesignEntry(data);
         }
 
+        public ResearchActionResult TryBeginPendingDesignLaunch()
+        {
+            if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
+            if (!hasPendingDesignEntry) return ResearchActionResult.NoPendingDesignEntry;
+            ResearchActionResult action = Model.BeginLaunch(pendingDesignEntry);
+            if (action == ResearchActionResult.Success)
+            {
+                hasLastLaunchResult = false;
+                ClearPendingDesignEntry();
+            }
+            return action;
+        }
+
+        public ResearchActionResult CompleteActiveLaunch(bool succeeded, out ResearchLaunchResultData result)
+        {
+            ResearchActionResult action = Model.CompleteLaunch(succeeded, out result);
+            if (action == ResearchActionResult.Success)
+            {
+                lastLaunchResult = result;
+                hasLastLaunchResult = true;
+                HasUnacknowledgedLaunchResult = true;
+            }
+            return action;
+        }
+
         public ResearchActionResult CommitPendingDesignLaunch(out ResearchLaunchResultData result)
         {
             result = default;
@@ -110,6 +137,7 @@ namespace Border.Research
             {
                 lastLaunchResult = result;
                 hasLastLaunchResult = true;
+                HasUnacknowledgedLaunchResult = true;
                 ClearPendingDesignEntry();
             }
 
@@ -122,12 +150,24 @@ namespace Border.Research
             hasPendingDesignEntry = false;
         }
 
+        public void AcknowledgeLaunchResult()
+        {
+            HasUnacknowledgedLaunchResult = false;
+        }
+
         public void ResetResearch()
         {
-            Model.Reset();
+            model = CreateModel();
             ClearPendingDesignEntry();
             lastLaunchResult = default;
             hasLastLaunchResult = false;
+            HasUnacknowledgedLaunchResult = false;
+        }
+
+        public static void PrepareNewGame()
+        {
+            ResearchFlowSession existing = instance != null ? instance : FindFirstObjectByType<ResearchFlowSession>();
+            if (existing != null) existing.ResetResearch();
         }
 
         public static void ResetForTests()

@@ -27,6 +27,10 @@ namespace Simulation
         private int _liveEngines;
 
         public bool Launched { get; private set; }
+        public System.Func<bool> AuthorizeLaunch { get; set; }
+        public event System.Action LaunchStarted;
+        public bool FlightStopped { get; private set; }
+        public float TotalBurnSeconds { get; private set; }
 
         /// <summary>과열로 발사가 끝났는지. 한 발사에 주요 사고는 하나뿐이라 이후 추력을 걸지 않는다.</summary>
         public bool Overheated { get; private set; }
@@ -56,6 +60,7 @@ namespace Simulation
         public void Launch()
         {
             if (Launched) return;
+            if (AuthorizeLaunch != null && !AuthorizeLaunch()) return;
 
             Launched = true;
             Overheated = false;
@@ -83,6 +88,7 @@ namespace Simulation
             _body.mass = mass;
 
             Log.D($"Launch: {_liveEngines}/{_engines.Count} engine(s) ignited, {mass:0.#} kg", this);
+            LaunchStarted?.Invoke();
         }
 
         /// <summary>
@@ -106,15 +112,23 @@ namespace Simulation
             if (y < waterLevel - sinkDepth) _body.isKinematic = true;
         }
 
+        public void StopFlight()
+        {
+            FlightStopped = true;
+            foreach (RocketPart engine in _engines) engine.Shutdown();
+            _body.isKinematic = true;
+        }
+
         private void FixedUpdate()
         {
             if (Launched && !_body.isKinematic) TickWater();
-            if (!Launched || Overheated || Splashed) return;
+            if (!Launched || Overheated || Splashed || FlightStopped) return;
 
             for (int i = 0; i < _engines.Count; i++)
             {
                 RocketPart engine = _engines[i];
                 bool burned = engine.Tick(Time.fixedDeltaTime);
+                if (burned) TotalBurnSeconds += Time.fixedDeltaTime;
 
                 if (engine.Overheated)
                 {
