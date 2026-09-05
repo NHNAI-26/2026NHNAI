@@ -454,6 +454,14 @@ UI 쪽은 `RocketDesignUI.BuildLaunchPip()`이다. 우하단 `(-16, 16)`은 미�
 - 기존 성공 조건과 수동 자폭은 유지한다. 폭발 애니메이션은 아직 추가하지 않으며,
   기존 `ExplosionRequested`와 `CompleteSelfDestruction()` 연결점은 보존한다.
 
+검증(2026-09-05): `dotnet build .\NHNAI2026.slnx -nologo --no-restore -v:q` 통과.
+Unity `Simulation.EditModeTests` 96개와 `Simulation.PlayModeTests` 5개 통과.
+공중 저속·정지 타이머 초기화·성공/자폭 회귀와 실제 물리 접촉·수면 상태·입수·벽 충돌·이륙 대기를 확인했다.
+기존 평가기 테스트의 33자리 잘못된 GUID는 외부 참조가 없음을 확인하고 32자리로 수정해 테스트 검색을 복구했다.
+실제 `SimulationTest` Game View에서도 지면 정지와 입수 후 대기 장면을 캡처해 확인했다.
+관찰 콜백 기준 실패까지 각각 약 3.01초·2.97초였으며, 캡처는 확인 후 삭제했다.
+전체 프로젝트 테스트는 실행하지 않았다.
+
 ### 접지가 성립하려면 두 가지가 같이 필요하다
 
 처음에는 로켓이 지면을 그대로 지나쳐 무한히 떨어졌다. 원인이 두 개였고, 하나만 고치면 다른 하나로

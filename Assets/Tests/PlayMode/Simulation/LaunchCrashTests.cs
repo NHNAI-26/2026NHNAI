@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using Border.Research;
 using NUnit.Framework;
 using UnityEngine;
@@ -9,6 +10,8 @@ namespace Simulation.Tests
 {
     public sealed class LaunchCrashTests
     {
+        private static readonly MethodInfo RocketTick = typeof(Rocket).GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly MethodInfo MissionTick = typeof(LaunchMissionController).GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
         private Scene scene;
         private PhysicsScene physics;
         private Rocket rocket;
@@ -73,10 +76,24 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void NoLiftoff_OnGroundWaitsTenSecondsBeforeCompleting()
+        {
+            CreateGround(Vector3.zero, new Vector3(20f, 1f, 20f));
+            rocket.Launch();
+            TickFor(9f);
+            Assert.That(rocket.IsGrounded, Is.True);
+            Assert.That(completions, Is.Zero);
+            TickFor(1.1f);
+            Assert.That(completions, Is.EqualTo(1));
+            Assert.That(mission.Status, Does.Contain("이륙"));
+        }
+
+        [Test]
         public void Splashdown_ContinuesSinkingForThreeSecondsBeforeStopping()
         {
             rocket.Launch();
             body.position = new Vector3(0f, -9f, 0f);
+            rocket.transform.position = body.position;
             Tick();
             Assert.That(rocket.Splashed, Is.True);
             float entryHeight = body.position.y;
@@ -148,8 +165,8 @@ namespace Simulation.Tests
         private void Tick()
         {
             // Local physics isolates these synchronous tests from gameplay and frame timing.
-            rocket.SendMessage("FixedUpdate");
-            mission.SendMessage("FixedUpdate");
+            RocketTick.Invoke(rocket, null);
+            MissionTick.Invoke(mission, null);
             physics.Simulate(Time.fixedDeltaTime);
         }
     }
