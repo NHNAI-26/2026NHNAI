@@ -162,7 +162,7 @@ dT/dt   = 발열률 - 냉각
 | technical | 에디터 전용 코드는 `Border.Editor`(`Assets/06. Packages/Editor`) | SF-016 | 툴 배치 위치 | active |
 | technical | `Rocket`은 추력을 뉴턴으로 직접 적용 | SF-005, SF-006 | 물리 저장이므로 변환 불필요 | active |
 | technical | 엔진 목록은 발사 시점 고정(`ponytail:` 주석) | SF-014 | 비행 중 교체 없음 | active |
-| technical | 연료 소모에 따른 질량 감소 없음 | SF-002 | 연료 질량은 고정 무게 | active |
+| technical | 연료 소모에 따른 질량 감소 없음 | SF-002 | 연료 질량은 고정 무게 — `Rocket.tankMassPerFuel`로 구현, 발사 시 `Rigidbody.mass`에 합산 | active |
 | process | `docs/artemis-2026-gdd/07_로켓_설계.md` 워킹트리 수정 중 | SF-015 | 사용자 변경분 보존 | active |
 
 ## Success Evidence

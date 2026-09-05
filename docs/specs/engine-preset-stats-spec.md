@@ -162,7 +162,7 @@ temperature >= CriticalTemperature  ->  overheat
 | technical | Editor-only code lives in `Border.Editor` (`Assets/06. Packages/Editor`) | SF-016 | Tool placement | active |
 | technical | `Rocket` applies thrust in newtons directly | SF-005, SF-006 | Physical storage needs no conversion layer | active |
 | technical | The engine list is frozen at launch (`ponytail:` note) | SF-014 | No mid-flight preset swap | active |
-| technical | No mass loss from fuel consumption | SF-002 | Fuel mass is static weight only | active |
+| technical | No mass loss from fuel consumption | SF-002 | Fuel mass is static weight only — implemented as `Rocket.tankMassPerFuel`, summed into `Rigidbody.mass` at launch | active |
 | process | `docs/artemis-2026-gdd/07_로켓_설계.md` is modified in the working tree | SF-015 | Preserve the user's edit | active |
 
 ## Success Evidence

@@ -66,7 +66,7 @@ Per UD-013 these features are intended for the main game, but the integration fo
 ### In scope (implemented)
 - Slot model removed; surface raycast free attachment (UD-005)
 - Right-drag orbit camera (UD-006)
-- Per-engine finite fuel (amount + burn rate), inspector-exposed, fixed mass (UD-007, UD-010, UD-011)
+- Per-engine finite fuel (amount + burn rate), inspector-exposed; launch mass derived from tank capacity and constant during flight (UD-007, UD-010, UD-011)
 - Fall under gravity after burnout; ground contact is plain physics collision (UD-004, UD-008)
 - Remaining fuel reported through `Log.D` only (UD-012)
 - `docs/rocket-simulation.md` updated; `RocketSlotTests` replaced (SF-008, SF-011)
@@ -114,7 +114,7 @@ Per UD-013 these features are intended for the main game, but the integration fo
 | R-004 | Camera rotation is bound to **right-drag** and never coincides with left-drag part dragging. | UD-006, SF-006 | `implemented` |
 | R-005 | Part dragging is anchored to the surface raycast, not a screen plane, so any camera angle attaches where the cursor points. | UD-005, UD-006, SF-007 | `implemented` |
 | R-006 | Each engine part holds finite fuel and a burn rate, consumed while producing thrust. | UD-003, UD-007 | `implemented` |
-| R-007 | Fuel is stored **per engine part**; rocket mass stays constant regardless of fuel consumed. | UD-007, RK-005 | `implemented` |
+| R-007 | Fuel is stored **per engine part**. Launch mass is `body + Σ(fuel capacity × tankMassPerFuel)`, fixed at ignition and constant regardless of fuel consumed. | UD-007, RK-005 | `implemented` |
 | R-008 | An engine at zero fuel produces no thrust; when all engines are dry the rocket decelerates and falls under gravity alone. | UD-004, SF-003, SF-004 | `implemented` |
 | R-009 | Remaining fuel is reported only through `Border.Core.Log.D` (launch, per-engine burnout, all dry). No screen UI. | UD-012 | `implemented` |
 | R-010 | `docs/rocket-simulation.md` is updated in the same change. | SF-011, project CLAUDE.md | `implemented` |
@@ -142,7 +142,7 @@ Per UD-013 these features are intended for the main game, but the integration fo
 |---|---|---|
 | SE-1 | A part attached somewhere other than the bottom. | **Met** — both engines attached at local `y = +0.6` (mid-body side), parented to `Rocket`. |
 | SE-2 | Camera orbits to view and attach on the far side. | **Partially met** — orbit math verified in Play Mode (yaw 0 → offset `(0, 2, -14)`; yaw 90 → `(-14, 2, 0)`; distance 14.1 preserved; camera aim error 0.0°). Actual mouse dragging was not exercised. |
-| SE-3 | Ascent → burnout → apex → fall in Play Mode. | **Met** — t=7.6 s: y=328.4, vy=+46.0, both engines at fuel 0; t=15.6 s: y=381.3, vy=−32.6, tilt 0.0° (symmetric placement cancels torque). Mass held at 100 throughout. |
+| SE-3 | Ascent → burnout → apex → fall in Play Mode. | **Superseded** — the measurement (t=7.6 s: y=328.4, vy=+46.0; t=15.6 s: y=381.3, vy=−32.6; mass 100 throughout) was taken before tank mass existed. Needs a fresh Play Mode capture at 150 kg. |
 | SE-4 | EditMode tests pass. | **Met** — `Border.Simulation.EditModeTests`: 2 passed, 0 failed. |
 | SE-5 | Changing `burnRate` in the Inspector changes burn length. | **Not tested** — the field is exposed and used, but no run varied it. |
 
@@ -154,7 +154,7 @@ Per UD-013 these features are intended for the main game, but the integration fo
 | RK-002 | Free surface placement replaces the slot model and its test outright. | Done deliberately (R-002, R-011). | `resolved` |
 | RK-003 | Sharing the left button between rotation and attachment causes misinput. | Right-drag separation (UD-006). | `resolved` |
 | RK-004 | Free camera rotation plus screen-plane dragging makes far-side depth unreadable. | The surface raycast lets the surface decide depth (R-005). | `resolved` |
-| RK-005 | Reducing mass with fuel would spike late acceleration and invalidate the tuning table. | Mass held constant (UD-007). | `resolved` |
+| RK-005 | Reducing mass with fuel would spike late acceleration and invalidate the tuning table. | Mass held constant through flight (UD-007); it varies only between designs, so the tuning table is per-configuration. | `resolved` |
 | RK-006 | The scene file is untracked, so there is no rollback baseline. | Committing the prototype before further work is still recommended (AR-007). | `active` |
 | RK-007 | Removing slots would force a scene edit. | At the time the two empty `Slot_L` / `Slot_R` Transforms were left in the scene to avoid hand-editing YAML. They have since been deleted through the Editor (via Unity MCP, not by hand-editing YAML), keeping the scene diff minimal. | `superseded` |
 | RK-008 | Free placement allows overlapping parts, stacking thrust at one point. | Deliberately accepted (UD-009); revisit if it bites (OI-009). | `accepted` |
@@ -173,7 +173,7 @@ Per UD-013 these features are intended for the main game, but the integration fo
 | UD-004 | "Gravity exists and it should fall when the fuel runs out." | `active` |
 | UD-005 | **Q-001 = 2.** Surface raycast free attachment; slots and `FindFreeSlot` removed; no grid snapping. | `active` |
 | UD-006 | **Q-002 = 1.** Right-drag orbit rotation; left-drag stays part dragging. | `active` |
-| UD-007 | **Q-003 = 1.** Fuel per engine part; rocket mass fixed. | `active` |
+| UD-007 | **Q-003 = 1.** Fuel per engine part; rocket mass fixed during flight, summed from tank capacity at launch. | `active` |
 | UD-008 | **Q-004 = 1.** Ground contact is plain physics collision — no reset key, verdict or explosion. | `active` |
 | UD-009 | **Q-006 = 1.** Attached parts keep the rocket's orientation; no normal alignment, no symmetry aid, no spacing check. | `active` |
 | UD-010 | **Q-007 = 4.** Store fuel as amount plus burn rate rather than seconds. | `active` |
