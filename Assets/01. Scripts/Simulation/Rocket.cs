@@ -24,6 +24,8 @@ namespace Simulation
         private readonly DeterministicRng _rng = new();
         private Rigidbody _body;
         private float _bodyMass;
+        private float initialLinearDamping;
+        private float initialAngularDamping;
         private int _liveEngines;
 
         public bool Launched { get; private set; }
@@ -44,6 +46,8 @@ namespace Simulation
             // 본체 무게의 원본은 씬의 Rigidbody 다 — 코드에 복제하지 않는다. 발사 때 mass 를 덮어쓰므로
             // 덮어쓰기 전 값을 여기서 잡아 둔다.
             _bodyMass = _body.mass;
+            initialLinearDamping = _body.linearDamping;
+            initialAngularDamping = _body.angularDamping;
             _body.isKinematic = true; // 발사 전에는 발사대에 고정
         }
 
@@ -117,6 +121,26 @@ namespace Simulation
             FlightStopped = true;
             foreach (RocketPart engine in _engines) engine.Shutdown();
             _body.isKinematic = true;
+        }
+
+        public void ResetFlight(Vector3 position, Quaternion rotation)
+        {
+            foreach (RocketPart engine in _engines) engine.Shutdown();
+            _body.isKinematic = false;
+            _body.linearVelocity = Vector3.zero;
+            _body.angularVelocity = Vector3.zero;
+            _body.collisionDetectionMode = CollisionDetectionMode.Discrete;
+            _body.isKinematic = true;
+            _body.position = position;
+            _body.rotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
+            _body.mass = _bodyMass;
+            _body.linearDamping = initialLinearDamping;
+            _body.angularDamping = initialAngularDamping;
+            Launched = FlightStopped = Overheated = Splashed = false;
+            TotalBurnSeconds = 0f;
+            _liveEngines = 0;
+            _engines.Clear();
         }
 
         private void FixedUpdate()

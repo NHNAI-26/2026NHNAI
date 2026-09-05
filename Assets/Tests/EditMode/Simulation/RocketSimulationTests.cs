@@ -738,6 +738,40 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void ResetFlight_RestoresPoseAndPhysics_AndAllowsRepeatedLaunch()
+        {
+            var host = Track(new GameObject("tester rocket"));
+            var rocket = host.AddComponent<Rocket>();
+            var body = host.GetComponent<Rigidbody>();
+            body.mass = 12f;
+            body.linearDamping = 0.2f;
+            Invoke(rocket, "Awake");
+            RocketPart part = CreateEngine(Stats(100f, 1000f, BaselineOutput, 100f));
+            rocket.Attach(part, Vector3.right);
+            Vector3 localPosition = part.transform.localPosition;
+            Quaternion localRotation = part.transform.localRotation;
+            for (int i = 0; i < 3; i++)
+            {
+                rocket.Launch();
+                Assert.IsTrue(rocket.Launched);
+                part.Tick(1f);
+                host.transform.position = new Vector3(0, -50, 0);
+                Invoke(rocket, "TickWater");
+                rocket.StopFlight();
+                rocket.ResetFlight(Vector3.zero, Quaternion.identity);
+                Assert.IsFalse(rocket.Launched);
+                Assert.IsFalse(rocket.FlightStopped);
+                Assert.IsFalse(rocket.Splashed);
+                Assert.IsFalse(part.Ignited);
+                Assert.AreEqual(localPosition, part.transform.localPosition);
+                Assert.AreEqual(localRotation, part.transform.localRotation);
+                Assert.AreEqual(12f, body.mass);
+                Assert.AreEqual(0.2f, body.linearDamping);
+                Assert.IsTrue(body.isKinematic);
+            }
+        }
+
+        [Test]
         public void OutlineAndHologram_ToggleShaderStateOnTheInstancedMaterial()
         {
             RocketPart part = CreateEngine(Stats(fuel: 10f, cooling: 10f, output: BaselineOutput, ignition: 100f));

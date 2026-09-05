@@ -299,7 +299,19 @@ namespace Simulation
 
             EnsurePipCamera();
             EnsureTrajectoryTrail();
+            _pipCamera.enabled = true;
+            _trail.Play();
             ApplyLaunchViews();
+        }
+
+        public void ReturnToDesign()
+        {
+            launchCam.Priority = 0;
+            _launchViewSwapped = false;
+            if (_pipCamera != null) _pipCamera.enabled = false;
+            if (_trail != null) _trail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            Select(null);
+            Changed?.Invoke();
         }
 
         /// <summary>

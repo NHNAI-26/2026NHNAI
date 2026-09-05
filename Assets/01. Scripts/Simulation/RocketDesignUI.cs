@@ -35,6 +35,7 @@ namespace Simulation
         // 미션 컨트롤 모드에서만 만드는 것들. 01_Main 위에 얹었을 때(SimulationStageHost)만 켜지고,
         // SimulationTest 씬을 직접 재생하면 예전 그대로 좌측 패널만 뜬다.
         private bool missionControl;
+        [SerializeField] private bool testerInterface;
         private Rocket rocket;
         private RectTransform viewport;
         private TMP_Text topBarText;
@@ -95,7 +96,8 @@ namespace Simulation
 
             rocket = FindFirstObjectByType<Rocket>();
 
-            BuildInterface();
+            if (testerInterface) BindTesterInterface();
+            else BuildInterface();
             builder.Changed += RefreshTools;
             builder.PresetLibraryChanged += RebuildPresetPanel;
             RefreshTools();
@@ -111,6 +113,11 @@ namespace Simulation
 
         private void LateUpdate()
         {
+            if (testerInterface)
+            {
+                launchButton.gameObject.SetActive(!rocket.Launched);
+                RefreshTools();
+            }
             if (missionControl)
             {
                 UpdateViewportRect();
@@ -274,13 +281,13 @@ namespace Simulation
             // 연구가 아직 열지 않은 슬롯은 목록에서 아예 뺀다 — GDD 07 §4 와 엔진 프리셋 스펙이
             // "개발된 슬롯만 보여준다"로 확정했다. 라이브러리 자체는 계속 10칸이다 — 슬롯 인덱스가
             // EnginePresetId 로의 유일한 매핑이라(ResearchEnginePresetRuntimeBridge) 거기서 빼면 안 된다.
-            ResearchPrototypeModel model = ResearchFlowSession.GetOrCreate().Model;
+            ResearchPrototypeModel model = testerInterface ? null : ResearchFlowSession.GetOrCreate().Model;
             int shown = 0;
 
             for (int i = 0; presets != null && i < presets.Count; i++)
             {
                 EngineStatsSO preset = presets[i];
-                if (preset == null || !IsDeveloped(preset, model)) continue;
+                if (preset == null || (!testerInterface && !IsDeveloped(preset, model))) continue;
 
                 shown++;
 
@@ -292,8 +299,10 @@ namespace Simulation
                 label.alignment = TextAlignmentOptions.Left;
                 Fill((RectTransform)label.transform, 10f);
 
-                PresetEntry entry = row.gameObject.AddComponent<PresetEntry>();
-                entry.Bind(this, preset, row.GetComponent<Image>());
+                if (testerInterface)
+                    row.gameObject.AddComponent<DesignTesterPresetEntry>().SetPreset(preset);
+                else
+                    row.gameObject.AddComponent<PresetEntry>().Bind(this, preset, row.GetComponent<Image>());
             }
 
             if (shown == 0)
@@ -458,6 +467,7 @@ namespace Simulation
 
         private void RebuildPresetPanel()
         {
+            if (testerInterface) return;
             HideStats();
             BuildPresetPanel((RectTransform)canvas.transform);
         }
@@ -504,14 +514,14 @@ namespace Simulation
 
             statText.text =
                 $"<b>{DisplayName(preset)}</b>\n" +
-                $"가격 {preset.Price}\n" +
+                (testerInterface ? string.Empty : $"가격 {preset.Price}\n") +
                 $"연료 탱크 {preset.FuelCapacity:0} kg\n" +
                 $"냉각 {preset.Cooling:0} °C/s\n" +
                 $"최대 출력 {preset.MaxOutput:0} N\n" +
                 $"점화 신뢰도 {preset.IgnitionReliability:0} %";
 
             // 물리값만 보면 이 숫자가 연구로 올라간 값인지 저작 기본값인지 구분이 안 된다.
-            if (TryGetPresetId(preset, out EnginePresetId presetId))
+            if (!testerInterface && TryGetPresetId(preset, out EnginePresetId presetId))
             {
                 EnginePresetState state = ResearchFlowSession.GetOrCreate().Model.GetEnginePreset(presetId);
                 statText.text += $"\n완성도 {state.Completion} / 최고 등급 "
@@ -525,6 +535,49 @@ namespace Simulation
         }
 
         internal void HideStats() => statBox.gameObject.SetActive(false);
+
+        public void BakeTesterInterface(RocketBuilder source)
+        {
+            testerInterface = true;
+            builder = source;
+            BuildInterface();
+            launchButton = CreateButton("LaunchButton", canvasRect, "발사", out _);
+            RectTransform launchRect = (RectTransform)launchButton.transform;
+            launchRect.anchorMin = launchRect.anchorMax = Vector2.right;
+            launchRect.pivot = Vector2.right;
+            launchRect.anchoredPosition = new Vector2(-16, 16);
+            launchRect.sizeDelta = new Vector2(120, 44);
+            Button reset = CreateButton("ResetButton", canvasRect, "다시 설계", out _);
+            RectTransform resetRect = (RectTransform)reset.transform;
+            resetRect.anchorMin = resetRect.anchorMax = Vector2.one;
+            resetRect.pivot = Vector2.one;
+            resetRect.anchoredPosition = new Vector2(-16, -16);
+            resetRect.sizeDelta = new Vector2(120, 44);
+        }
+
+        private void BindTesterInterface()
+        {
+            canvasRect = (RectTransform)transform.Find("RocketDesignCanvas");
+            canvas = canvasRect.GetComponent<Canvas>();
+            presetPanel = (RectTransform)canvasRect.Find("PresetPanel");
+            statBox = (RectTransform)canvasRect.Find("StatBox");
+            statText = statBox.GetComponentInChildren<TMP_Text>(true);
+            partTools = (RectTransform)canvasRect.Find("PartTools");
+            moveButton = partTools.Find("MoveButton").GetComponent<Button>();
+            rotateButton = partTools.Find("RotateButton").GetComponent<Button>();
+            moveButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Move));
+            rotateButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Rotate));
+            launchPip = (RectTransform)canvasRect.Find("LaunchPip");
+            pipImage = launchPip.GetComponentInChildren<RawImage>(true);
+            pipLabel = launchPip.GetComponentInChildren<TMP_Text>(true);
+            launchPip.GetComponent<Button>().onClick.AddListener(builder.ToggleLaunchView);
+            launchButton = canvasRect.Find("LaunchButton").GetComponent<Button>();
+            launchButton.onClick.AddListener(builder.RequestLaunch);
+            DesignStageTester tester = FindFirstObjectByType<DesignStageTester>();
+            canvasRect.Find("ResetButton").GetComponent<Button>().onClick.AddListener(tester.ReturnToDesign);
+            foreach (DesignTesterPresetEntry entry in presetPanel.GetComponentsInChildren<DesignTesterPresetEntry>(true))
+                entry.Bind(this);
+        }
 
         internal void BeginPresetDrag(EngineStatsSO preset, Vector2 screenPosition)
         {
