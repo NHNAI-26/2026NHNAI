@@ -355,6 +355,11 @@ namespace Simulation
             _pipCamera.rect = new Rect(0f, 0f, 1f, 1f);
             _pipCamera.targetTexture = _pipTexture;
 
+            // CopyFrom 이 Main Camera 컬링 마스크를 통째로 가져오는데, 먼지는 그 카메라를 감싸고 있다 —
+            // 488 유닛 밖인 이쪽에서는 로켓에 붙은 각지름 14° 짜리 얼룩으로만 보인다. 뷰 역할이 스왑돼도
+            // 먼지는 늘 Main Camera 쪽이라 매 프레임 토글이 아니라 여기서 한 번 끈다.
+            _pipCamera.cullingMask &= ~(1 << SkyEnvironment.DustLayer);
+
             Log.D($"Launch views ready: pip {pipResolution.x}x{pipResolution.y}", this);
         }
 

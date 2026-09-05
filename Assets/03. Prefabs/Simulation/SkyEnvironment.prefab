@@ -4945,6 +4945,7 @@ MonoBehaviour:
   groundRenderer: {fileID: 0}
   skyboxSource: {fileID: 2100000, guid: 33938f1c9ef2b8745a5454865782cd68, type: 2}
   clouds: {fileID: 4233347052645007185}
+  dustMaterial: {fileID: 2100000, guid: 43bf6270bcc4a45429227ef14f6d7552, type: 2}
   worldMetersPerUnit: 250
   maxKm: 120
   cloudKm: 10
@@ -5131,3 +5132,10 @@ MonoBehaviour:
     m_RotationOrder: 4
   horizonDistance: 450
   oceanResolution: 96
+  dustRadius: 60
+  dustHollow: 0.5
+  dustPerUnit: 0.9
+  dustLifetime: 2.5
+  dustSize: {x: 0.1, y: 0.25}
+  dustAlpha: 0.25
+  dustStretch: 0.03
