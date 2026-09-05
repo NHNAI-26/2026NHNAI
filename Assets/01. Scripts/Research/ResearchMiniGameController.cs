@@ -34,6 +34,7 @@ namespace Border.Research
         private const float CoolingInitialHeat = 0.4f;
         private const float CoolingHeatPerSecond = 0.1f;
         private const float CoolingHeatPerTargetRotation = 1.2f;
+        private const float CoolingMotionGraceSeconds = 0.12f;
         private const float NoInputReactionSeconds = 9f;
         private const float PerfectJudgementThreshold = 0.02f;
         private const float GreatJudgementThreshold = 0.08f;
@@ -53,7 +54,17 @@ namespace Border.Research
         private const float ValveCenterDeadZone = 0.12f;
         private const int OutputStageCount = 3;
         private const int IgnitionRoundCount = 3;
-        private const float IgnitionClickFlashSeconds = 0.18f;
+        private const float IgnitionStartDelaySeconds = 0.5f;
+        private const float IgnitionPreviewSeconds = 0.45f;
+        private const float IgnitionBlackoutSeconds = 0.5f;
+        private const float IgnitionPressSeconds = 0.125f;
+        private const float IgnitionWrongSeconds = 0.6f;
+        private enum IgnitionPhase { StartDelay, Preview, Blackout, Input, Correct, Wrong }
+        private IgnitionPhase ignitionPhase;
+        private readonly Tween[] ignitionPunches = new Tween[4];
+        private readonly Vector3[] ignitionRestScales = new Vector3[4];
+        private readonly IgnitionClickParticles[] ignitionParticles = new IgnitionClickParticles[4];
+        private SoundHandle ignitionSound;
 
         private readonly float[] fuelScores = new float[FuelAttemptCount];
         private readonly float[] outputErrors = new float[OutputStageCount];
@@ -61,6 +72,7 @@ namespace Border.Research
         private readonly Button[] ignitionButtons = new Button[4];
 
         [SerializeField] private GameObject miniGameScreenPrefab;
+        [SerializeField, Range(0.1f, 1f)] private float coolingWarningThreshold = 0.7f;
 
         private EnginePresetId presetId;
         private EngineStatId statId;
@@ -100,14 +112,26 @@ namespace Border.Research
         private float outputTargetValue;
         private float outputGaugeValue;
         private bool fuelFilling;
-        private bool ignitionShowingSequence;
-        private int ignitionClickedIndex = -1;
-        private bool ignitionAdvancePending;
         private Tween feedbackTween;
+        private Sequence outputFeedbackTween;
+        private RectTransform outputFeedbackRoot;
+        private Vector3 outputRestScale;
+        private Vector2 outputRestPosition;
+        private bool outputFeedbackActive;
         private SoundHandle resultSuccessSound;
         private SoundHandle fuelGaugeSound;
         private Color fuelDialRestColor;
         private float fuelPromptElapsed;
+        private SoundHandle outputGaugeSound;
+        private SoundHandle outputJudgementSound;
+        private SoundHandle coolingWarningSound;
+        private SoundHandle coolingStoneSound;
+        private SoundHandle coolingSteamSound;
+        private bool coolingWarningActive;
+        private bool coolingMotionActive;
+        private float coolingMotionRemaining;
+        private float coolingVibrationPhase;
+        private Vector2 coolingPipeRestPosition;
 
         private TMP_Text titleText;
         private TMP_Text instructionText;
@@ -180,8 +204,12 @@ namespace Border.Research
 
         public void HideForReuse()
         {
+            ResetIgnitionFeedback();
+            StopCoolingFeedback();
             StopResultSound();
             StopFuelFeedback();
+            StopOutputAudio();
+            ResetOutputFeedback();
             feedbackTween?.Kill();
             feedbackTween = null;
             completedCallback = null;
@@ -195,8 +223,12 @@ namespace Border.Research
 
         private void OnDestroy()
         {
+            ResetIgnitionFeedback();
+            StopCoolingFeedback();
             StopResultSound();
             StopFuelFeedback();
+            StopOutputAudio();
+            ResetOutputFeedback();
             if (coolingPipeMaterial != null) DestroyUnityObject(coolingPipeMaterial);
             if (coolingValveMaterial != null) DestroyUnityObject(coolingValveMaterial);
             if (fuelReadoutMaterial != null) DestroyUnityObject(fuelReadoutMaterial);
@@ -238,7 +270,7 @@ namespace Border.Research
             if (begin) { coolingDragging = true; coolingHasAngle = false; }
             DragValveLocal(position);
         }
-        public void ReleaseValveForTests() { coolingDragging = false; coolingHasAngle = false; }
+        public void ReleaseValveForTests() => ReleaseCoolingValve();
         public float GetFuelDurationForTests() => fuelFillDuration;
         public float GetCoolingTargetForTests() => coolingTargetDegrees;
         public float GetCoolingDegreesForTests() => coolingDegrees;
@@ -403,10 +435,23 @@ namespace Border.Research
                 return;
             }
 
+            // Hold both the rendered cursor and the countdown throughout the judgement.
+            if (outputJudgementShowing)
+            {
+                outputJudgementElapsedSeconds += deltaSeconds;
+                if (outputJudgementElapsedSeconds >= OutputJudgementSeconds)
+                {
+                    AdvanceOutputAfterJudgement();
+                }
+
+                return;
+            }
+
             if (statId == EngineStatId.Cooling)
             {
                 float activeSeconds = Mathf.Min(deltaSeconds, Mathf.Max(0f, CoolingDurationSeconds - elapsedSeconds));
                 coolingHeat = Mathf.Clamp01(coolingHeat + activeSeconds * CoolingHeatPerSecond);
+                UpdateCoolingMotion(deltaSeconds);
             }
             elapsedSeconds += deltaSeconds;
             roundElapsedSeconds += deltaSeconds;
@@ -418,17 +463,6 @@ namespace Border.Research
                 if (fuelJudgementElapsedSeconds >= FuelJudgementSeconds)
                 {
                     AdvanceFuelAfterJudgement();
-                }
-
-                return;
-            }
-
-            if (outputJudgementShowing)
-            {
-                outputJudgementElapsedSeconds += deltaSeconds;
-                if (outputJudgementElapsedSeconds >= OutputJudgementSeconds)
-                {
-                    AdvanceOutputAfterJudgement();
                 }
 
                 return;
@@ -602,8 +636,12 @@ namespace Border.Research
 
         private void ResetRunState()
         {
+            ResetIgnitionFeedback();
+            StopCoolingFeedback();
             StopResultSound();
             StopFuelFeedback();
+            StopOutputAudio();
+            ResetOutputFeedback();
             feedbackTween?.Kill();
             feedbackTween = null;
             gameCompleted = false;
@@ -631,9 +669,7 @@ namespace Border.Research
             coolingHasAngle = false;
             outputGaugeValue = 0f;
             fuelFilling = false;
-            ignitionShowingSequence = false;
-            ignitionClickedIndex = -1;
-            ignitionAdvancePending = false;
+            ignitionPhase = IgnitionPhase.StartDelay;
             Array.Clear(fuelScores, 0, fuelScores.Length);
             for (int i = 0; i < outputErrors.Length; i++) outputErrors[i] = 1f;
             Array.Clear(ignitionSequence, 0, ignitionSequence.Length);
@@ -701,17 +737,14 @@ namespace Border.Research
                 DragValve(data);
             });
             AddPointerEvent(coolingValveImage.gameObject, EventTriggerType.Drag, DragValve);
-            AddPointerEvent(coolingValveImage.gameObject, EventTriggerType.PointerUp, _ =>
-            {
-                coolingDragging = false;
-                coolingHasAngle = false;
-            });
+            AddPointerEvent(coolingValveImage.gameObject, EventTriggerType.PointerUp, _ => ReleaseCoolingValve());
             UpdateCoolingGame();
         }
 
         private void BuildOutputGame()
         {
             SetActiveGameGroup(outputGameGroup);
+            ApplyOutputHolograms();
             outputStageIndex = 0;
             SetupOutputStage();
             primaryButton.gameObject.SetActive(true);
@@ -724,6 +757,19 @@ namespace Border.Research
             AddPointer(outputGameGroup.gameObject, EventTriggerType.PointerDown, RecordOutputStage);
         }
 
+        private void ApplyOutputHolograms()
+        {
+            foreach (UnityEngine.UI.Image graphic in outputGameGroup.GetComponentsInChildren<UnityEngine.UI.Image>(true))
+            {
+                Material hologram = Resources.Load<Material>($"ResearchUI/OutputHologram_{graphic.name}");
+                if (hologram == null) continue;
+                graphic.material = hologram;
+                graphic.color = Color.white;
+                if (graphic.GetComponent<Border.UI.UberUIMaterialBinder>() == null)
+                    graphic.gameObject.AddComponent<Border.UI.UberUIMaterialBinder>();
+            }
+        }
+
         private void BuildIgnitionGame()
         {
             SetActiveGameGroup(ignitionGameGroup);
@@ -733,7 +779,12 @@ namespace Border.Research
             {
                 int igniterIndex = i;
                 Button button = ignitionButtons[i];
+                if (button.GetComponent<Border.UI.UIManualClickSound>() == null)
+                    button.gameObject.AddComponent<Border.UI.UIManualClickSound>();
                 Border.UI.UISelectableSoundHook.ClearListeners(button);
+                ignitionRestScales[i] = button.transform.localScale;
+                if (ignitionParticles[i] == null)
+                    ignitionParticles[i] = IgnitionClickParticles.Create((RectTransform)button.transform);
                 TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
                 if (label != null)
                 {
@@ -784,14 +835,104 @@ namespace Border.Research
 
         private void UpdateCoolingGame()
         {
+            UpdateCoolingWarning();
             coolingPipeMaterial.SetFloat("_Heat", coolingHeat);
             coolingValveMaterial.SetFloat("_Heat", 0f);
             coolingProgressText.text = $"과열 {Mathf.FloorToInt(coolingHeat * 100f)}%";
             SetStateText($"회전 {coolingDegrees / 360f:0.0}바퀴", false);
         }
 
+        private void UpdateCoolingWarning()
+        {
+            if (coolingHeat >= coolingWarningThreshold) coolingWarningActive = true;
+            else if (coolingHeat <= coolingWarningThreshold - 0.1f) coolingWarningActive = false;
+
+            if (coolingWarningActive)
+                PlayCoolingLoop(ref coolingWarningSound, "warning");
+            else
+            {
+                coolingWarningSound.Stop();
+                coolingWarningSound = SoundHandle.Invalid;
+            }
+        }
+
+        private void PlayCoolingLoop(ref SoundHandle handle, string id)
+        {
+            if (!Application.isPlaying || !isActiveAndEnabled || handle.IsPlaying || SoundManager.Instance == null) return;
+            handle = SoundManager.Instance.PlaySfx(id);
+            handle.SetLoop(true);
+        }
+
+        private void ApplyCoolingRotationFeedback(float rotation)
+        {
+            if (Mathf.Abs(rotation) < 0.05f) return;
+            if (!coolingMotionActive)
+            {
+                coolingPipeRestPosition = coolingPipeImage.rectTransform.anchoredPosition;
+                coolingVibrationPhase = 0f;
+                coolingMotionActive = true;
+            }
+            coolingMotionRemaining = CoolingMotionGraceSeconds;
+            PlayCoolingLoop(ref coolingStoneSound, "stone push");
+            if (rotation > 0f)
+                PlayCoolingLoop(ref coolingSteamSound, "steam");
+            else
+            {
+                coolingSteamSound.Stop();
+                coolingSteamSound = SoundHandle.Invalid;
+            }
+            ApplyCoolingPipeVibration();
+        }
+
+        private void UpdateCoolingMotion(float deltaSeconds)
+        {
+            if (!coolingMotionActive) return;
+            coolingMotionRemaining -= deltaSeconds;
+            if (!coolingDragging || coolingMotionRemaining <= 0f)
+            {
+                StopCoolingMotion();
+                return;
+            }
+            coolingVibrationPhase += deltaSeconds * 110f;
+            ApplyCoolingPipeVibration();
+        }
+
+        private void ApplyCoolingPipeVibration()
+        {
+            float strength = Mathf.Clamp01(coolingMotionRemaining / CoolingMotionGraceSeconds);
+            coolingPipeImage.rectTransform.anchoredPosition = coolingPipeRestPosition
+                + new Vector2(Mathf.Cos(coolingVibrationPhase) * 2.5f, Mathf.Sin(coolingVibrationPhase * 1.37f) * 1.5f) * strength;
+        }
+
+        private void StopCoolingMotion()
+        {
+            coolingStoneSound.Stop();
+            coolingSteamSound.Stop();
+            coolingStoneSound = coolingSteamSound = SoundHandle.Invalid;
+            if (coolingMotionActive && coolingPipeImage != null)
+                coolingPipeImage.rectTransform.anchoredPosition = coolingPipeRestPosition;
+            coolingMotionActive = false;
+            coolingMotionRemaining = 0f;
+        }
+
+        private void ReleaseCoolingValve()
+        {
+            coolingDragging = false;
+            coolingHasAngle = false;
+            StopCoolingMotion();
+        }
+
+        private void StopCoolingFeedback()
+        {
+            StopCoolingMotion();
+            coolingWarningSound.Stop();
+            coolingWarningSound = SoundHandle.Invalid;
+            coolingWarningActive = false;
+        }
+
         private void UpdateOutputGame()
         {
+            StartOutputGaugeSound();
             outputGaugeValue = Mathf.PingPong(roundElapsedSeconds / GetOutputStageDuration(outputStageIndex), 1f);
             SetOutputCursor();
             outputLabelText.text = $"{GetOutputStageLabel(outputStageIndex)} 단계";
@@ -809,6 +950,7 @@ namespace Border.Research
 
         private void SetupOutputStage()
         {
+            StopOutputAudio();
             roundElapsedSeconds = 0f;
             outputGaugeValue = 0f;
             outputTargetValue = NextFloat(GreatJudgementThreshold, 1f - GreatJudgementThreshold);
@@ -816,50 +958,80 @@ namespace Border.Research
             SetOutputCursor();
             outputJudgementText.gameObject.SetActive(false);
             outputLabelText.text = $"{GetOutputStageLabel(outputStageIndex)} 단계";
+            StartOutputGaugeSound();
+        }
+
+        private void StartOutputGaugeSound()
+        {
+            if (!Application.isPlaying || !isActiveAndEnabled || outputGaugeSound.IsPlaying) return;
+            outputGaugeSound = SoundManager.Instance != null
+                ? SoundManager.Instance.PlaySfx("Gauge") : SoundHandle.Invalid;
+            outputGaugeSound.SetLoop(true);
+        }
+
+        private void StopOutputAudio()
+        {
+            outputGaugeSound.Stop();
+            outputGaugeSound = SoundHandle.Invalid;
+            outputJudgementSound.Stop();
+            outputJudgementSound = SoundHandle.Invalid;
         }
 
         private void UpdateIgnitionGame()
         {
-            if (!ignitionShowingSequence)
+            switch (ignitionPhase)
             {
-                bool flashing = roundElapsedSeconds < IgnitionClickFlashSeconds;
-                for (int i = 0; i < ignitionButtons.Length; i++)
-                {
-                    ignitionButtons[i].GetComponent<Image>().color = GetIgniterColor(i, flashing && i == ignitionClickedIndex);
-                }
-
-                if (ignitionAdvancePending && !flashing)
-                {
-                    ignitionAdvancePending = false;
-                    AdvanceIgnitionRound();
-                    return;
-                }
-
-                SetStateText($"입력 {roundIndex + 1}/{IgnitionRoundCount}", false);
-                return;
+                case IgnitionPhase.StartDelay:
+                    if (roundElapsedSeconds >= IgnitionStartDelaySeconds)
+                        SetIgnitionPhase(IgnitionPhase.Preview);
+                    break;
+                case IgnitionPhase.Preview:
+                    int visibleIndex = Mathf.FloorToInt(roundElapsedSeconds / IgnitionPreviewSeconds);
+                    if (visibleIndex >= GetIgnitionRoundLength(roundIndex))
+                        SetIgnitionPhase(IgnitionPhase.Blackout);
+                    else
+                        SetIgnitionLights(false, ignitionSequence[visibleIndex]);
+                    break;
+                case IgnitionPhase.Blackout:
+                    if (roundElapsedSeconds >= IgnitionBlackoutSeconds)
+                        SetIgnitionPhase(IgnitionPhase.Input);
+                    break;
+                case IgnitionPhase.Correct:
+                    if (roundElapsedSeconds < IgnitionPressSeconds) break;
+                    if (ignitionInputIndex >= GetIgnitionRoundLength(roundIndex))
+                        AdvanceIgnitionRound();
+                    else
+                        SetIgnitionPhase(IgnitionPhase.Input);
+                    break;
+                case IgnitionPhase.Wrong:
+                    if (roundElapsedSeconds >= IgnitionWrongSeconds)
+                        AdvanceIgnitionRound();
+                    else
+                        SetIgnitionLights(Mathf.FloorToInt(roundElapsedSeconds / 0.1f) % 2 == 0);
+                    break;
             }
+        }
 
-            int length = GetIgnitionRoundLength(roundIndex);
-            int visibleIndex = Mathf.FloorToInt(roundElapsedSeconds / 0.45f);
+        private void SetIgnitionPhase(IgnitionPhase phase)
+        {
+            ignitionPhase = phase;
+            roundElapsedSeconds = 0f;
+            foreach (Button button in ignitionButtons)
+                button.interactable = phase == IgnitionPhase.Input;
+            SetIgnitionLights(phase == IgnitionPhase.Input || phase == IgnitionPhase.Wrong,
+                phase == IgnitionPhase.Preview ? ignitionSequence[0] : -1);
+            string label = phase == IgnitionPhase.StartDelay ? "준비"
+                : phase == IgnitionPhase.Preview ? "순서 보기"
+                : phase == IgnitionPhase.Blackout ? "기다리세요"
+                : phase == IgnitionPhase.Wrong ? "틀렸어요"
+                : phase == IgnitionPhase.Correct ? "정답" : "입력";
+            SetStateText($"{label} {roundIndex + 1}/{IgnitionRoundCount}", false);
+        }
+
+        private void SetIgnitionLights(bool allOn, int onlyOn = -1)
+        {
             for (int i = 0; i < ignitionButtons.Length; i++)
-            {
-                ignitionButtons[i].GetComponent<Image>().color = GetIgniterColor(i, visibleIndex < length && ignitionSequence[visibleIndex] == i);
-                ignitionButtons[i].interactable = false;
-            }
-
-            if (visibleIndex >= length)
-            {
-                ignitionShowingSequence = false;
-                ignitionInputIndex = 0;
-                roundElapsedSeconds = 0f;
-                for (int i = 0; i < ignitionButtons.Length; i++)
-                {
-                    ignitionButtons[i].GetComponent<Image>().color = GetIgniterColor(i, false);
-                    ignitionButtons[i].interactable = true;
-                }
-            }
-
-            SetStateText(ignitionShowingSequence ? $"순서 보기 {roundIndex + 1}/{IgnitionRoundCount}" : $"입력 {roundIndex + 1}/{IgnitionRoundCount}", false);
+                ignitionButtons[i].GetComponent<Image>().color = GetIgniterColor(i, allOn || i == onlyOn);
         }
 
         private void StartFuelGaugeSound()
@@ -888,12 +1060,6 @@ namespace Border.Research
         {
             StopFuelGaugeSound();
             if (fuelDialImage != null) fuelDialImage.color = fuelDialRestColor;
-        }
-
-        private void StopResultSound()
-        {
-            resultSuccessSound.Stop();
-            resultSuccessSound = SoundHandle.Invalid;
         }
 
         private void SetupFuelAttempt()
@@ -973,6 +1139,7 @@ namespace Border.Research
             if (position.sqrMagnitude <= deadZone * deadZone)
             {
                 coolingHasAngle = false;
+                StopCoolingMotion();
                 return;
             }
             float angle = Mathf.Atan2(position.y, position.x) * Mathf.Rad2Deg;
@@ -983,6 +1150,7 @@ namespace Border.Research
                 float rotation = coolingDegrees - previousDegrees;
                 coolingHeat = Mathf.Clamp01(coolingHeat - rotation / coolingTargetDegrees * CoolingHeatPerTargetRotation);
                 coolingValveImage.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -coolingDegrees);
+                ApplyCoolingRotationFeedback(rotation);
             }
             coolingPreviousAngle = angle;
             coolingHasAngle = true;
@@ -1006,7 +1174,7 @@ namespace Border.Research
             float error = Mathf.Abs(outputGaugeValue - outputTargetValue);
             outputErrors[outputStageIndex] = error;
             outputStageIndex++;
-            ShowOutputJudgement(error);
+            ShowOutputJudgement(error, true);
         }
 
         private void RecordMissedOutputStage()
@@ -1024,8 +1192,15 @@ namespace Border.Research
             ShowOutputJudgement(1f);
         }
 
-        private void ShowOutputJudgement(float normalizedError)
+        private void ShowOutputJudgement(float normalizedError, bool pressed = false)
         {
+            StopOutputAudio();
+            if (Application.isPlaying && isActiveAndEnabled && SoundManager.Instance != null)
+            {
+                string soundId = GetOutputJudgementText(normalizedError) == "Miss" ? "miss" : "hit";
+                outputJudgementSound = SoundManager.Instance.PlaySfx(soundId);
+                outputJudgementSound.SetLoop(false);
+            }
             outputJudgementShowing = true;
             outputJudgementElapsedSeconds = 0f;
             primaryButton.interactable = false;
@@ -1034,15 +1209,18 @@ namespace Border.Research
                 outputJudgementText.text = GetOutputJudgementText(normalizedError);
                 outputJudgementText.color = GetJudgementColor(outputJudgementText.text);
                 outputJudgementText.gameObject.SetActive(true);
-                PlayJudgementFeedback(outputJudgementText);
+                outputJudgementText.alpha = 1f;
+                outputJudgementText.transform.localScale = Vector3.one;
             }
 
+            PlayOutputFeedback(normalizedError, pressed);
             SetStateText($"판정 {outputStageIndex}/{OutputStageCount}", false);
         }
 
         private void AdvanceOutputAfterJudgement()
         {
             if (!outputJudgementShowing) return;
+            ResetOutputFeedback();
             outputJudgementShowing = false;
             if (outputStageIndex >= OutputStageCount)
             {
@@ -1062,61 +1240,65 @@ namespace Border.Research
 
         private void SetupIgnitionRound()
         {
-            ignitionClickedIndex = -1;
-            ignitionAdvancePending = false;
-            roundElapsedSeconds = 0f;
-            ignitionShowingSequence = true;
+            ignitionInputIndex = 0;
             int length = GetIgnitionRoundLength(roundIndex);
             for (int i = 0; i < length; i++)
             {
                 int previousIndex = i == 0 ? -1 : ignitionSequence[i - 1];
                 ignitionSequence[i] = NextIndex(ignitionButtons.Length, previousIndex);
             }
-
-            for (int i = 0; i < ignitionButtons.Length; i++)
-            {
-                ignitionButtons[i].interactable = false;
-            }
+            SetIgnitionPhase(roundIndex == 0 ? IgnitionPhase.StartDelay : IgnitionPhase.Preview);
         }
 
         private void PressIgniter(int igniterIndex)
         {
-            if (gameCompleted || statId != EngineStatId.IgnitionReliability || ignitionShowingSequence || ignitionAdvancePending)
-            {
+            if (!isActiveAndEnabled || gameCompleted || statId != EngineStatId.IgnitionReliability
+                || ignitionPhase != IgnitionPhase.Input || igniterIndex < 0 || igniterIndex >= ignitionButtons.Length)
                 return;
-            }
 
-            int length = GetIgnitionRoundLength(roundIndex);
             ignitionTotalInputs++;
             ignitionReactionTotal += roundElapsedSeconds;
-            roundElapsedSeconds = 0f;
-            ignitionClickedIndex = igniterIndex;
-            for (int i = 0; i < ignitionButtons.Length; i++)
+            bool correct = ignitionSequence[ignitionInputIndex] == igniterIndex;
+            PlayIgnitionPunch(igniterIndex);
+            ignitionSound.Stop();
+            if (Application.isPlaying && SoundManager.Instance != null)
             {
-                ignitionButtons[i].GetComponent<Image>().color = GetIgniterColor(i, i == igniterIndex);
+                ignitionSound = SoundManager.Instance.PlaySfx(correct ? "button8" : "wrong");
+                ignitionSound.SetLoop(false);
             }
-
-            if (ignitionSequence[ignitionInputIndex] == igniterIndex)
+            if (correct)
             {
                 ignitionCorrectInputs++;
                 ignitionInputIndex++;
-                if (ignitionInputIndex >= length)
-                {
-                    QueueIgnitionRoundAdvance();
-                }
-
-                return;
+                ignitionParticles[igniterIndex]?.Play();
             }
-
-            QueueIgnitionRoundAdvance();
+            SetIgnitionPhase(correct ? IgnitionPhase.Correct : IgnitionPhase.Wrong);
         }
 
-        private void QueueIgnitionRoundAdvance()
+        private void PlayIgnitionPunch(int index)
         {
-            ignitionAdvancePending = true;
-            foreach (Button button in ignitionButtons)
+            ignitionPunches[index]?.Kill();
+            Transform target = ignitionButtons[index].transform;
+            Vector3 rest = ignitionRestScales[index];
+            target.localScale = rest * 0.94f;
+            ignitionPunches[index] = DOTween.Sequence().SetUpdate(true)
+                .Append(target.DOScale(rest * 1.06f, 0.025f).SetEase(Ease.OutCubic))
+                .Append(target.DOScale(rest * 0.98f, 0.02f).SetEase(Ease.InOutSine))
+                .Append(target.DOScale(rest * 1.14f, 0.025f).SetEase(Ease.OutCubic))
+                .Append(target.DOScale(rest, 0.055f).SetEase(Ease.OutCubic));
+        }
+
+        private void ResetIgnitionFeedback()
+        {
+            ignitionSound.Stop();
+            ignitionSound = SoundHandle.Invalid;
+            for (int i = 0; i < ignitionButtons.Length; i++)
             {
-                button.interactable = false;
+                ignitionPunches[i]?.Kill();
+                ignitionPunches[i] = null;
+                if (ignitionButtons[i] != null && ignitionRestScales[i] != Vector3.zero)
+                    ignitionButtons[i].transform.localScale = ignitionRestScales[i];
+                ignitionParticles[i]?.Stop();
             }
         }
 
@@ -1156,6 +1338,10 @@ namespace Border.Research
 
             StopResultSound();
             StopFuelFeedback();
+            StopOutputAudio();
+            ResetOutputFeedback();
+            ResetIgnitionFeedback();
+            StopCoolingFeedback();
             gameCompleted = true;
             fuelFilling = false;
             coolingDragging = false;
@@ -1167,6 +1353,12 @@ namespace Border.Research
                 resultSuccessSound = SoundManager.Instance.PlaySfx("success");
                 resultSuccessSound.SetLoop(false);
             }
+        }
+
+        private void StopResultSound()
+        {
+            resultSuccessSound.Stop();
+            resultSuccessSound = SoundHandle.Invalid;
         }
 
         private void ShowResult()
@@ -1225,6 +1417,63 @@ namespace Border.Research
             return $"미니게임 점수 {pendingResult.Score}\n"
                 + $"스탯 {oldStat}->{nextStat} (+{gain})\n"
                 + $"완성도 {oldCompletion}->{nextCompletion} (+{completionGain})";
+        }
+
+        private void PlayOutputFeedback(float normalizedError, bool pressed)
+        {
+            ResetOutputFeedback();
+            // The track contains both target zones and the cursor; surrounding UI stays still.
+            outputFeedbackRoot = (RectTransform)outputCursorImage.transform.parent;
+            outputRestScale = outputFeedbackRoot.localScale;
+            outputRestPosition = outputFeedbackRoot.anchoredPosition;
+            outputFeedbackActive = true;
+            outputFeedbackTween = DOTween.Sequence().SetUpdate(true).SetTarget(this);
+
+            if (pressed)
+            {
+                // Apply the compression synchronously so the press is visible in this frame.
+                outputFeedbackRoot.localScale = outputRestScale * 0.94f;
+                outputFeedbackTween
+                    .Append(outputFeedbackRoot.DOScale(outputRestScale * 1.06f, 0.025f).SetEase(Ease.OutCubic))
+                    .Append(outputFeedbackRoot.DOScale(outputRestScale * 0.98f, 0.02f).SetEase(Ease.InOutSine));
+            }
+
+            if (GetOutputJudgementText(normalizedError) == "Miss")
+            {
+                if (pressed)
+                    outputFeedbackTween.Append(outputFeedbackRoot.DOScale(outputRestScale, 0.05f).SetEase(Ease.OutCubic));
+                // Decreasing, horizontal impacts keep the failure readable without moving the scored anchor.
+                float[] offsets = { -12f, 10f, -7f, 4f, -2f, 0f };
+                foreach (float offset in offsets)
+                {
+                    outputFeedbackTween.Append(DOTween.To(
+                        () => outputFeedbackRoot.anchoredPosition,
+                        value => outputFeedbackRoot.anchoredPosition = value,
+                        outputRestPosition + Vector2.right * offset, 0.045f).SetEase(Ease.OutQuad));
+                }
+            }
+            else
+            {
+                float strength = GetOutputJudgementText(normalizedError) == "Perfect" ? 1.14f : 1.11f;
+                // A short, stronger rebound flows straight into recovery without an impact hold.
+                outputFeedbackTween
+                    .Append(outputFeedbackRoot.DOScale(outputRestScale * strength, 0.025f).SetEase(Ease.OutCubic))
+                    .Append(outputFeedbackRoot.DOScale(outputRestScale, 0.055f).SetEase(Ease.OutCubic));
+            }
+        }
+
+        private void ResetOutputFeedback()
+        {
+            outputFeedbackTween?.Kill();
+            outputFeedbackTween = null;
+            if (!outputFeedbackActive) return;
+            if (outputFeedbackRoot != null)
+            {
+                outputFeedbackRoot.localScale = outputRestScale;
+                outputFeedbackRoot.anchoredPosition = outputRestPosition;
+            }
+            outputFeedbackRoot = null;
+            outputFeedbackActive = false;
         }
 
         private void PlayJudgementFeedback(TMP_Text target)
@@ -1414,16 +1663,19 @@ namespace Border.Research
 
         private void OnDisable()
         {
+            ResetIgnitionFeedback();
+            StopCoolingFeedback();
             StopResultSound();
             StopFuelFeedback();
+            StopOutputAudio();
+            ResetOutputFeedback();
             ReleaseHeldInput();
         }
 
         private void ReleaseHeldInput()
         {
             if (initialized && fuelFilling) RecordFuelAttempt();
-            coolingDragging = false;
-            coolingHasAngle = false;
+            ReleaseCoolingValve();
         }
 
         private static void RemovePointerHandlers(GameObject target)

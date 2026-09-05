@@ -60,6 +60,116 @@ namespace Border.Audio.Tests
         }
 
         [UnityTest]
+        public IEnumerator GaugeLoopsStopsOnHitAndRestartsWithoutDuplicates()
+        {
+            Assert.That(Playing("Gauge").Length, Is.EqualTo(1));
+            Assert.That(Playing("Gauge")[0].loop, Is.True);
+            yield return new WaitForSeconds(1.1f);
+            Assert.That(Playing("Gauge").Length, Is.EqualTo(1), "The gauge must survive the end of its clip.");
+            controller.RecordOutputStageForTests(controller.GetOutputTargetForTests());
+            Assert.That(Playing("Gauge"), Is.Empty);
+            Assert.That(Playing("hit").Length, Is.EqualTo(1));
+            Assert.That(Playing("hit")[0].loop, Is.False);
+            controller.RecordOutputStageForTests(0f);
+            Assert.That(Playing("hit").Length, Is.EqualTo(1));
+            Assert.That(Playing("miss"), Is.Empty);
+            controller.ForceAdvanceOutputJudgementForTests();
+            Assert.That(Playing("Gauge").Length, Is.EqualTo(1));
+            controller.AdvanceTimeForTests(0.1f);
+            Assert.That(Playing("Gauge").Length, Is.EqualTo(1));
+            controller.HideForReuse();
+            Assert.That(Playing("Gauge"), Is.Empty);
+            Assert.That(Playing("hit"), Is.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator MissTimeoutDisableAndCompletionReleaseAudio()
+        {
+            float target = controller.GetOutputTargetForTests();
+            controller.RecordOutputStageForTests(target < 0.5f ? 1f : 0f);
+            Assert.That(Playing("Gauge"), Is.Empty);
+            Assert.That(Playing("miss").Length, Is.EqualTo(1));
+            controller.ForceAdvanceOutputJudgementForTests();
+            controller.AdvanceTimeForTests(5.1f);
+            Assert.That(Playing("Gauge"), Is.Empty);
+            Assert.That(Playing("miss").Length, Is.EqualTo(1));
+            Assert.That(Playing("miss")[0].loop, Is.False);
+            controller.ForceAdvanceOutputJudgementForTests();
+            host.SetActive(false);
+            Assert.That(Playing("Gauge"), Is.Empty);
+            host.SetActive(true);
+            yield return null;
+            Assert.That(Playing("Gauge").Length, Is.EqualTo(1));
+            controller.ForceCompleteForTests(100);
+            Assert.That(Playing("Gauge"), Is.Empty);
+            Assert.That(Playing("miss"), Is.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator CoolingRotationRequiresMovementAndRestoresPipeOnRelease()
+        {
+            controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 77, _ => { });
+            var pipe = host.GetComponentsInChildren<RectTransform>(true).First(t => t.name == "CoolingPipe");
+            var button = host.GetComponentsInChildren<RectTransform>(true).First(t => t.name == "CoolingValve");
+            Vector2 rest = pipe.anchoredPosition;
+            Vector2 valvePosition = button.anchoredPosition;
+            controller.RotateValveForTests(Vector2.right * 200f, true);
+            Assert.That(Playing("stone push"), Is.Empty);
+            Assert.That(Playing("steam"), Is.Empty);
+            controller.RotateValveForTests(Vector2.down * 200f);
+            Assert.That(Playing("stone push").Length, Is.EqualTo(1));
+            Assert.That(Playing("steam").Length, Is.EqualTo(1));
+            Assert.That(Playing("steam")[0].loop, Is.True);
+            Assert.That(pipe.anchoredPosition, Is.Not.EqualTo(rest));
+            Assert.That(button.anchoredPosition, Is.EqualTo(valvePosition));
+            controller.AdvanceTimeForTests(0.13f);
+            Assert.That(Playing("stone push"), Is.Empty);
+            Assert.That(Playing("steam"), Is.Empty);
+            Assert.That(pipe.anchoredPosition, Is.EqualTo(rest));
+            controller.RotateValveForTests(Vector2.right * 200f);
+            Assert.That(Playing("stone push").Length, Is.EqualTo(1));
+            Assert.That(Playing("steam"), Is.Empty, "Closing the valve must not release steam.");
+            controller.ReleaseValveForTests();
+            Assert.That(Playing("stone push"), Is.Empty);
+            Assert.That(pipe.anchoredPosition, Is.EqualTo(rest));
+            controller.RotateValveForTests(Vector2.right * 200f, true);
+            controller.RotateValveForTests(Vector2.down * 200f);
+            controller.HideForReuse();
+            Assert.That(Playing("steam"), Is.Empty);
+            Assert.That(Playing("stone push"), Is.Empty);
+            Assert.That(pipe.anchoredPosition, Is.EqualTo(rest));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator CoolingWarningUsesHeatThresholdAndStopsOnCompletion()
+        {
+            controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 77, _ => { });
+            controller.AdvanceTimeForTests(2.9f);
+            Assert.That(Playing("warning"), Is.Empty);
+            controller.AdvanceTimeForTests(0.2f);
+            Assert.That(Playing("warning").Length, Is.EqualTo(1));
+            Assert.That(Playing("warning")[0].loop, Is.True);
+            controller.RotateValveForTests(Vector2.right * 200f, true);
+            controller.RotateValveForTests(Vector2.down * 200f);
+            Assert.That(Playing("warning").Length, Is.EqualTo(1), "Cooling just below 70% must not chatter.");
+            for (int step = 2; step <= 6; step++)
+            {
+                float angle = -90f * step * Mathf.Deg2Rad;
+                controller.RotateValveForTests(new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 200f);
+            }
+            Assert.That(controller.GetCoolingHeatForTests(), Is.LessThan(0.6f));
+            Assert.That(Playing("warning"), Is.Empty);
+            controller.AdvanceTimeForTests(2f);
+            Assert.That(Playing("warning").Length, Is.EqualTo(1));
+            controller.ForceCompleteForTests(80);
+            Assert.That(Playing("warning"), Is.Empty);
+            Assert.That(Playing("steam"), Is.Empty);
+            Assert.That(Playing("stone push"), Is.Empty);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator FuelPromptAndGaugeFollowHoldAndCleanup()
         {
             controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.FuelCapacity, false, 77, _ => { });

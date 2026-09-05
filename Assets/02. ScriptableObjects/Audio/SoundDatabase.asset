@@ -220,3 +220,59 @@ MonoBehaviour:
     useSpatialAudio: 0
     minDistance: 1
     maxDistance: 50
+  - id: hit
+    clip: {fileID: 8300000, guid: dbccc1ebfb8624b9f8b1e830869359ae, type: 3}
+    volume: 0.8
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: miss
+    clip: {fileID: 8300000, guid: 84be2f6fb32054128b941d0d3becff25, type: 3}
+    volume: 0.8
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: warning
+    clip: {fileID: 8300000, guid: 480b5c66325af4d0384cb267a11f0140, type: 3}
+    volume: 0.6
+    pitch: 1
+    loop: 1
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: stone push
+    clip: {fileID: 8300000, guid: 9ca8c499df4e24e639a130820dbd3a68, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 1
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: steam
+    clip: {fileID: 8300000, guid: d2f0ab27a9fcc494590b577de67bf3a3, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 1
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: button8
+    clip: {fileID: 8300000, guid: ff94d4fa729e14d4f94350847a5bc89b, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: wrong
+    clip: {fileID: 8300000, guid: 84be2f6fb32054128b941d0d3becff25, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50

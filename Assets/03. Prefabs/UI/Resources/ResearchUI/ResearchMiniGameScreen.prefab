@@ -761,6 +761,7 @@ GameObject:
   - component: {fileID: 4796482190194328356}
   - component: {fileID: 3448066424426489774}
   - component: {fileID: 3678121129549178504}
+  - component: {fileID: 2394065451211892230}
   m_Layer: 0
   m_Name: OutputBackground
   m_TagString: Untagged
@@ -807,8 +808,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.12, g: 0.16, b: 0.18, a: 1}
+  m_Material: {fileID: 2100000, guid: 1a325274ce53f4118a71f4cab0c5a39c, type: 2}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -825,6 +826,18 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &2394065451211892230
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2284973192491510538}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21719d9ad5208754a90ba70be6db9297, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Border::Border.UI.UberUIMaterialBinder
 --- !u!1 &2292363168862168234
 GameObject:
   m_ObjectHideFlags: 0
@@ -2855,6 +2868,7 @@ GameObject:
   - component: {fileID: 5684237170701285169}
   - component: {fileID: 3906335655142664997}
   - component: {fileID: 3979817827130216403}
+  - component: {fileID: 8214186275743599562}
   m_Layer: 0
   m_Name: SafeZone
   m_TagString: Untagged
@@ -2902,7 +2916,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 2100000, guid: f6f892adab4b34e20affd73a98851fd2, type: 2}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -2920,6 +2934,18 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &8214186275743599562
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5974269327603826831}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21719d9ad5208754a90ba70be6db9297, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Border::Border.UI.UberUIMaterialBinder
 --- !u!1 &5982589347200132727
 GameObject:
   m_ObjectHideFlags: 0
@@ -3069,6 +3095,7 @@ GameObject:
   - component: {fileID: 1838376975034103957}
   - component: {fileID: 4299358865885376606}
   - component: {fileID: 816744631395604357}
+  - component: {fileID: 633637760439367567}
   m_Layer: 0
   m_Name: OutputTrack
   m_TagString: Untagged
@@ -3117,8 +3144,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.45, g: 0.52, b: 0.55, a: 1}
+  m_Material: {fileID: 2100000, guid: 577b69d1b0071421c8455915aa18c6e1, type: 2}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -3149,6 +3176,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.AspectRatioFitter
   m_AspectMode: 3
   m_AspectRatio: 7.111111
+--- !u!114 &633637760439367567
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6140827054420754794}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21719d9ad5208754a90ba70be6db9297, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Border::Border.UI.UberUIMaterialBinder
 --- !u!1 &6145260787952684985
 GameObject:
   m_ObjectHideFlags: 0
@@ -3455,6 +3494,7 @@ GameObject:
   - component: {fileID: 1689740918596836547}
   - component: {fileID: 8080020294762070734}
   - component: {fileID: 8760589940308466647}
+  - component: {fileID: 9015535947313328462}
   m_Layer: 0
   m_Name: PerfectZone
   m_TagString: Untagged
@@ -3501,8 +3541,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.9, b: 0.15, a: 1}
+  m_Material: {fileID: 2100000, guid: 7d8232992eca44691af8e102f8a0caed, type: 2}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -3519,6 +3559,18 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &9015535947313328462
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6219815144375963783}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21719d9ad5208754a90ba70be6db9297, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Border::Border.UI.UberUIMaterialBinder
 --- !u!1 &6332347754749717969
 GameObject:
   m_ObjectHideFlags: 0
@@ -4285,6 +4337,7 @@ GameObject:
   - component: {fileID: 8281314449374155075}
   - component: {fileID: 4050880502688079560}
   - component: {fileID: 6173728473956623657}
+  - component: {fileID: 8875884348704421181}
   m_Layer: 0
   m_Name: OutputCursor
   m_TagString: Untagged
@@ -4331,7 +4384,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 2100000, guid: 8caa57737a67244298e8217395f641cc, type: 2}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -4363,6 +4416,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.AspectRatioFitter
   m_AspectMode: 2
   m_AspectRatio: 0.4375
+--- !u!114 &8875884348704421181
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7588919947210884717}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21719d9ad5208754a90ba70be6db9297, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Border::Border.UI.UberUIMaterialBinder
 --- !u!1 &7677428567208667888
 GameObject:
   m_ObjectHideFlags: 0

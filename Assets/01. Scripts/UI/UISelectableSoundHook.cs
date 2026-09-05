@@ -32,7 +32,8 @@ namespace Border.UI
         {
             if (button == null) return;
             button.onClick.RemoveListener(ClickAction);
-            button.onClick.AddListener(ClickAction);
+            if (button.GetComponent<UIManualClickSound>() == null)
+                button.onClick.AddListener(ClickAction);
         }
 
         public static void ClearListeners(Button button)

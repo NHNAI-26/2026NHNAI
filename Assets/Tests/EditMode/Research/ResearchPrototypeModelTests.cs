@@ -1051,6 +1051,7 @@ namespace Border.Research.Tests
                 var pointer = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
                 controller.AdvanceTimeForTests(0.27f);
                 float renderedCursor = controller.GetOutputCursorForTests();
+                string remainingTime = GetText(FindText(host.transform, "Timer"));
 
                 ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerDownHandler);
                 Assert.That(controller.IsShowingOutputJudgementForTests, Is.True);
@@ -1058,6 +1059,7 @@ namespace Border.Research.Tests
                 controller.AdvanceTimeForTests(0.5f);
                 Assert.That(controller.IsShowingOutputJudgementForTests, Is.True);
                 Assert.That(controller.GetOutputCursorForTests(), Is.EqualTo(renderedCursor));
+                Assert.That(GetText(FindText(host.transform, "Timer")), Is.EqualTo(remainingTime));
 
                 if (!releaseAfterStageAdvance)
                 {
@@ -1081,6 +1083,76 @@ namespace Border.Research.Tests
                 Assert.That(controller.GetOutputCursorForTests(), Is.GreaterThan(0f));
                 ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerDownHandler);
                 Assert.That(controller.IsShowingOutputJudgementForTests, Is.True);
+            }
+            finally { Object.DestroyImmediate(host); }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void MiniGameController_OutputFeedbackSeparatesMissAndSuccessAndRestoresOnHide(bool success)
+        {
+            var host = new GameObject("Output Feedback Test");
+            try
+            {
+                var controller = host.AddComponent<ResearchMiniGameController>();
+                controller.InitializeForTests(EnginePresetId.Engine01, EngineStatId.MaxOutput, false, 77, _ => { });
+                var group = (RectTransform)FindTransform(host.transform, "OutputGame");
+                Button button = FindButton(host.transform, "PrimaryActionButton");
+                Vector3 groupScale = group.localScale;
+                Vector3 buttonScale = button.transform.localScale;
+                var panel = (RectTransform)FindTransform(host.transform, "OutputTrack");
+                Vector3 panelScale = panel.localScale;
+                Vector2 position = panel.anchoredPosition;
+                var cursor = FindTransform(host.transform, "OutputCursor");
+                var safeZone = FindTransform(host.transform, "SafeZone");
+                float cursorWorldScale = cursor.lossyScale.x;
+                float targetWorldScale = safeZone.lossyScale.x;
+                Transform[] fixedElements = { group, button.transform, FindTransform(host.transform, "OutputBackground"), FindTransform(host.transform, "OutputJudgementText") };
+                Matrix4x4[] fixedMatrices = System.Array.ConvertAll(fixedElements, element => element.localToWorldMatrix);
+                float buttonWorldScale = button.transform.lossyScale.x;
+                float target = controller.GetOutputTargetForTests();
+                controller.RecordOutputStageForTests(success ? target : (target < 0.5f ? 1f : 0f));
+                float stoppedCursor = controller.GetOutputCursorForTests();
+                Assert.That(panel.localScale.x, Is.LessThan(panelScale.x));
+                Assert.That(button.transform.localScale, Is.EqualTo(buttonScale));
+                Assert.That(group.localScale, Is.EqualTo(groupScale));
+                Assert.That(cursor.lossyScale.x / cursorWorldScale,
+                    Is.EqualTo(safeZone.lossyScale.x / targetWorldScale).Within(0.0001f));
+
+                FieldInfo feedbackField = typeof(ResearchMiniGameController)
+                    .GetField("outputFeedbackTween", BindingFlags.Instance | BindingFlags.NonPublic);
+                object tween = feedbackField.GetValue(controller);
+                System.Type extensions = tween.GetType().Assembly.GetType("DG.Tweening.TweenExtensions");
+                extensions.GetMethod("Goto").Invoke(null, new object[] { tween, success ? 0.07f : 0.18f, false });
+                if (success)
+                {
+                    Assert.That(panel.localScale.x, Is.GreaterThan(panelScale.x));
+                    Assert.That(panel.anchoredPosition, Is.EqualTo(position));
+                    Vector3 impactScale = panel.localScale;
+                    Assert.That(impactScale.x / panelScale.x, Is.GreaterThan(1.13f));
+                    extensions.GetMethod("Goto").Invoke(null, new object[] { tween, 0.085f, false });
+                    Assert.That(panel.localScale.x, Is.LessThan(impactScale.x), "The stronger peak must immediately flow into recovery without a hold.");
+                    Assert.That(panel.localScale.x, Is.GreaterThan(panelScale.x));
+                    extensions.GetMethod("Goto").Invoke(null, new object[] { tween, 0.13f, false });
+                    Assert.That(panel.localScale, Is.EqualTo(panelScale), "Success must return directly without a trailing rebound.");
+                }
+                else
+                {
+                    Assert.That(panel.anchoredPosition.x, Is.Not.EqualTo(position.x));
+                    Assert.That(panel.localScale, Is.EqualTo(panelScale));
+                }
+                Assert.That(cursor.lossyScale.x / cursorWorldScale,
+                    Is.EqualTo(safeZone.lossyScale.x / targetWorldScale).Within(0.0001f));
+                Assert.That(button.transform.lossyScale.x, Is.EqualTo(buttonWorldScale));
+                for (int i = 0; i < fixedElements.Length; i++)
+                    Assert.That(fixedElements[i].localToWorldMatrix, Is.EqualTo(fixedMatrices[i]), fixedElements[i].name + " must stay still.");
+                Assert.That(controller.GetOutputCursorForTests(), Is.EqualTo(stoppedCursor));
+                controller.HideForReuse();
+                Assert.That(group.localScale, Is.EqualTo(groupScale));
+                Assert.That(panel.localScale, Is.EqualTo(panelScale));
+                Assert.That(panel.anchoredPosition, Is.EqualTo(position));
+                Assert.That(button.transform.localScale, Is.EqualTo(buttonScale));
+                Assert.That(feedbackField.GetValue(controller), Is.Null);
             }
             finally { Object.DestroyImmediate(host); }
         }
