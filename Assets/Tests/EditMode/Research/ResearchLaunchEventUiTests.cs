@@ -55,6 +55,7 @@ namespace Border.Research.Tests
                 { LaunchOutcomeEventId.UsefulFailureData, "깨진 기록에서 멀쩡한 답 나왔다" },
                 { LaunchOutcomeEventId.Whistleblower, "관계자, \"비리 관계 있다\" 밝혀" },
                 { LaunchOutcomeEventId.FinalProof, "적게 태우고, 끝내 증명했다" },
+                { LaunchOutcomeEventId.FinalFailure, "끝내 낮은 불꽃은 달에 닿지 못했다" },
             };
 
             foreach (LaunchOutcomeEventResult outcomeEvent in AllLaunchOutcomeEvents())
@@ -76,11 +77,23 @@ namespace Border.Research.Tests
                     "저전력 검증을 통과했습니다. 아르테미스 발사 체계가 최종 인정됐습니다.",
                     "효율 검증 통과 · 최종 미션 성공"),
                     missionId: LaunchMissionId.LowPowerZoneHold,
-                    visibility: TestVisibility.FinalMission,
+                    visibility: TestVisibility.Public,
                     finalMissionWon: true), "저전력 구역 체류");
+            LaunchNewspaperArticle finalFailureArticle = LaunchNewspaperArticle.Create(
+                CreateResult(new LaunchOutcomeEventResult(
+                    LaunchOutcomeEventId.FinalFailure,
+                    "최종 검증 실패",
+                    "저전력 검증은 최종 통과 기준에 못 미쳤습니다.",
+                    "최종 미션 실패"),
+                    missionId: LaunchMissionId.LowPowerZoneHold,
+                    visibility: TestVisibility.Public,
+                    finalMissionWon: false,
+                    deadlineMissed: true,
+                    grade: ResearchGrade.F), "저전력 구역 체류");
 
             Assert.That(privateArticle.Edition, Is.EqualTo("2024년 2분기 내부 메일"));
             Assert.That(finalArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
+            Assert.That(finalFailureArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
         }
 
         [Test]
@@ -111,7 +124,7 @@ namespace Border.Research.Tests
                     "저전력 검증을 통과했습니다.",
                     "효율 검증 통과 · 최종 미션 성공"),
                     missionId: LaunchMissionId.LowPowerZoneHold,
-                    visibility: TestVisibility.FinalMission,
+                    visibility: TestVisibility.Public,
                     finalMissionWon: true), "저전력 구역 체류");
 
             Assert.That(publicArticle.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
@@ -368,7 +381,9 @@ namespace Border.Research.Tests
             LaunchOutcomeEventResult outcomeEvent,
             LaunchMissionId missionId = LaunchMissionId.LowAltitude,
             TestVisibility visibility = TestVisibility.Public,
-            bool finalMissionWon = false)
+            bool finalMissionWon = false,
+            bool deadlineMissed = false,
+            ResearchGrade grade = ResearchGrade.B)
         {
             return new ResearchLaunchResultData(
                 missionId,
@@ -385,11 +400,11 @@ namespace Border.Research.Tests
                 10,
                 10,
                 42,
-                ResearchGrade.B,
+                grade,
                 600,
                 75,
                 finalMissionWon,
-                false,
+                deadlineMissed,
                 outcomeEvent,
                 LaunchTerminationReason.Succeeded);
         }
@@ -439,6 +454,8 @@ namespace Border.Research.Tests
                     return "내부 고발자";
                 case LaunchOutcomeEventId.FinalProof:
                     return "최종 검증 인정";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "최종 검증 실패";
                 default:
                     return id.ToString();
             }
@@ -472,6 +489,8 @@ namespace Border.Research.Tests
                     return "관계자가 비공개 실패 기록과 예산 처리에 \"비리 관계 있다\"고 주장했습니다. 후원 기관이 다음 분기 지원을 깎았습니다.";
                 case LaunchOutcomeEventId.FinalProof:
                     return "저전력 검증을 통과했습니다. 아르테미스 발사 체계가 최종 인정됐습니다.";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "저전력 검증은 최종 통과 기준에 못 미쳤습니다. 남은 기록은 다음 판단 자료로 넘겨졌습니다.";
                 default:
                     return id.ToString();
             }
@@ -505,6 +524,8 @@ namespace Border.Research.Tests
                     return "분기 연구비 -100";
                 case LaunchOutcomeEventId.FinalProof:
                     return "효율 검증 통과 · 최종 미션 성공\n1번 엔진 완성도 +10\n1번 엔진 연료 탱크 용량 +5";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "최종 미션 실패";
                 default:
                     return id.ToString();
             }

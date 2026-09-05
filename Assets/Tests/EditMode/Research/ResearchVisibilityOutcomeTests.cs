@@ -54,12 +54,30 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void FinalMission_ForcesFinalVisibility()
+        public void FinalMission_RequiresPublicVisibility()
         {
             var model = new ResearchPrototypeModel();
             model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
             Assert.That(model.TryEnterDesign(LaunchMissionId.LowPowerZoneHold, EnginePresetId.Engine01, TestVisibility.Public, out var entry), Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(entry.Visibility, Is.EqualTo(TestVisibility.FinalMission));
+            Assert.That(entry.Visibility, Is.EqualTo(TestVisibility.Public));
+
+            model = new ResearchPrototypeModel();
+            model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
+            Assert.That(model.TryEnterDesign(LaunchMissionId.LowPowerZoneHold, EnginePresetId.Engine01, TestVisibility.Private, out _), Is.EqualTo(ResearchActionResult.RequirementNotMet));
+            Assert.That(model.LastMessage, Does.Contain("공개 테스트"));
+        }
+
+        [Test]
+        public void FinalMission_PrivateDesignEntryCannotBeginLaunch()
+        {
+            var model = new ResearchPrototypeModel();
+            model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
+            var entry = model.CreateDesignEntry(LaunchMissionId.LowPowerZoneHold,
+                EnginePresetId.Engine01, new[] { 1 }, 50, TestVisibility.Private);
+
+            Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.RequirementNotMet));
+            Assert.That(model.LastMessage, Does.Contain("공개 테스트"));
+            Assert.That(model.HasActiveLaunch, Is.False);
         }
 
         [Test]
@@ -101,16 +119,33 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void Operation_FinalMissionStartsWithoutChoiceDialog()
+        public void Dialog_FinalMissionDefaultsToPublicAndExplainsPublicRequirement()
+        {
+            var model = new ResearchPrototypeModel();
+            model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
+            var dialog = CreateDialog();
+
+            dialog.Open(model, LaunchMissionId.LowPowerZoneHold, _ => ResearchActionResult.Success);
+
+            Assert.That(Find<Toggle>("PublicToggle").isOn, Is.True);
+            Assert.That(Find<Toggle>("PrivateToggle").isOn, Is.False);
+            Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Contain("마지막 미션은 공개 테스트가 필수"));
+            Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Contain("비공개 테스트로는 미션을 진행할 수 없습니다"));
+        }
+
+        [Test]
+        public void Operation_FinalMissionOpensChoiceDialog()
         {
             var session = ResearchFlowSession.GetOrCreate();
             session.Model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
             operationObject = new GameObject("Final Mission Entry Test");
             var operation = operationObject.AddComponent<ResearchOperationUIController>();
+            var dialog = CreateDialog();
+            SetReference(operation, "visibilityDialog", dialog);
             operation.InitializeForTests();
             operationObject.GetComponentsInChildren<Button>(true).Single(button => button.name == "EnterDesignButton").onClick.Invoke();
-            Assert.That(operation.IsTransitioningToDesignForTests(), Is.True);
-            Assert.That(session.PendingDesignEntry.Visibility, Is.EqualTo(TestVisibility.FinalMission));
+            Assert.That(operation.IsTransitioningToDesignForTests(), Is.False);
+            Assert.That(dialog.IsOpen, Is.True);
         }
 
         [Test]

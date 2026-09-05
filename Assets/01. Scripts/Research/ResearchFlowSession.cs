@@ -21,6 +21,7 @@ namespace Border.Research
         private ResearchLaunchResultData lastLaunchResult;
         private bool hasPendingDesignEntry;
         private bool hasLastLaunchResult;
+        private bool deadlineFailureReportQueued;
 
         public ResearchPrototypeModel Model => model ??= CreateModel();
         public bool HasPendingDesignEntry => hasPendingDesignEntry;
@@ -97,7 +98,7 @@ namespace Border.Research
 
         public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, out ResearchDesignEntryData data)
         {
-            return TryEnterDesign(missionId, presetId, missionId == LaunchMissionId.LowPowerZoneHold ? TestVisibility.FinalMission : TestVisibility.Private, out data);
+            return TryEnterDesign(missionId, presetId, missionId == LaunchMissionId.LowPowerZoneHold ? TestVisibility.Public : TestVisibility.Private, out data);
         }
 
         public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, TestVisibility visibility, out ResearchDesignEntryData data)
@@ -214,6 +215,27 @@ namespace Border.Research
             if (outcomeChannel != null) outcomeChannel.RaiseEvent(outcome);
         }
 
+        public bool QueueDeadlineFailureReportIfNeeded()
+        {
+            if (!Model.HasGameEnded || Model.GameWon || HasUnacknowledgedLaunchResult || deadlineFailureReportQueued)
+            {
+                return false;
+            }
+
+            if (hasLastLaunchResult && lastLaunchResult.OutcomeEvent?.Id == LaunchOutcomeEventId.FinalFailure)
+            {
+                deadlineFailureReportQueued = true;
+                return false;
+            }
+
+            lastLaunchResult = Model.CreateDeadlineFailureResult();
+            hasLastLaunchResult = true;
+            HasUnacknowledgedLaunchResult = true;
+            deadlineFailureReportQueued = true;
+            QueueOutcome(lastLaunchResult, "제한 시간 종료");
+            return true;
+        }
+
         public void ResetResearch()
         {
             ReleaseLaunchPhoto();
@@ -225,6 +247,7 @@ namespace Border.Research
             HasUnacknowledgedLaunchResult = false;
             HasPendingOutcomeNotification = false;
             pendingOutcome = default;
+            deadlineFailureReportQueued = false;
         }
 
         public static void PrepareNewGame()

@@ -43,7 +43,7 @@ namespace Border.Research
 
         public static LaunchResultMedium ResolveMedium(ResearchLaunchResultData result)
         {
-            if (result.Visibility == TestVisibility.FinalMission || result.FinalMissionWon)
+            if (result.MissionId == LaunchMissionId.LowPowerZoneHold || result.FinalMissionWon)
             {
                 return LaunchResultMedium.Newspaper;
             }
@@ -61,6 +61,7 @@ namespace Border.Research
             switch (id)
             {
                 case LaunchOutcomeEventId.FinalProof:
+                case LaunchOutcomeEventId.FinalFailure:
                 case LaunchOutcomeEventId.Whistleblower:
                 case LaunchOutcomeEventId.SponsorBoost:
                 case LaunchOutcomeEventId.PublicPressure:
@@ -116,6 +117,8 @@ namespace Border.Research
                     return "관계자, \"비리 관계 있다\" 밝혀";
                 case LaunchOutcomeEventId.FinalProof:
                     return "적게 태우고, 끝내 증명했다";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "끝내 낮은 불꽃은 달에 닿지 못했다";
                 default:
                     return succeeded ? "발사 성공 확인" : "발사 실패 확인";
             }
@@ -124,7 +127,7 @@ namespace Border.Research
         private static string CreateEdition(ResearchLaunchResultData result, LaunchResultMedium medium)
         {
             string date = $"{result.Year}년 {result.Quarter}분기";
-            if (result.FinalMissionWon)
+            if (result.FinalMissionWon || result.OutcomeEvent?.Id == LaunchOutcomeEventId.FinalFailure)
             {
                 return $"{date} 특별호";
             }
@@ -149,6 +152,8 @@ namespace Border.Research
         {
             string article = succeeded
                 ? $"{missionName} 시험이 성공했다."
+                : result.OutcomeEvent?.Id == LaunchOutcomeEventId.FinalFailure && result.DeadlineMissed
+                    ? $"{result.Year}년 {result.Quarter}분기 마감까지 {missionName}을 통과하지 못했다."
                 : CreateFailedBodyLead(result, missionName);
             if (result.OutcomeEvent == null || string.IsNullOrWhiteSpace(result.OutcomeEvent.Description))
             {
@@ -182,7 +187,7 @@ namespace Border.Research
 
         private static string CreateEffects(ResearchLaunchResultData result)
         {
-            string label = result.Visibility == TestVisibility.FinalMission ? "기본 보상" : "테스트 정산";
+            string label = result.MissionId == LaunchMissionId.LowPowerZoneHold ? "기본 보상" : "테스트 정산";
             string baseEffects = $"{label}: 즉시 지원금 {FormatSigned(result.ImmediateFunding)} / 분기 연구비 {FormatSigned(result.QuarterlyFundingDelta)}";
             if (result.OutcomeEvent == null || string.IsNullOrWhiteSpace(result.OutcomeEvent.EffectsText))
             {

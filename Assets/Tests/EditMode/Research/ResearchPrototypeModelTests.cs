@@ -412,7 +412,7 @@ namespace Border.Research.Tests
                 model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
                 int[] installed = new int[ResearchPrototypeModel.MaxEnginePresetCount];
                 installed[(int)EnginePresetId.Engine01] = 1;
-                ResearchDesignEntryData entry = model.CreateDesignEntry(LaunchMissionId.LowPowerZoneHold, EnginePresetId.Engine01, installed, 100, TestVisibility.FinalMission);
+                ResearchDesignEntryData entry = model.CreateDesignEntry(LaunchMissionId.LowPowerZoneHold, EnginePresetId.Engine01, installed, 100, TestVisibility.Public);
 
                 model.CommitLaunch(entry, out ResearchLaunchResultData result);
 

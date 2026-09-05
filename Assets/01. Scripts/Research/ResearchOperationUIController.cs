@@ -563,7 +563,8 @@ namespace Border.Research
             session.ClearPendingDesignEntry();
             if (model.HasGameEnded)
             {
-                ShowEndingScreen();
+                session.QueueDeadlineFailureReportIfNeeded();
+                Refresh();
                 return;
             }
             canvasTransform.gameObject.SetActive(true);
@@ -581,11 +582,6 @@ namespace Border.Research
             }
 
             selectedMission = model.GetCurrentMission();
-            if (selectedMission == LaunchMissionId.LowPowerZoneHold)
-            {
-                if (ConfirmDesignEntry(selectedMission, selectedEnginePreset, TestVisibility.FinalMission) != ResearchActionResult.Success) Refresh();
-                return;
-            }
             if (visibilityDialog == null)
             {
                 Debug.LogError("Research test visibility dialog must be assigned in the scene.", this);
@@ -657,6 +653,7 @@ namespace Border.Research
         private void Refresh()
         {
             if (resultReport != null && resultReport.gameObject.activeSelf) return;
+            session.QueueDeadlineFailureReportIfNeeded();
             if (session.HasUnacknowledgedLaunchResult)
             {
                 ShowResultReport(session.LastLaunchResult);
@@ -904,6 +901,12 @@ namespace Border.Research
                 session.AcknowledgeLaunchResult();
                 if (model.HasGameEnded)
                 {
+                    if (session.QueueDeadlineFailureReportIfNeeded())
+                    {
+                        ShowResultReport(session.LastLaunchResult);
+                        return;
+                    }
+
                     ShowEndingScreen();
                     return;
                 }

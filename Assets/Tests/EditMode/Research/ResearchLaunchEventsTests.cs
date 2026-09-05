@@ -22,10 +22,10 @@ namespace Border.Research.Tests
             new[] { LaunchOutcomeEventId.MediaBacklash, LaunchOutcomeEventId.UsefulFailureData })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Private, 2024, LaunchTerminationReason.SelfDestruct,
             new[] { LaunchOutcomeEventId.QuietLessons, LaunchOutcomeEventId.UsefulFailureData, LaunchOutcomeEventId.Whistleblower })]
-        [TestCase(LaunchMissionId.LowPowerZoneHold, true, TestVisibility.FinalMission, 2024, LaunchTerminationReason.Succeeded,
+        [TestCase(LaunchMissionId.LowPowerZoneHold, true, TestVisibility.Public, 2024, LaunchTerminationReason.Succeeded,
             new[] { LaunchOutcomeEventId.FinalProof })]
-        [TestCase(LaunchMissionId.LowPowerZoneHold, false, TestVisibility.FinalMission, 2024, LaunchTerminationReason.GroundCrash,
-            new LaunchOutcomeEventId[0])]
+        [TestCase(LaunchMissionId.LowPowerZoneHold, false, TestVisibility.Public, 2024, LaunchTerminationReason.GroundCrash,
+            new[] { LaunchOutcomeEventId.FinalFailure })]
         public void GetEligibleLaunchEvents_ReturnsApprovedCandidatesInSourceOrder(
             LaunchMissionId mission,
             bool succeeded,
@@ -377,14 +377,14 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void FinalProof_AppliesRewardAndWinWhileFinalFailureHasNoEvent()
+        public void FinalProof_AppliesRewardAndWinWhileFinalFailureGetsArticleEvent()
         {
             var successModel = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: AlwaysFirst);
             PrepareFinalMission(successModel);
 
             ResearchLaunchResultData success = Launch(successModel, LaunchMissionId.LowPowerZoneHold, TestVisibility.Public, true, LaunchTerminationReason.Succeeded);
 
-            Assert.That(success.Visibility, Is.EqualTo(TestVisibility.FinalMission));
+            Assert.That(success.Visibility, Is.EqualTo(TestVisibility.Public));
             Assert.That(success.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.FinalProof));
             Assert.That(success.FinalMissionWon, Is.True);
             Assert.That(successModel.GameWon, Is.True);
@@ -394,12 +394,13 @@ namespace Border.Research.Tests
 
             var failureModel = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: AlwaysFirst);
             PrepareFinalMission(failureModel);
-            BeginLaunch(failureModel, LaunchMissionId.LowPowerZoneHold, TestVisibility.FinalMission);
+            BeginLaunch(failureModel, LaunchMissionId.LowPowerZoneHold, TestVisibility.Public);
             Assert.That(failureModel.CompleteLaunch(false, LaunchTerminationReason.GroundCrash, out ResearchLaunchResultData failure), Is.EqualTo(ResearchActionResult.Success));
 
-            Assert.That(failure.OutcomeEvent, Is.Null);
+            Assert.That(failure.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.FinalFailure));
             Assert.That(failure.FinalMissionWon, Is.False);
             Assert.That(failureModel.GameWon, Is.False);
+            Assert.That(failureModel.HasGameEnded, Is.False);
         }
 
         [Test]
@@ -483,14 +484,14 @@ namespace Border.Research.Tests
         {
             var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: Sequence(1, 0, 1, 0, 0));
             LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash);
-            LaunchPaid(model, LaunchMissionId.LowPowerZoneHold, TestVisibility.FinalMission, false, LaunchTerminationReason.GroundCrash);
+            LaunchPaid(model, LaunchMissionId.LowPowerZoneHold, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash);
             LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash);
             int baseCost = ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.LowAltitude).LaunchCost;
 
             Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(baseCost + 50));
             Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 +50"));
 
-            LaunchPaid(model, LaunchMissionId.LowPowerZoneHold, TestVisibility.FinalMission, false, LaunchTerminationReason.GroundCrash);
+            LaunchPaid(model, LaunchMissionId.LowPowerZoneHold, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash);
             LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Private, false, LaunchTerminationReason.GroundCrash);
             Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 -50"));
             Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 +50"));
@@ -589,7 +590,10 @@ namespace Border.Research.Tests
             ResearchDesignEntryData entry = model.CreateDesignEntry(missionId, EnginePresetId.Engine01, SingleEngine(), 50, visibility, true);
             Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(model.CompleteLaunch(succeeded, reason, out ResearchLaunchResultData result), Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(result.OutcomeEvent, Is.Null);
+            if (missionId == LaunchMissionId.LowPowerZoneHold)
+                Assert.That(result.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.FinalFailure));
+            else
+                Assert.That(result.OutcomeEvent, Is.Null);
             return result;
         }
 

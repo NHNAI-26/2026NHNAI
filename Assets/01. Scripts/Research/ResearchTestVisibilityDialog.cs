@@ -38,12 +38,13 @@ namespace Border.Research
             }
             model = currentModel;
             confirm = onConfirm;
-            publicToggle.SetIsOnWithoutNotify(false);
-            privateToggle.SetIsOnWithoutNotify(true);
+            bool finalMission = missionId == LaunchMissionId.LowPowerZoneHold;
+            publicToggle.SetIsOnWithoutNotify(finalMission);
+            privateToggle.SetIsOnWithoutNotify(!finalMission);
             LaunchMissionConfig mission = model.GetConfiguredMissionConfig(missionId);
             missionText.text = $"MISSION {(int)missionId} : {mission.DisplayName}";
-            publicDetails.text = Describe(TestVisibility.Public);
-            privateDetails.text = Describe(TestVisibility.Private);
+            publicDetails.text = Describe(TestVisibility.Public, finalMission);
+            privateDetails.text = Describe(TestVisibility.Private, finalMission);
             TMP_Text confirmLabel = confirmButton.GetComponentInChildren<TMP_Text>(true);
             if (confirmLabel != null)
                 confirmLabel.text = $"설계 진입\n<size=15>-{model.GetDesignEntryCost(missionId)}$ / +1분기</size>";
@@ -93,9 +94,19 @@ namespace Border.Research
             transform.localScale = Vector3.one;
         }
 
-        private static string Describe(TestVisibility visibility) => visibility == TestVisibility.Private
-            ? "사내에서 비공개로 발사 테스트를 진행합니다.\n\n성공 보수가 적지만 \n실패 시 위험 부담도 적습니다. "
-            : "모두의 앞에서 공개로 발사 테스트를 진행합니다. \n\n성공 시 투자 혹은 연구비 지원을 \n받을 수 있습니다.\n실패 시 연구비가 줄어들수도..?";
+        private static string Describe(TestVisibility visibility, bool finalMission)
+        {
+            if (visibility == TestVisibility.Private)
+            {
+                return finalMission
+                    ? "사내에서 비공개로 발사 테스트를 진행합니다.\n\n마지막 미션은 공개 테스트가 필수입니다.\n비공개 테스트로는 미션을 진행할 수 없습니다."
+                    : "사내에서 비공개로 발사 테스트를 진행합니다.\n\n성공 보수가 적지만 \n실패 시 위험 부담도 적습니다. ";
+            }
+
+            return finalMission
+                ? "모두의 앞에서 공개로 발사 테스트를 진행합니다.\n\n마지막 미션은 공개 테스트가 필수입니다.\n이 선택으로만 최종 검증에 진입할 수 있습니다."
+                : "모두의 앞에서 공개로 발사 테스트를 진행합니다. \n\n성공 시 투자 혹은 연구비 지원을 \n받을 수 있습니다.\n실패 시 연구비가 줄어들수도..?";
+        }
 
         private void Confirm()
         {

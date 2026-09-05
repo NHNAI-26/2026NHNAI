@@ -1175,6 +1175,37 @@ namespace Border.Research
                 succeeded ? 100 : 0, 0, 0, out result, terminationReason);
         }
 
+        public ResearchLaunchResultData CreateDeadlineFailureResult()
+        {
+            LaunchMissionState finalMission = GetMission(LaunchMissionId.LowPowerZoneHold);
+            ResearchGrade finalGrade = finalMission.HasBestGrade ? finalMission.BestGrade : ResearchGrade.F;
+            int year = HasGameEnded ? FinalYear : Year;
+            int quarter = HasGameEnded ? FinalQuarter : Quarter;
+
+            return new ResearchLaunchResultData(
+                LaunchMissionId.LowPowerZoneHold,
+                EnginePresetId.Engine01,
+                year,
+                quarter,
+                0,
+                0,
+                TestVisibility.Public,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                finalGrade,
+                0,
+                0,
+                false,
+                true,
+                CreateFinalFailureOutcomeEvent(),
+                LaunchTerminationReason.Unknown);
+        }
+
         private ResearchActionResult FinishLaunch(ResearchGrade grade, int successChance, int partialChance, int roll, out ResearchLaunchResultData result,
             LaunchTerminationReason terminationReason = LaunchTerminationReason.Unknown)
         {
