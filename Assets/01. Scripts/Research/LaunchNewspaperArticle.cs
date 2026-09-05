@@ -31,7 +31,7 @@ namespace Border.Research
                 ? ResearchPrototypeModel.GetMissionConfig(result.MissionId).DisplayName
                 : missionName;
 
-            bool succeeded = result.Succeeded;
+            bool succeeded = result.Grade <= ResearchGrade.B;
             LaunchResultMedium medium = ResolveMedium(result);
             string heading = CreateHeading(result, resolvedMissionName, succeeded, medium);
             string edition = CreateEdition(result, medium);
@@ -66,7 +66,7 @@ namespace Border.Research
             if (medium == LaunchResultMedium.Mail)
             {
                 string subject = result.OutcomeEvent == null
-                    ? succeeded ? "성공 판정" : "실패 판정"
+                    ? succeeded ? "성공 판정" : result.Grade == ResearchGrade.C ? "부분 성공 판정" : "실패 판정"
                     : CreateMailSubject(result.OutcomeEvent.Id, result.OutcomeEvent.Name);
                 return $"[시험 결과] {missionName} - {subject}";
             }
@@ -219,6 +219,11 @@ namespace Border.Research
 
         private static string CreateFailedBodyLead(ResearchLaunchResultData result, string missionName)
         {
+            if (result.Grade == ResearchGrade.C)
+            {
+                return $"{missionName} 시험은 부분 성공으로 기록됐다.";
+            }
+
             return $"{missionName} 시험은 {CreateTerminationReasonText(result.TerminationReason)} 종료됐다.";
         }
 

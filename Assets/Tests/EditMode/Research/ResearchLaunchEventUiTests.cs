@@ -89,7 +89,7 @@ namespace Border.Research.Tests
                     visibility: TestVisibility.Public,
                     finalMissionWon: false,
                     deadlineMissed: true,
-                    succeeded: false), "저전력 구역 체류");
+                    grade: ResearchGrade.F), "저전력 구역 체류");
 
             Assert.That(privateArticle.Edition, Is.EqualTo("2024년 2분기 내부 메일"));
             Assert.That(finalArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
@@ -402,7 +402,7 @@ namespace Border.Research.Tests
             TestVisibility visibility = TestVisibility.Public,
             bool finalMissionWon = false,
             bool deadlineMissed = false,
-            bool succeeded = true)
+            ResearchGrade grade = ResearchGrade.B)
         {
             return new ResearchLaunchResultData(
                 missionId,
@@ -412,13 +412,20 @@ namespace Border.Research.Tests
                 800,
                 350,
                 visibility,
-                succeeded,
+                50,
+                80,
+                70,
+                80,
+                10,
+                10,
+                42,
+                grade,
                 600,
                 75,
                 finalMissionWon,
                 deadlineMissed,
                 outcomeEvent,
-                succeeded ? LaunchTerminationReason.Succeeded : LaunchTerminationReason.Unknown);
+                LaunchTerminationReason.Succeeded);
         }
 
         private static IEnumerable<LaunchOutcomeEventResult> AllLaunchOutcomeEvents()
