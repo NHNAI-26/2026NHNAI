@@ -368,30 +368,51 @@ namespace Simulation.Tests
             Vector3.Distance(local, new Vector3(0f, Mathf.Clamp(local.y, -halfSegment, halfSegment), 0f));
 
         [Test]
-        public void PullbackDistance_PinsGroundToFrameBottom_ThenClampsAtBothEnds()
+        public void PullbackDistance_GrowsWithAltitude_ThenClampsAtBothEnds()
         {
-            const float Fov = 60f;   // 두 vcam 의 Lens 값
             const float Near = 40f;
-            const float Far = 180f;
-            float halfHeightPerUnit = Mathf.Tan(Fov * 0.5f * Mathf.Deg2Rad); // 거리 1 당 화면 세로 절반
+            const float Growth = 3f;
+            const float Far = 500f;
 
-            // 저고도에서는 기하가 요구하는 거리가 0 으로 붕괴한다 — 하한이 이긴다.
-            Assert.AreEqual(Near, RocketBuilder.PullbackDistance(0f, Fov, Near, Far), 1e-4f);
+            // 발사 순간, 그리고 발사 고도 아래로 떨어진 뒤에도 하한보다 붙지 않는다.
+            Assert.AreEqual(Near, RocketBuilder.PullbackDistance(0f, Near, Growth, Far), 1e-4f);
+            Assert.AreEqual(Near, RocketBuilder.PullbackDistance(-80f, Near, Growth, Far), 1e-4f);
 
-            // 이 변경의 전부: 화면 아래 절반이 정확히 고도와 같아야 발사 고도의 지면 선이
-            // 프레임 아래 변에 붙는다. 로켓은 카메라와 같은 높이라 자동으로 중앙에 남는다.
-            const float Altitude = 60f;
-            float distance = RocketBuilder.PullbackDistance(Altitude, Fov, Near, Far);
-            Assert.Greater(distance, Near, "이 고도면 하한을 넘어 기하가 거리를 정해야 한다.");
-            Assert.AreEqual(Altitude, distance * halfHeightPerUnit, 1e-3f,
-                "화면 아래 절반이 고도와 같아야 지면이 프레임 아래 변에 앉는다.");
+            // 본 구간: 고도 1 유닛마다 Growth 만큼 물러난다.
+            Assert.AreEqual(Near + 100f * Growth,
+                RocketBuilder.PullbackDistance(100f, Near, Growth, Far), 1e-3f);
+            Assert.Greater(RocketBuilder.PullbackDistance(120f, Near, Growth, Far),
+                RocketBuilder.PullbackDistance(100f, Near, Growth, Far),
+                "거리는 고도에 대해 단조 증가해야 한다.");
 
-            // 화각을 넓히면 같은 그림을 만드는 거리가 짧아진다 — FOV 를 상수로 박으면 안 되는 이유.
-            Assert.Less(RocketBuilder.PullbackDistance(Altitude, 90f, Near, Far), distance);
+            // 상한. far clip 1000 안이라 로켓이 클립 밖으로 나가지 않는다.
+            Assert.AreEqual(Far, RocketBuilder.PullbackDistance(10000f, Near, Growth, Far), 1e-4f);
+            Assert.Less(Far, 1000f);
+        }
 
-            // 상한. 근거는 far clip 이 아니라 지면 평면 반경이다.
-            Assert.AreEqual(Far, RocketBuilder.PullbackDistance(1000f, Fov, Near, Far), 1e-4f);
-            Assert.Less(Far, 200f, "카메라가 지면 평면(반경 200) 안에 남아야 아래 변이 지면을 비춘다.");
+        [Test]
+        public void TrailCullingMask_ShowsTheTrailToExactlyOneView_AndFollowsTheSwap()
+        {
+            const int Layer = 8;                 // Trajectory
+            int bit = 1 << Layer;
+            const int Everything = ~0;
+
+            // 켜고 끄는 것은 그 비트 하나뿐 — 다른 레이어를 같이 잘라내면 3D 가 통째로 사라진다.
+            Assert.AreEqual(Everything, RocketBuilder.TrailCullingMask(Everything, Layer, true));
+            Assert.AreEqual(Everything & ~bit, RocketBuilder.TrailCullingMask(Everything, Layer, false));
+            Assert.AreEqual(bit, RocketBuilder.TrailCullingMask(0, Layer, true));
+            Assert.AreEqual(0, RocketBuilder.TrailCullingMask(0, Layer, false));
+
+            // 실제 쓰임: 두 카메라가 반대 인자를 받으므로 스왑 양쪽에서 정확히 하나만 궤적을 본다.
+            // bool 이 뒤집히면 둘 다 보이거나 둘 다 안 보인다.
+            foreach (bool swapped in new[] { false, true })
+            {
+                int main = RocketBuilder.TrailCullingMask(Everything, Layer, swapped);
+                int pip = RocketBuilder.TrailCullingMask(Everything, Layer, !swapped);
+
+                Assert.AreNotEqual((main & bit) != 0, (pip & bit) != 0,
+                    $"swapped={swapped}: 후퇴 뷰를 맡은 카메라 하나만 궤적을 봐야 한다.");
+            }
         }
 
         [Test]
@@ -512,27 +533,6 @@ namespace Simulation.Tests
             return stats;
         }
 
-        private RocketPart CreateEngine(EngineStatsSO stats)
-        {
-            // RocketPart 의 RequireComponent(Collider) 는 추상 타입이라 자동 추가되지 않는다.
-            var go = Track(new GameObject("engine"));
-            go.AddComponent<BoxCollider>();
-
-            var part = go.AddComponent<RocketPart>();
-            SetField(part, "stats", stats);
-            return part;
-        }
-
-        private EnginePresetLibrarySO TrackRuntimeLibrary(EnginePresetLibrarySO library)
-        {
-            Track(library);
-            for (int i = 0; i < library.Slots.Count; i++)
-                if (library.Slots[i] != null)
-                    Track(library.Slots[i]);
-
-            return library;
-        }
-
         [Test]
         public void OutlineAndHologram_ToggleShaderStateOnTheInstancedMaterial()
         {
@@ -564,6 +564,27 @@ namespace Simulation.Tests
             Assert.IsFalse(instance.GetShaderPassEnabled("StencilOutline"));
             Assert.IsFalse(instance.IsKeywordEnabled("_HOLOGRAM_ON"));
             Assert.AreEqual(0f, instance.GetFloat("_HologramEnabled"), 1e-4f);
+        }
+
+        private RocketPart CreateEngine(EngineStatsSO stats)
+        {
+            // RocketPart 의 RequireComponent(Collider) 는 추상 타입이라 자동 추가되지 않는다.
+            var go = Track(new GameObject("engine"));
+            go.AddComponent<BoxCollider>();
+
+            var part = go.AddComponent<RocketPart>();
+            SetField(part, "stats", stats);
+            return part;
+        }
+
+        private EnginePresetLibrarySO TrackRuntimeLibrary(EnginePresetLibrarySO library)
+        {
+            Track(library);
+            for (int i = 0; i < library.Slots.Count; i++)
+                if (library.Slots[i] != null)
+                    Track(library.Slots[i]);
+
+            return library;
         }
 
         private T Track<T>(T target) where T : Object

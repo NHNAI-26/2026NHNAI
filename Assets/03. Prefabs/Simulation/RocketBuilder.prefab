@@ -202,8 +202,17 @@ MonoBehaviour:
   presetLibrary: {fileID: 11400000, guid: 511c3f49a9fcc4f4d8916e8e6fed5b12, type: 2}
   designCam: {fileID: 7334816678546237059}
   launchCam: {fileID: 2867681269896495977}
-  launchDistance: 40
   launchBlendSeconds: 1.5
+  chaseDistance: 12
+  cameraFloorY: -6
+  pullbackDistance: 150
+  pullbackMaxFov: 100
+  pullbackFill: 0.8
+  pipResolution: {x: 320, y: 180}
+  trailMaterial: {fileID: 2100000, guid: 43bf6270bcc4a45429227ef14f6d7552, type: 2}
+  trailDotSpacing: 3
+  trailDotSize: 2
+  trailLayer: 8
   orbitSensitivity: 0.3
   minPitch: -20
   maxPitch: 80

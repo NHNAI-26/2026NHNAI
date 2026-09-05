@@ -45,6 +45,9 @@ namespace Simulation
         private RectTransform statBox;
         private TMP_Text statText;
         private RectTransform partTools;
+        private RectTransform launchPip;
+        private RawImage pipImage;
+        private TMP_Text pipLabel;
         private Button moveButton;
         private Button rotateButton;
 
@@ -106,6 +109,8 @@ namespace Simulation
                 UpdateTopBar();
             }
 
+            UpdateLaunchPip();
+
             if (builder.Selected == null || (rocket != null && rocket.Launched)) return;
 
             // 버튼은 선택한 부품을 화면에서 따라다닌다. 카메라를 돌려도 같은 부품 옆에 붙어 있다.
@@ -144,6 +149,7 @@ namespace Simulation
             BuildPresetPanel(canvasTransform);
             BuildStatBox(canvasTransform);
             BuildPartTools(canvasTransform);
+            BuildLaunchPip(canvasTransform);
 
             if (missionControl) BuildMissionControl(canvasTransform);
         }
@@ -268,6 +274,41 @@ namespace Simulation
             partTools.gameObject.SetActive(false);
         }
 
+        /// <summary>
+        /// 발사 후에만 뜨는 작은 화면. 두 번째 카메라가 RenderTexture 에 그린 것을 그대로 얹고,
+        /// 누르면 큰 화면과 역할이 바뀐다(<see cref="RocketBuilder.ToggleLaunchView"/>).
+        /// 우하단 (-16, 16) 은 미션 컨트롤 모드의 <c>Viewport</c> 오른쪽·아래 여백과 같은 값이라
+        /// 3D 뷰 안에 정확히 앉는다.
+        /// </summary>
+        private void BuildLaunchPip(RectTransform canvasTransform)
+        {
+            launchPip = CreatePanel("LaunchPip", canvasTransform, PanelColor); // 테두리 겸 배경
+            launchPip.anchorMin = Vector2.right; // (1, 0)
+            launchPip.anchorMax = Vector2.right;
+            launchPip.pivot = Vector2.right;
+            launchPip.anchoredPosition = new Vector2(-16f, 16f);
+            launchPip.sizeDelta = new Vector2(324f, 184f);
+
+            var view = new GameObject("View", typeof(RectTransform));
+            view.transform.SetParent(launchPip, false);
+            pipImage = view.AddComponent<RawImage>();
+            pipImage.raycastTarget = false; // 클릭은 부모 버튼이 받는다
+            Fill((RectTransform)view.transform, 2f);
+
+            // 어느 뷰가 어느 화면에 있는지 글자로 박아 둔다 — 두 각도가 비슷해 보이는 저고도 구간에서도
+            // 눌렀을 때 바뀌었다는 것이 즉시 읽힌다.
+            pipLabel = CreateText("Label", launchPip, 13, FontStyles.Bold, string.Empty);
+            pipLabel.raycastTarget = false;
+            pipLabel.alignment = TextAlignmentOptions.BottomLeft;
+            Fill((RectTransform)pipLabel.transform, 8f);
+
+            var button = launchPip.gameObject.AddComponent<Button>();
+            button.targetGraphic = launchPip.GetComponent<Image>();
+            button.onClick.AddListener(builder.ToggleLaunchView);
+
+            launchPip.gameObject.SetActive(false);
+        }
+
         // ---- 갱신 ---------------------------------------------------------------------------
 
         private void RefreshTools()
@@ -305,6 +346,21 @@ namespace Simulation
 
             // rect 대입은 URP 렌더 타깃 재할당을 부른다 — 값이 그대로면 건드리지 않는다.
             if (builder.Cam.rect != rect) builder.Cam.rect = rect;
+        }
+
+        /// <summary>
+        /// 작은 화면을 매 프레임 상태에서 유도한다. 이벤트(<c>builder.Changed</c>)로 켜면
+        /// 발사 프레임에 선택이 이미 비어 있어 이벤트가 오지 않는 경우를 놓친다 — 상태를 그대로 읽는 편이 싸다.
+        /// </summary>
+        private void UpdateLaunchPip()
+        {
+            bool launched = rocket != null && rocket.Launched;
+            if (launchPip.gameObject.activeSelf != launched) launchPip.gameObject.SetActive(launched);
+            if (!launched) return;
+
+            // 텍스처는 발사 순간 RocketBuilder 가 만든다 — 한 프레임 늦게 잡힐 수 있어 붙을 때까지 본다.
+            if (pipImage.texture == null) pipImage.texture = builder.LaunchPipTexture;
+            pipLabel.text = builder.LaunchViewSwapped ? "추적 뷰" : "후퇴 뷰";
         }
 
         private void UpdateTopBar()

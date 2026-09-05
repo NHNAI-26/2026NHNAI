@@ -47,12 +47,26 @@ namespace Simulation
         [Header("Launch views")]
         [Tooltip("추적 뷰가 로켓에서 떨어져 있는 거리(유닛). 12 면 로켓이 화면 높이의 약 30% 를 채운다.")]
         [SerializeField] private float chaseDistance = 12f;
-        [Tooltip("후퇴 뷰 거리의 하한(유닛). 고도가 낮을 때 기하로 구한 거리가 0 으로 붕괴하는 것을 막는다.")]
+        [Tooltip("추적 카메라가 내려갈 수 있는 최저 높이(유닛). 수면(-8.9)보다 위여야 한다 — 로켓이 가라앉아도 카메라는 물 밖에 남는다.")]
+        [SerializeField] private float cameraFloorY = -6f;
+        [Tooltip("후퇴 뷰가 고도 0 에서 로켓과 떨어진 거리(유닛).")]
         [SerializeField] private float pullbackNearDistance = 40f;
-        [Tooltip("후퇴 뷰 거리의 상한(유닛). 지면 평면 반경(200)보다 작아야 아래 변이 계속 지면을 비춘다.")]
-        [SerializeField] private float pullbackFarDistance = 180f;
+        [Tooltip("고도 1 유닛마다 후퇴 뷰가 더 물러나는 거리(유닛). 3 이면 고도 100 에서 340 까지 빠진다.")]
+        [SerializeField] private float pullbackGrowth = 3f;
+        [Tooltip("후퇴 뷰 거리의 상한(유닛). far clip(1000) 안에 둔다.")]
+        [SerializeField] private float pullbackFarDistance = 500f;
         [Tooltip("작은 화면(PiP)의 렌더 타깃 해상도. 표시 전용이라 낮아도 된다.")]
         [SerializeField] private Vector2Int pipResolution = new(320, 180);
+
+        [Header("Trajectory trail")]
+        [Tooltip("궤적 점에 쓸 머티리얼. 비우면 URP Unlit 을 런타임에 찾는다. 기본은 Sky/Star.mat.")]
+        [SerializeField] private Material trailMaterial;
+        [Tooltip("점 사이 간격(유닛). 로켓이 이만큼 움직일 때마다 점 하나가 남는다.")]
+        [SerializeField] private float trailDotSpacing = 3f;
+        [Tooltip("점 하나의 크기(유닛). 후퇴 뷰 거리에서 읽히는 크기를 기준으로 잡는다.")]
+        [SerializeField] private float trailDotSize = 2f;
+        [Tooltip("궤적 레이어. 이 레이어를 후퇴 뷰를 맡은 카메라만 그린다.")]
+        [SerializeField] private int trailLayer = 8; // Trajectory
 
         [Header("Orbit camera")]
         [SerializeField] private float orbitSensitivity = 0.3f; // 도/픽셀
@@ -86,6 +100,10 @@ namespace Simulation
         private const int RingSegments = 32;
         private const float MinRadius = 1e-3f; // 축 위에서는 방위각이 정의되지 않는다
         private const float DragSlopPixels = 4f;
+
+        // 비행은 약 13초다. 넉넉히 잡아 궤적이 도중에 사라지지 않게만 한다 — Mathf.Infinity 는
+        // 파티클 수명에 그대로 넣을 값이 아니다.
+        private const float TrailLifetimeSeconds = 600f;
 
         // 유니티 씬 뷰와 같은 배색. 초록(로컬 up)이 추력 방향이라 플레이어가 제일 자주 잡는 축이다.
         private static readonly Color[] AxisColors = { Color.red, Color.green, Color.blue };
@@ -135,6 +153,7 @@ namespace Simulation
         private float _launchYaw;
         private float _launchAltitude;
         private bool _launchViewSwapped;
+        private ParticleSystem _trail;
 
         public Camera Cam => cam;
 
@@ -265,11 +284,11 @@ namespace Simulation
             _launchAltitude = rocket.transform.position.y;
             _launchViewSwapped = false;
 
-            PlaceView(launchCam.transform, chaseDistance);
             launchCam.Priority = 20; // PrioritySettings 는 int 암시 변환
 
             EnsurePipCamera();
-            PlaceView(_pipCamera.transform, CurrentPullbackDistance());
+            EnsureTrajectoryTrail();
+            ApplyLaunchViews();
         }
 
         /// <summary>
@@ -296,33 +315,107 @@ namespace Simulation
         }
 
         /// <summary>
-        /// 두 발사 뷰의 공통 배치: 로켓 높이만 따라가고 X/Z 와 자세는 발사 순간 방위각에 고정한다 —
-        /// 카메라를 기울이지 않아야 상승이 상승으로 읽힌다. 두 뷰의 차이는 거리 하나뿐이다.
-        /// 상태를 두지 않으므로 스왑으로 트랜스폼이 바뀌어도 한 프레임에 맞는다.
+        /// 궤적 점. 고정된 후퇴 카메라에서는 로켓이 화면의 1% 남짓이라 어디까지 올라갔는지가 안 읽힌다 —
+        /// 지나온 자리에 점을 남겨 발사대에서 현재 위치까지를 눈으로 잇는다.
+        /// 위치를 기록하는 코드는 두지 않는다: <see cref="ParticleSystem.EmissionModule.rateOverDistance"/>
+        /// 가 "이만큼 움직일 때마다 하나" 를 그대로 해준다. 시간 기준으로 뿌리면 연소 구간은 성기고
+        /// 정점에는 뭉치는데, 거리 기준이면 속도와 무관하게 간격이 균일하다.
+        /// </summary>
+        private void EnsureTrajectoryTrail()
+        {
+            if (_trail != null) return;
+
+            var host = new GameObject("TrajectoryTrail") { layer = trailLayer };
+            host.transform.SetParent(rocket.transform, false); // 로켓과 같이 움직여야 거리가 쌓인다
+
+            _trail = host.AddComponent<ParticleSystem>();
+            _trail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            ParticleSystem.MainModule main = _trail.main;
+            main.simulationSpace = ParticleSystemSimulationSpace.World; // 뿌린 점은 그 자리에 남는다
+            main.startLifetime = TrailLifetimeSeconds;
+            main.startSpeed = 0f;
+            main.startSize = trailDotSize;
+            main.gravityModifier = 0f;
+            main.playOnAwake = false;
+            main.maxParticles = 4096;
+
+            ParticleSystem.EmissionModule emission = _trail.emission;
+            emission.rateOverTime = 0f;
+            emission.rateOverDistance = trailDotSpacing > 0f ? 1f / trailDotSpacing : 0f;
+
+            ParticleSystem.ShapeModule shape = _trail.shape;
+            shape.enabled = false; // 로켓 위치 그대로 한 점
+
+            var renderer = host.GetComponent<ParticleSystemRenderer>();
+            // ponytail: Shader.Find 는 에디터 프로토타입 한정 — 빌드에 넣으려면 trailMaterial 을 채운다.
+            renderer.material = trailMaterial != null
+                ? trailMaterial
+                : new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+
+            _trail.Play();
+        }
+
+        /// <summary>
+        /// 두 발사 뷰를 이번 프레임 상태에 맞춘다. 스왑은 카메라가 아니라 <b>역할</b>을 맞바꾸는 것이라
+        /// 큰 화면은 끝까지 <c>launchCam</c> 이다 — 화각을 쓰는 쪽이 vcam Lens 이고 다른 쪽이 순수
+        /// Camera 라, 두 타입에 각각 써 준다.
+        /// </summary>
+        private void ApplyLaunchViews()
+        {
+            // 궤적은 후퇴 뷰를 맡은 카메라에만 보인다. 역할이 스왑되므로 카메라에 고정 배정할 수 없어
+            // 매 프레임 다시 쓴다 — int 대입 두 번이라 캐시할 값도 아니다.
+            cam.cullingMask = TrailCullingMask(cam.cullingMask, trailLayer, _launchViewSwapped);
+            if (_pipCamera != null)
+            {
+                _pipCamera.cullingMask =
+                    TrailCullingMask(_pipCamera.cullingMask, trailLayer, !_launchViewSwapped);
+            }
+
+            float pullback = PullbackDistance(rocket.transform.position.y - _launchAltitude,
+                pullbackNearDistance, pullbackGrowth, pullbackFarDistance);
+
+            PlaceView(launchCam.transform, _launchViewSwapped ? pullback : chaseDistance);
+            if (_pipCamera != null)
+            {
+                PlaceView(_pipCamera.transform, _launchViewSwapped ? chaseDistance : pullback);
+            }
+        }
+
+        /// <summary>
+        /// 두 발사 뷰의 공통 배치. 자세는 발사 순간 방위각에 고정하고 위치는 로켓을 그대로 따라간다 —
+        /// 고도뿐 아니라 <b>좌우 드리프트도</b> 따라가므로, 편심 추력으로 로켓이 옆으로 밀려도 화면
+        /// 한가운데 남는다. 두 뷰의 차이는 거리 하나뿐이고, 상태를 두지 않으므로 스왑으로 담당 카메라가
+        /// 바뀌어도 한 프레임에 맞는다.
         /// </summary>
         private void PlaceView(Transform view, float distance)
         {
             Quaternion rotation = Quaternion.Euler(0f, _launchYaw, 0f);
+            Vector3 target = rocket.transform.position;
+            // 로켓은 물을 통과해 가라앉는다. 카메라까지 따라 들어가면 물을 아래에서 올려다보게 된다.
+            target.y = Mathf.Max(target.y, cameraFloorY);
             view.SetPositionAndRotation(
-                rocket.transform.position + rotation * new Vector3(0f, 0f, -distance), rotation);
+                target + rotation * new Vector3(0f, 0f, -distance), rotation);
         }
 
-        private float CurrentPullbackDistance() => PullbackDistance(
-            rocket.transform.position.y - _launchAltitude, cam.fieldOfView,
-            pullbackNearDistance, pullbackFarDistance);
-
         /// <summary>
-        /// 후퇴 뷰 거리. 카메라가 로켓 높이에 피치 0 으로 서 있으므로 화면이 담는 세로 절반은
-        /// <c>d · tan(FOV/2)</c> 다. 그것을 고도와 같게 두면 발사 고도의 지면 선이 프레임 아래 변에
-        /// 정확히 붙고, 로켓은 중앙에 남은 채 그림만 축소된다 — 기울임도 FOV 조작도 필요 없다.
-        /// 위 클램프의 근거는 far clip 이 아니라 <b>지면 평면 반경(200 유닛)</b> 이다. 그 밖으로 나가면
-        /// 아래 변에 지면 대신 허공이 온다.
+        /// 후퇴 뷰 거리. 고도에 비례해 계속 물러난다 — 궤적 점이 고도를 알려주므로 로켓이 작아져도
+        /// 읽히고, 대신 지나온 궤적 전체가 프레임에 들어온다.
+        /// 상한은 far clip(1000) 안에 둔다. 발사 고도 아래로 떨어져도 하한 밑으로는 붙지 않는다.
         /// </summary>
-        public static float PullbackDistance(float altitude, float verticalFov,
-            float nearDistance, float farDistance)
+        public static float PullbackDistance(float altitude, float nearDistance, float growth,
+            float farDistance)
         {
-            float fit = altitude / Mathf.Tan(verticalFov * 0.5f * Mathf.Deg2Rad);
-            return Mathf.Clamp(fit, nearDistance, farDistance);
+            return Mathf.Clamp(nearDistance + Mathf.Max(altitude, 0f) * growth, nearDistance, farDistance);
+        }
+
+        /// <summary>궤적 레이어 비트만 켜고 끈 컬링 마스크. 나머지 비트는 건드리지 않는다.</summary>
+        public static int TrailCullingMask(int cullingMask, int trailLayer, bool visible)
+        {
+            int bit = 1 << trailLayer;
+            return visible ? cullingMask | bit : cullingMask & ~bit;
         }
 
         /// <summary>큰 화면과 작은 화면의 역할을 맞바꾼다. 작은 화면 클릭이 이걸 부른다.</summary>
@@ -345,14 +438,7 @@ namespace Simulation
         {
             if (rocket.Launched)
             {
-                // 두 발사 뷰는 카메라가 아니라 '동작' 을 맞바꾼다 — 큰 화면은 끝까지 launchCam 이라
-                // Cam·Camera.rect·설계→발사 블렌드가 손대지 않아도 그대로 맞는다.
-                float pullback = CurrentPullbackDistance();
-                float main = _launchViewSwapped ? pullback : chaseDistance;
-                float pip = _launchViewSwapped ? chaseDistance : pullback;
-
-                PlaceView(launchCam.transform, main);
-                if (_pipCamera != null) PlaceView(_pipCamera.transform, pip);
+                ApplyLaunchViews();
             }
             else
             {
@@ -542,6 +628,7 @@ namespace Simulation
             _draggedCollider.enabled = true;
             _draggedCollider = null;
             HideGuides();
+            part.SetHologram(false);
 
             _spawnedFromPreset = false;
 
@@ -628,7 +715,6 @@ namespace Simulation
                 Vector3 wanted = _grabPosition + _grabAxisWorld * (t - _grabT);
                 part.position = ProjectOntoBody(SnapToGuides(wanted, _selected), _selected, _grabPosition);
                 return;
-            part.SetHologram(false);
             }
 
             if (!AngleOnPlane(_grabPosition, _grabAxisWorld, _grabReference, ray, out float angle)) return;
@@ -1105,6 +1191,9 @@ namespace Simulation
         {
             if (_selected == part) return;
 
+            if (_selected != null) _selected.SetOutline(false);
+            if (part != null) part.SetOutline(true);
+
             _selected = part;
             _mode = EditMode.None;
             _grabAxis = -1;
@@ -1144,6 +1233,3 @@ namespace Simulation
         }
     }
 }
-            if (_selected != null) _selected.SetOutline(false);
-            if (part != null) part.SetOutline(true);
-

@@ -11,8 +11,10 @@ namespace Simulation
     /// 테스트용 미션 컨트롤 뷰: `01_Main` 위에 `SimulationTest` 씬을 additive 로 얹었다 내린다.
     /// 3D 는 시뮬레이션 카메라의 뷰포트 사각형(<see cref="Camera.rect"/>)으로 화면 가운데에만 그리고,
     /// 가장자리는 <see cref="RocketDesignUI"/> 가 미션 컨트롤 모드로 만드는 UI 가 채운다.
-    /// RenderTexture 를 쓰지 않는 이유는 <c>docs/rocket-simulation.md</c> 참고 — 뷰포트 방식이면
-    /// <see cref="RocketBuilder"/> 의 집기·기즈모 좌표계가 손대지 않고 그대로 맞는다.
+    /// 이 큰 화면이 RenderTexture 를 쓰지 않는 이유는 <c>docs/rocket-simulation.md</c> 참고 —
+    /// 뷰포트 방식이면 <see cref="RocketBuilder"/> 의 집기·기즈모 좌표계가 손대지 않고 그대로 맞는다.
+    /// 발사 후 우하단 작은 화면은 예외로 RenderTexture 다 — 입력을 전혀 받지 않는 표시 전용이라
+    /// 그 근거가 걸리지 않는다.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class SimulationStageHost : MonoBehaviour
