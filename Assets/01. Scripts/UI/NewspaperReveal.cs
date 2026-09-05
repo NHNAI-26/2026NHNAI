@@ -5,6 +5,7 @@ using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace Border.UI
@@ -18,6 +19,7 @@ namespace Border.UI
         [SerializeField] private CanvasGroup backdrop;
         [SerializeField] private Image newspaperImage;
         [SerializeField] private LaunchResultMedium medium;
+        [FormerlySerializedAs("newspaperSprite")]
         [SerializeField] private Sprite presentationSprite;
         [SerializeField] private TMP_Text headlineText;
         [SerializeField] private TMP_Text editionText;
@@ -68,7 +70,7 @@ namespace Border.UI
         {
             activeSprite = sprite;
             ApplySprite();
-            Show();
+            ShowInternal(clearCloseCallback: true);
         }
 
         public void Present(LaunchNewspaperArticle article, Texture photo, Action onClosed)
@@ -91,7 +93,8 @@ namespace Border.UI
         private void ApplySprite()
         {
             if (newspaperImage == null) return;
-            newspaperImage.sprite = activeSprite != null ? activeSprite : presentationSprite;
+            Sprite sprite = activeSprite != null ? activeSprite : presentationSprite;
+            if (sprite != null) newspaperImage.sprite = sprite;
             newspaperImage.preserveAspect = true;
         }
 

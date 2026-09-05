@@ -33,47 +33,12 @@ public static class NewspaperRevealBuilder
         {
             var reveal = newspaperRoot.GetComponent<NewspaperReveal>();
             var serialized = new SerializedObject(reveal);
-            var view = (GameObject)serialized.FindProperty("view").objectReferenceValue;
-            view.GetComponent<Canvas>().sortingOrder = 30;
-            var paper = (RectTransform)serialized.FindProperty("paper").objectReferenceValue;
-            paper.anchorMin = new Vector2(0.1f, 0.025f);
-            paper.anchorMax = new Vector2(0.9f, 0.975f);
-            paper.offsetMin = paper.offsetMax = Vector2.zero;
-            var content = (RectTransform)paper.Find("Content");
-            var fitter = content.GetComponent<AspectRatioFitter>() ?? content.gameObject.AddComponent<AspectRatioFitter>();
-            fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
-            fitter.aspectRatio = sprite.rect.width / sprite.rect.height;
+            // The saved newspaper prefab is the source of truth for its original appearance.
+            // Only migrate the sprite binding; keep all layout, material and animation settings.
             serialized.FindProperty("medium").enumValueIndex = (int)LaunchResultMedium.Newspaper;
             serialized.FindProperty("presentationSprite").objectReferenceValue = sprite;
-            serialized.FindProperty("showEvent").objectReferenceValue = null;
-            TMP_Text heading = PaperText("Headline", content, font, sprite, 405, 92, 536, 94, 28, 20);
-            heading.fontStyle = FontStyles.Bold;
-            TMP_Text edition = PaperText("Edition", content, font, sprite, 252, 290, 770, 40, 14, 12);
-            TMP_Text body = PaperText("Body", content, font, sprite, 792, 362, 226, 286, 15, 12);
-            TMP_Text effects = PaperText("Effects", content, font, sprite, 262, 998, 752, 146, 15, 12);
-            var effectsBackground = EnsureRect("EffectsBackground", content);
-            PlaceOnPaper(effectsBackground, sprite, 246, 976, 788, 184);
-            var background = effectsBackground.GetComponent<Image>() ?? effectsBackground.gameObject.AddComponent<Image>();
-            background.color = new Color(0.91f, 0.88f, 0.79f, 1f);
-            background.raycastTarget = false;
-            effectsBackground.SetSiblingIndex(effects.transform.GetSiblingIndex());
-            var photoRect = EnsureRect("Photo", content);
-            PlaceOnPaper(photoRect, sprite, 407, 369, 366, 274.5f);
-            var photo = photoRect.GetComponent<RawImage>() ?? photoRect.gameObject.AddComponent<RawImage>();
-            photo.material = GetPhotoMaterial();
-            photo.raycastTarget = false;
-            var fallback = PaperText("PhotoFallback", content, font, sprite, 407, 369, 366, 274.5f, 15, 12);
-            fallback.alignment = TextAlignmentOptions.Center;
-            fallback.text = "현장 사진 수신 실패";
-            serialized.FindProperty("headlineText").objectReferenceValue = heading;
-            serialized.FindProperty("editionText").objectReferenceValue = edition;
-            serialized.FindProperty("articleText").objectReferenceValue = body;
-            serialized.FindProperty("effectsText").objectReferenceValue = effects;
-            serialized.FindProperty("photoImage").objectReferenceValue = photo;
-            serialized.FindProperty("photoFallbackText").objectReferenceValue = fallback;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             reveal.SetSprite(sprite);
-            photo.gameObject.SetActive(false);
             PrefabUtility.SaveAsPrefabAsset(newspaperRoot, NewspaperPrefabPath);
         }
         finally { PrefabUtility.UnloadPrefabContents(newspaperRoot); }

@@ -89,7 +89,7 @@ namespace Border.Research.Tests
                     visibility: TestVisibility.Public,
                     finalMissionWon: false,
                     deadlineMissed: true,
-                    grade: ResearchGrade.F), "저전력 구역 체류");
+                    succeeded: false), "저전력 구역 체류");
 
             Assert.That(privateArticle.Edition, Is.EqualTo("2024년 2분기 내부 메일"));
             Assert.That(finalArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
@@ -367,6 +367,26 @@ namespace Border.Research.Tests
             Assert.That(status, Does.Not.Contain("예상 이벤트 효과"));
         }
 
+        [Test]
+        public void SavedNewspaperPrefab_PreservesOriginalSpriteAfterDeserialization()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/NewspaperReveal.prefab");
+            GameObject instance = UnityEngine.Object.Instantiate(prefab);
+            createdObjects.Add(instance);
+            NewspaperReveal reveal = instance.GetComponent<NewspaperReveal>();
+            Sprite expected = AssetDatabase.LoadAllAssetsAtPath(
+                    "Assets/05. Arts/UI/Newspaper/newspaper-original-transparent.png")
+                .OfType<Sprite>().Single();
+
+            Assert.That(GetPrivateField<Sprite>(reveal, "presentationSprite"), Is.SameAs(expected),
+                "The original newspaperSprite serialized reference must migrate to presentationSprite.");
+            typeof(NewspaperReveal).GetMethod("OnValidate", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(reveal, null);
+            Image paperImage = GetPrivateField<Image>(reveal, "newspaperImage");
+            Assert.That(paperImage.sprite, Is.SameAs(expected));
+            Assert.That(paperImage.preserveAspect, Is.True);
+        }
+
         private ResearchResultReportController CreateReport()
         {
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ReportPrefabPath);
@@ -382,7 +402,7 @@ namespace Border.Research.Tests
             TestVisibility visibility = TestVisibility.Public,
             bool finalMissionWon = false,
             bool deadlineMissed = false,
-            ResearchGrade grade = ResearchGrade.B)
+            bool succeeded = true)
         {
             return new ResearchLaunchResultData(
                 missionId,
@@ -392,20 +412,13 @@ namespace Border.Research.Tests
                 800,
                 350,
                 visibility,
-                50,
-                80,
-                70,
-                80,
-                10,
-                10,
-                42,
-                grade,
+                succeeded,
                 600,
                 75,
                 finalMissionWon,
                 deadlineMissed,
                 outcomeEvent,
-                LaunchTerminationReason.Succeeded);
+                succeeded ? LaunchTerminationReason.Succeeded : LaunchTerminationReason.Unknown);
         }
 
         private static IEnumerable<LaunchOutcomeEventResult> AllLaunchOutcomeEvents()
