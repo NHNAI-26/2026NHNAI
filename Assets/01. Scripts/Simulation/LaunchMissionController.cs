@@ -17,7 +17,7 @@ namespace Simulation
         [SerializeField, Min(0.1f)] private float noLiftoffTimeout = 10f;
         [SerializeField] private UnityEvent explosionRequested = new();
         [SerializeField] private bool waitForExplosionCompletion;
-        [SerializeField, Min(0f)] private float placeholderExplosionSeconds = 0.5f;
+        [SerializeField, Min(0f)] private float placeholderExplosionSeconds = 1.2f;
         private Rocket rocket;
         private Rigidbody body;
         private Vector3 origin;
@@ -44,6 +44,8 @@ namespace Simulation
         public void Initialize(LaunchMissionId mission, Func<bool> authorize, Action<bool> onCompleted)
         {
             rocket = GetComponent<Rocket>();
+            rocket.OverheatExplosionStarted -= HandleOverheat;
+            rocket.OverheatExplosionStarted += HandleOverheat;
             body = GetComponent<Rigidbody>();
             origin = transform.position;
             var rules = new LaunchMissionRules
@@ -83,9 +85,27 @@ namespace Simulation
         {
             if (!CanSelfDestruct) return;
             evaluator.SelfDestruct();
+            BeginExplosion("자폭 · 미션 실패");
+        }
+
+        private void HandleOverheat()
+        {
+            if (returning || IsExploding || evaluator == null) return;
+            evaluator.Overheat();
+            BeginExplosion("과열 폭발 · 미션 실패");
+        }
+
+        private void OnDestroy()
+        {
+            if (rocket != null) rocket.OverheatExplosionStarted -= HandleOverheat;
+        }
+
+        private void BeginExplosion(string status)
+        {
             IsExploding = true;
-            Status = "자폭 · 미션 실패";
-            rocket.StopFlight();
+            explosionTime = 0f;
+            Status = status;
+            rocket.Explode();
             explosionRequested.Invoke();
         }
 
@@ -99,6 +119,7 @@ namespace Simulation
         {
             if (returning) return;
             returning = true;
+            GetComponent<LaunchPhotoCapture>()?.CaptureOutcome();
             rocket.StopFlight();
             Status = success ? "미션 성공" : evaluator.FailureReason;
             completed?.Invoke(success);

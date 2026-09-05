@@ -7,6 +7,7 @@ namespace Border.Research
         NoLiftoff,
         GroundCrash,
         Splashdown,
-        SelfDestruct
+        SelfDestruct,
+        Overheat
     }
 }

@@ -9,6 +9,13 @@ namespace Simulation
     public sealed class Rocket : MonoBehaviour
     {
         [SerializeField] private int launchSeed = 20260904;
+        [SerializeField] private ParticleSystem explosionPrefab;
+        private ParticleSystem activeExplosion;
+        private Renderer[] explosionRenderers;
+        private bool[] rendererVisibility;
+        public bool Exploded { get; private set; }
+        public event System.Action OverheatExplosionStarted;
+        public event System.Action<bool> ExplosionPhotoRequested;
         // ponytail: 계수 하나를 모든 엔진이 공유한다. 프리셋마다 탱크 밀도를 다르게 하고 싶어지면 그때
         // EngineStatsSO 필드로 내린다 — CreateRuntimeCopy 와 리서치 브리지도 같이 넓어진다.
         [SerializeField] private float tankMassPerFuel = 0.25f; // 연료 1kg 당 탱크 무게(kg)
@@ -186,8 +193,39 @@ namespace Simulation
             _body.isKinematic = true;
         }
 
+        public void Explode()
+        {
+            if (Exploded || !Launched) return;
+            Exploded = true;
+            if (explosionPrefab == null) ExplosionPhotoRequested?.Invoke(false);
+            StopFlight();
+            ThrustFraction = 0f;
+            explosionRenderers = GetComponentsInChildren<Renderer>(true);
+            rendererVisibility = new bool[explosionRenderers.Length];
+            for (int i = 0; i < explosionRenderers.Length; i++)
+            {
+                rendererVisibility[i] = explosionRenderers[i].enabled;
+                explosionRenderers[i].enabled = false;
+            }
+            if (explosionPrefab != null)
+            {
+                activeExplosion = Instantiate(explosionPrefab, transform.position, Quaternion.identity);
+                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(activeExplosion.gameObject, gameObject.scene);
+                activeExplosion.Play(true);
+                ExplosionPhotoRequested?.Invoke(true);
+                Destroy(activeExplosion.gameObject, 3f);
+            }
+        }
+
         public void ResetFlight(Vector3 position, Quaternion rotation)
         {
+            if (activeExplosion != null) Destroy(activeExplosion.gameObject);
+            if (explosionRenderers != null)
+                for (int i = 0; i < explosionRenderers.Length; i++)
+                    if (explosionRenderers[i] != null) explosionRenderers[i].enabled = rendererVisibility[i];
+            explosionRenderers = null;
+            rendererVisibility = null;
+            Exploded = false;
             _groundContacts.Clear();
             foreach (RocketPart engine in _engines) engine.Shutdown();
             _body.isKinematic = false;
@@ -237,6 +275,8 @@ namespace Simulation
                     Overheated = true;
                     ThrustFraction = 0f;
                     Log.D($"Overheat: {engine.name} hit {EngineStatsSO.CriticalTemperature} °C", this);
+                    Explode();
+                    OverheatExplosionStarted?.Invoke();
                     return;
                 }
 

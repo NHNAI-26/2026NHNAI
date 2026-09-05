@@ -191,6 +191,13 @@ namespace Simulation
             return Outcome;
         }
 
+        public LaunchMissionOutcome Overheat()
+        {
+            if (Outcome == LaunchMissionOutcome.Running)
+                Fail("엔진 과열로 로켓이 폭발했습니다.", LaunchTerminationReason.Overheat);
+            return Outcome;
+        }
+
         public static string GetObjectiveDescription(LaunchMissionId missionId, LaunchMissionRules rules = null)
         {
             ValidateMission(missionId);
