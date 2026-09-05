@@ -104,7 +104,7 @@ namespace Border.Research
                 case LaunchOutcomeEventId.FinalProof:
                     return "적게 태우고, 끝내 증명했다";
                 case LaunchOutcomeEventId.FinalFailure:
-                    return "끝내 낮은 불꽃은 달에 닿지 못했다";
+                    return "세금만 태운 8년, 책임자 구속";
                 default:
                     return succeeded ? "발사 성공 확인" : "발사 실패 확인";
             }
@@ -199,7 +199,7 @@ namespace Border.Research
                 case LaunchOutcomeEventId.FinalProof:
                     return "저전력 검증을 통과하며 아르테미스 발사 체계가 최종 인정을 받았다.";
                 case LaunchOutcomeEventId.FinalFailure:
-                    return "저전력 검증은 최종 통과 기준에 미치지 못했다. 남은 기록은 다음 판단 자료로 넘겨졌다.";
+                    return "감사원은 이 계획을 예산 낭비로 결론지었고, 검찰은 책임자를 구속 기소했다. 남은 설비는 매각 절차에 들어갔다.";
                 default:
                     return string.IsNullOrWhiteSpace(fallback) ? "추가 사건은 기록되지 않았다." : fallback;
             }

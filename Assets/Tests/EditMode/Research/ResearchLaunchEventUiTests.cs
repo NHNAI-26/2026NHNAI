@@ -55,7 +55,7 @@ namespace Border.Research.Tests
                 { LaunchOutcomeEventId.UsefulFailureData, "깨진 기록에서 멀쩡한 답 나왔다" },
                 { LaunchOutcomeEventId.Whistleblower, "관계자, \"비리 관계 있다\" 밝혀" },
                 { LaunchOutcomeEventId.FinalProof, "적게 태우고, 끝내 증명했다" },
-                { LaunchOutcomeEventId.FinalFailure, "끝내 낮은 불꽃은 달에 닿지 못했다" },
+                { LaunchOutcomeEventId.FinalFailure, "세금만 태운 8년, 책임자 구속" },
             };
 
             foreach (LaunchOutcomeEventResult outcomeEvent in AllLaunchOutcomeEvents())

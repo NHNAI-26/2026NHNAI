@@ -992,6 +992,14 @@ namespace Border.Research
                 return;
             }
 
+            // 실패 엔딩은 배드엔딩 시네마틱이 가져간다(신문 → 페이드 → 타이핑 대사 → 타이틀).
+            // 플레이 모드가 아니면 Play 가 null 이라 아래 통계 패널로 그대로 떨어진다.
+            if (model != null && !model.GameWon && SadEndingSequence.Play() != null)
+            {
+                RequestedScreenName = "SadEnding";
+                return;
+            }
+
             if (endingScreen == null)
             {
                 Debug.LogError("Research ending prefab must be assigned in the scene.", this);
