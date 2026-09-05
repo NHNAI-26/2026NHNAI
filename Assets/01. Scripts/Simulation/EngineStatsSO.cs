@@ -12,8 +12,8 @@ namespace Simulation
         /// <summary>모든 엔진이 공유하는 포화 한계 온도(°C). 넘으면 과열로 발사가 끝난다.</summary>
         public const float CriticalTemperature = 300f;
 
-        /// <summary>출력 1N 당 초당 발열(°C/s). 기준 프리셋 1200N 에서 120°C/s.</summary>
-        public const float HeatPerNewton = 0.10f;
+        /// <summary>출력 1N 당 초당 발열(°C/s). 기준 프리셋 1200N 에서 60°C/s.</summary>
+        public const float HeatPerNewton = 0.05f;
 
         /// <summary>출력 1N 당 초당 연료 소모(kg/s). 기준 프리셋 1200N 이 20kg/s 를 태우도록 잡았다.</summary>
         public const float FuelPerNewton = 20f / 1200f;

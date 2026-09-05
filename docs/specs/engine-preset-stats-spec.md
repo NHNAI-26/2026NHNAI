@@ -258,6 +258,13 @@ temperature >= CriticalTemperature  ->  overheat
 | OI-016 | unresolved item | Whether an overheat destroys one engine or fails the launch | GDD 08 §9 permits only one major accident | open | R-013, AR-011, AR-012 |
 | OI-017 | unresolved item | Does thrust follow the rocket's up or each part's own up | GDD 07 §5 fixes it to the rocket's up, and the heat model assumes applied output along that axis. The code is currently half-changed (SF-022), so placement and force direction can disagree | open | R-007, SF-022, RK-011 |
 
+## Implementation Record (rev 7)
+
+Heat balance was normalized back to the documented value: `EngineStatsSO.HeatPerNewton = 0.05`.
+The runtime research scaling, per-engine temperature accumulation, shared `300 °C` critical threshold,
+and whole-launch overheat failure behavior are unchanged. A regression test covers the `56 / 98 / 87 / 41`
+research-stat case so high cooling no longer explodes before fuel depletion.
+
 ## Implementation Record (rev 6)
 
 Landed under UD-018. Everything below is written but **neither compiled nor tested** — the Editor holds

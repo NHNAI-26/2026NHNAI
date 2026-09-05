@@ -57,12 +57,12 @@ namespace Simulation.Tests
         [Test]
         public void Temperature_RisesByHeatMinusCooling_ThenOverheats()
         {
-            // 발열 120, 냉각 10: 초당 110도 상승.
+            // 발열 60, 냉각 10: 초당 50도 상승.
             RocketPart part = CreateEngine(Stats(fuel: 200f, cooling: 10f, output: BaselineOutput, ignition: 100f));
             part.Prepare(new DeterministicRng());
 
             part.Tick(1f);
-            Assert.AreEqual(110f, part.Temperature, 1e-3f, "초당 발열 − 냉각 만큼 쌓여야 한다.");
+            Assert.AreEqual(50f, part.Temperature, 1e-3f, "초당 발열 − 냉각 만큼 쌓여야 한다.");
             Assert.IsFalse(part.Overheated);
 
             for (int i = 0; i < 5; i++) part.Tick(1f);
@@ -80,11 +80,11 @@ namespace Simulation.Tests
 
             part.Tick(1f);
             part.Tick(1f);
-            Assert.AreEqual(220f, part.Temperature, 1e-3f);
+            Assert.AreEqual(100f, part.Temperature, 1e-3f);
             Assert.IsFalse(part.HasFuel);
 
             Assert.IsFalse(part.Tick(1f), "연료가 없으면 추력이 없다.");
-            Assert.AreEqual(210f, part.Temperature, 1e-3f, "꺼진 엔진은 발열이 0 이라 냉각만큼 식는다.");
+            Assert.AreEqual(90f, part.Temperature, 1e-3f, "꺼진 엔진은 발열이 0 이라 냉각만큼 식는다.");
 
             for (int i = 0; i < 25; i++) part.Tick(1f);
             Assert.AreEqual(0f, part.Temperature, 1e-4f, "온도는 0 아래로 내려가지 않는다.");
@@ -593,8 +593,8 @@ namespace Simulation.Tests
 
             Assert.AreEqual(20f, 100f - full.Remaining, 1e-3f);
             Assert.AreEqual(10f, 100f - half.Remaining, 1e-3f, "반만 내는 추력은 연료도 반만 태운다.");
-            Assert.AreEqual(120f, full.Temperature, 1e-3f);
-            Assert.AreEqual(60f, half.Temperature, 1e-3f, "발열도 같은 배율을 타야 램프가 열 이득이 된다.");
+            Assert.AreEqual(60f, full.Temperature, 1e-3f);
+            Assert.AreEqual(30f, half.Temperature, 1e-3f, "발열도 같은 배율을 타야 램프가 열 이득이 된다.");
         }
 
         [Test]
@@ -856,6 +856,36 @@ namespace Simulation.Tests
             }
             Assert.AreEqual(expected,
                 Track(ResearchEnginePresetRuntimeBridge.BuildRuntimePreset(0, null, state)).IgnitionReliability);
+        }
+
+        [TestCase(100f, 60f, 1200f)]
+        [TestCase(220f, 62f, 1150f)]
+        [TestCase(120f, 80f, 2400f)]
+        [TestCase(110f, 68f, 1300f)]
+        public void RuntimeBridge_HighCoolingResearchSurvivesUntilFuelRunsOut(
+            float baseFuel,
+            float baseCooling,
+            float baseOutput)
+        {
+            var state = new EnginePresetState
+            {
+                FuelCapacity = 56,
+                Cooling = 98,
+                MaxOutput = 87,
+                IgnitionReliability = 100,
+            };
+            EngineStatsSO runtime = Track(ResearchEnginePresetRuntimeBridge.BuildRuntimePreset(
+                0,
+                Stats(baseFuel, baseCooling, baseOutput, 100f),
+                state));
+            RocketPart part = CreateEngine(runtime);
+            part.Prepare(new DeterministicRng());
+
+            for (int i = 1; i <= 2000 && part.HasFuel && !part.Overheated; i++)
+                part.Tick(0.02f, Rocket.RampFactor(i * 0.02f, 1.2f));
+
+            Assert.IsFalse(part.Overheated, "냉각 98 연구 프리셋은 연료 소진 전 과열 폭발하지 않아야 한다.");
+            Assert.IsFalse(part.HasFuel);
         }
 
         [TestCase(EngineStatId.FuelCapacity)]
@@ -1146,9 +1176,10 @@ namespace Simulation.Tests
         }
 
         [TestCase(100f, 60f, 1200f, false)]
-        [TestCase(90f, 55f, 1800f, true)]
-        [TestCase(120f, 80f, 2400f, true)]
+        [TestCase(90f, 55f, 1800f, false)]
+        [TestCase(120f, 80f, 2400f, false)]
         [TestCase(90f, 100f, 1800f, false)]
+        [TestCase(200f, 10f, 2400f, true)]
         public void HeatBalance_WithIgnitionRamp_CoolingPreventsExplosion(float fuel, float cooling, float output, bool expected)
         {
             RocketPart part = CreateEngine(Stats(fuel, cooling, output, 100f));
