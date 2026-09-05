@@ -31,6 +31,14 @@ namespace Simulation
         [Tooltip("몸통 아래쪽이 부푸는 폭. 그 높이의 반지름에 대한 비율이라 메시 크기와 무관하다.")]
         [SerializeField, Range(0f, 0.5f)] private float bounceAmplitude = 0.25f;
 
+        [Header("Assisted liftoff")]
+        [Tooltip("클램프 해제 위치에서 월드 위쪽으로 유도 상승할 높이. 0이면 바로 물리를 적용한다.")]
+        [SerializeField, Min(0f)] private float assistedLiftHeight = 3f;
+        [Tooltip("목표 높이까지 정지 상태에서 서서히 가속하는 시간.")]
+        [SerializeField, Min(0f)] private float assistedLiftSeconds = 2.5f;
+        [Tooltip("유도 상승 후 엔진 힘과 중력을 완전히 적용하기까지 걸리는 시간.")]
+        [SerializeField, Min(0f)] private float physicsBlendSeconds = 1f;
+
         [Header("Splashdown")]
         [Tooltip("수면 높이(월드 y). 씬의 Ground 와 같은 값이어야 한다.")]
         [SerializeField] private float waterLevel = -6.71f;
@@ -58,6 +66,14 @@ namespace Simulation
         private float _holdElapsed;
         private float _ignitedFraction;
         private Material _bounceMaterial;
+        private enum LiftPhase { None, Guided, Blending }
+        private LiftPhase _liftPhase;
+        private Vector3 _liftOrigin;
+        private Vector3 _liftVelocity;
+        private float _liftElapsed;
+        private float _physicsBlendElapsed;
+
+        public bool LiftAssistActive => _liftPhase != LiftPhase.None;
 
         public bool Launched { get; private set; }
         public System.Func<bool> AuthorizeLaunch { get; set; }
@@ -228,10 +244,72 @@ namespace Simulation
         {
             SetWobble(0f);
             _sinceLaunch = 0f;
+            _liftElapsed = _physicsBlendElapsed = 0f;
+            _liftVelocity = Vector3.zero;
+            _liftOrigin = _body.position;
+            bool hasUpwardEngine = _engines.Exists(engine => engine.Ignited && engine.HasFuel
+                && engine.Output > 0f && Vector3.Dot(engine.transform.up, Vector3.up) > 0f);
+            if (assistedLiftHeight > 0f && assistedLiftSeconds > 0f && hasUpwardEngine)
+            {
+                _liftPhase = LiftPhase.Guided;
+                _body.isKinematic = true;
+                return;
+            }
+
+            _liftPhase = LiftPhase.None;
+            ReleaseLift();
+        }
+
+        private void ReleaseLift()
+        {
             _body.isKinematic = false;
             // 접지 속도가 90 m/s 를 넘는다. 0.02초 스텝이면 한 번에 1.8 m 이동이라
             // Discrete 판정으로는 두께 0 인 지면 평면을 그대로 통과한다.
             _body.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            _body.linearVelocity = _liftVelocity;
+            _body.angularVelocity = Vector3.zero;
+        }
+
+        private float UpdateLiftBlend(float deltaTime)
+        {
+            if (_liftPhase == LiftPhase.Guided && _liftElapsed >= assistedLiftSeconds)
+            {
+                ReleaseLift();
+                _liftPhase = physicsBlendSeconds > 0f ? LiftPhase.Blending : LiftPhase.None;
+            }
+
+            if (_liftPhase == LiftPhase.Guided) return 0f;
+            if (_liftPhase != LiftPhase.Blending) return 1f;
+
+            _physicsBlendElapsed += deltaTime;
+            float blend = RampFactor(_physicsBlendElapsed, physicsBlendSeconds);
+            if (_physicsBlendElapsed >= physicsBlendSeconds) _liftPhase = LiftPhase.None;
+            return blend;
+        }
+
+        private void ApplyLiftAssist(float deltaTime, float physicsBlend, bool hasUpwardEngine)
+        {
+            if (_liftPhase == LiftPhase.None) return;
+            if (!hasUpwardEngine)
+            {
+                if (_liftPhase == LiftPhase.Guided) ReleaseLift();
+                _liftPhase = LiftPhase.None;
+                return;
+            }
+
+            float acceleration = 2f * assistedLiftHeight / (assistedLiftSeconds * assistedLiftSeconds);
+            if (_liftPhase == LiftPhase.Guided)
+            {
+                _liftElapsed = Mathf.Min(_liftElapsed + deltaTime, assistedLiftSeconds);
+                float progress = _liftElapsed / assistedLiftSeconds;
+                _body.MovePosition(_liftOrigin + Vector3.up * (assistedLiftHeight * progress * progress));
+                _liftVelocity = Vector3.up * (acceleration * _liftElapsed);
+                return;
+            }
+
+            // 엔진 힘과 중력은 같은 배율로 넘긴다. 기존 상승 속도를 유지한 채 보조 가속만 줄인다.
+            Vector3 gravity = _body.useGravity ? Physics.gravity : Vector3.zero;
+            _body.AddForce((Vector3.up * acceleration - gravity) * (1f - physicsBlend), ForceMode.Acceleration);
         }
 
         /// <summary>
@@ -293,6 +371,8 @@ namespace Simulation
         public void StopFlight()
         {
             FlightStopped = true;
+            _liftPhase = LiftPhase.None;
+            _liftVelocity = Vector3.zero;
             // 홀드 중 자폭도 여기를 지난다 — 끊지 않으면 로켓이 클램프에 갇힌 채로 남는다.
             Holding = false;
             HoldProgress = 0f;
@@ -358,6 +438,9 @@ namespace Simulation
             _ignitedFraction = 0f;
             _maxThrust = 0f;
             _liveEngines = 0;
+            _liftPhase = LiftPhase.None;
+            _liftElapsed = _physicsBlendElapsed = 0f;
+            _liftVelocity = Vector3.zero;
             _engines.Clear();
         }
 
@@ -376,12 +459,11 @@ namespace Simulation
                 return;
             }
 
-            // 점화 직후에는 추력이 0 에서 올라온다. 그동안 로켓은 발사대 데크 위에 그대로 앉아 있다 —
-            // 연소와 발열도 같은 배율을 타므로(RocketPart.Tick) 패드 위에서 연료를 헛되이 버리지 않고,
-            // 잃는 것은 늦게 뜬 만큼의 중력 손실뿐이다.
+            float physicsBlend = UpdateLiftBlend(Time.fixedDeltaTime);
             _sinceLaunch += Time.fixedDeltaTime;
             float ramp = RampFactor(_sinceLaunch, ignitionRampSeconds);
             float applied = 0f;
+            bool hasUpwardEngine = false;
 
             for (int i = 0; i < _engines.Count; i++)
             {
@@ -404,8 +486,11 @@ namespace Simulation
                 // 무게중심이 아니라 엔진 위치에 힘을 건다. 비대칭 배치가 그대로 토크가 된다.
                 // 방향은 로켓이 아니라 엔진 자신의 up — 설계 단계에서 회전시킨 자세가 곧 추력 방향이다.
                 float output = engine.OutputAt(ramp);
-                _body.AddForceAtPosition(engine.transform.up * output, engine.transform.position);
+                if (!_body.isKinematic)
+                    _body.AddForceAtPosition(engine.transform.up * (output * physicsBlend), engine.transform.position);
                 applied += output;
+                hasUpwardEngine |= engine.HasFuel && output > 0f
+                    && Vector3.Dot(engine.transform.up, Vector3.up) > 0f;
 
                 if (engine.HasFuel) continue;
 
@@ -415,6 +500,7 @@ namespace Simulation
                     : $"Fuel out: {engine.name}, all engines dry", this);
             }
 
+            ApplyLiftAssist(Time.fixedDeltaTime, physicsBlend, hasUpwardEngine);
             ThrustFraction = _maxThrust > 0f ? applied / _maxThrust : 0f;
         }
     }

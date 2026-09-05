@@ -187,13 +187,56 @@ namespace Simulation.Tests
 
             Assert.That(rocket.Holding, Is.False, "홀드는 제한 시간 안에 끝나야 한다.");
             Assert.That(rocket.Lifted, Is.True);
-            Assert.That(body.isKinematic, Is.False, "클램프가 풀리면 물리가 로켓을 넘겨받는다.");
+            Assert.That(body.isKinematic, Is.True, "클램프가 풀린 뒤에는 유도 상승을 시작한다.");
+            Assert.That(rocket.LiftAssistActive, Is.True);
 
             // 클램프가 풀린 첫 스텝은 램프가 0 부터 다시 오르므로 홀드 끝의 세기보다 훨씬 약하다.
             float atRelease = rocket.ThrustFraction;
             Invoke(rocket, "FixedUpdate");
             Assert.That(rocket.ThrustFraction, Is.LessThan(atRelease * 0.1f),
                 "이륙 추력 램프는 클램프 해제 시점부터 다시 시작한다.");
+        }
+
+        [TestCase(0f, 100f, 1200f)]
+        [TestCase(100f, 0f, 1200f)]
+        [TestCase(100f, 100f, 0f)]
+        public void AssistedLift_RequiresIgnitionFuelAndUpwardOutput(float ignition, float fuel, float output)
+        {
+            var host = Track(new GameObject("unpowered rocket"));
+            var rocket = host.AddComponent<Rocket>();
+            Invoke(rocket, "Awake");
+            SetField(rocket, "holdSeconds", 0f);
+            var engine = CreateEngine(Stats(fuel, 1000f, output, ignition));
+            rocket.Attach(engine, Vector3.zero);
+            rocket.Launch();
+            Assert.IsFalse(rocket.LiftAssistActive);
+            Assert.IsFalse(host.GetComponent<Rigidbody>().isKinematic);
+        }
+
+        [Test]
+        public void AssistedLift_FuelOutCancelsGuide_AndResetAllowsAnotherLaunch()
+        {
+            var host = Track(new GameObject("assisted rocket"));
+            var rocket = host.AddComponent<Rocket>();
+            Invoke(rocket, "Awake");
+            SetField(rocket, "holdSeconds", 0f);
+            SetField(rocket, "ignitionRampSeconds", 0f);
+            var engine = CreateEngine(Stats(0.01f, 1000f, 1200f, 100f));
+            rocket.Attach(engine, Vector3.zero);
+            rocket.Launch();
+            Assert.IsTrue(rocket.LiftAssistActive);
+            Invoke(rocket, "FixedUpdate");
+            Assert.IsFalse(engine.HasFuel);
+            Assert.IsFalse(rocket.LiftAssistActive);
+            Assert.IsFalse(host.GetComponent<Rigidbody>().isKinematic);
+            rocket.StopFlight();
+            rocket.ResetFlight(Vector3.up * 10f, Quaternion.identity);
+            engine.ApplyPreset(Stats(100f, 1000f, 1200f, 100f));
+            rocket.Launch();
+            Assert.IsTrue(rocket.LiftAssistActive);
+            rocket.StopFlight();
+            Assert.IsFalse(rocket.LiftAssistActive);
+            Assert.IsTrue(host.GetComponent<Rigidbody>().isKinematic);
         }
 
         [Test]

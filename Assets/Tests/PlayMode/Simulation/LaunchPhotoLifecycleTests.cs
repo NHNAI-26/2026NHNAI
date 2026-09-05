@@ -91,6 +91,8 @@ namespace Simulation.Tests
         {
             ResearchFlowSession session = BeginSessionLaunch();
             Rocket rocket = CreateRocketWithCapture(session, out _, out _);
+            // 결과 사진의 전달 순서를 검사하므로 준비 홀드를 생략한다.
+            typeof(Rocket).GetField("holdSeconds", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(rocket, 0f);
             var controller = rocket.gameObject.AddComponent<LaunchMissionController>();
             bool callbackObservedPhoto = false;
             controller.Initialize(LaunchMissionId.LowAltitude, () => true, success =>
