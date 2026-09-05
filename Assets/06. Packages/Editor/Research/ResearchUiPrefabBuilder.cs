@@ -151,7 +151,11 @@ namespace Border.Research.Editor
 
         private static void AddEngineNameEditor(GameObject card)
         {
-            if (card.GetComponent<EnginePresetNameEditor>() != null) return;
+            if (card.GetComponent<EnginePresetNameEditor>() != null)
+            {
+                LayoutEngineNameEditor(card);
+                return;
+            }
             Transform content = card.transform.Find("Content");
             HorizontalLayoutGroup horizontal = content.GetComponent<HorizontalLayoutGroup>();
             if (horizontal != null) Object.DestroyImmediate(horizontal);
@@ -190,6 +194,34 @@ namespace Border.Research.Editor
             label.fontSize = 11f;
             card.AddComponent<EnginePresetNameEditor>().Configure(title, input, rename, label);
             inputRect.gameObject.SetActive(false);
+            LayoutEngineNameEditor(card);
+        }
+
+        public static void LayoutEngineNameEditor(GameObject card)
+        {
+            if (card.GetComponent<EnginePresetNameEditor>() == null) return;
+            Transform content = card.transform.Find("Content");
+            if (content == null) return;
+            HorizontalLayoutGroup horizontal = content.GetComponent<HorizontalLayoutGroup>();
+            if (horizontal != null) Object.DestroyImmediate(horizontal);
+            Stretch((RectTransform)content, 7f);
+            RectTransform icon = content.Find("EngineIcon") as RectTransform;
+            if (icon != null)
+            {
+                icon.anchorMin = icon.anchorMax = new Vector2(0f, 0.5f);
+                icon.pivot = new Vector2(0f, 0.5f);
+                icon.anchoredPosition = Vector2.zero;
+                icon.sizeDelta = new Vector2(30f, 30f);
+            }
+            foreach (string name in new[] { "Title", "Detail", "NameInput" })
+            {
+                RectTransform rect = content.Find(name) as RectTransform;
+                if (rect == null) continue;
+                bool detail = name == "Detail";
+                SetNameRect(rect, detail ? Vector2.zero : new Vector2(0f, 0.42f),
+                    detail ? new Vector2(1f, 0.42f) : Vector2.one, -48f);
+                rect.offsetMin = new Vector2(38f, 0f);
+            }
         }
 
         private static void SetNameRect(RectTransform rect, Vector2 min, Vector2 max, float right)
