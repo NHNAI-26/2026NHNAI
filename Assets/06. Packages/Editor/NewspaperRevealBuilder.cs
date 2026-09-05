@@ -29,7 +29,6 @@ public static class NewspaperRevealBuilder
 
     private static void MigrateMissingMail()
     {
-        if (EditorApplication.isPlayingOrWillChangePlaymode) return;
         if (EditorApplication.isCompiling || EditorApplication.isUpdating)
         {
             EditorApplication.delayCall += MigrateMissingMail;
@@ -46,6 +45,7 @@ public static class NewspaperRevealBuilder
             UpdateMailReadability();
             return;
         }
+        if (EditorApplication.isPlayingOrWillChangePlaymode) return;
         ApplyLaunchNewspaper();
         Debug.Log("Created and connected the missing MailReveal prefab for private launch results.");
     }
@@ -69,7 +69,7 @@ public static class NewspaperRevealBuilder
             var effects = (TMP_Text)serialized.FindProperty("effectsText").objectReferenceValue;
             var background = (RectTransform)serialized.FindProperty("effectsBackground").objectReferenceValue;
             if (effects != null && background != null
-                && (effects.color == new Color(0.08f, 0.075f, 0.065f, 1f)
+                && (effects.color == Color.black || effects.color == new Color(0.08f, 0.075f, 0.065f, 1f)
                     || effects.transform.GetSiblingIndex() < background.GetSiblingIndex()))
             {
                 ConfigureMailEffects(effects, background);
@@ -92,7 +92,13 @@ public static class NewspaperRevealBuilder
 
     private static void ConfigureMailEffects(TMP_Text effects, RectTransform background)
     {
-        effects.color = Color.black;
+        effects.color = Color.white;
+        effects.enableVertexGradient = false;
+        effects.fontStyle |= FontStyles.Bold;
+        effects.fontSize = 17f;
+        effects.fontSizeMax = 17f;
+        effects.fontSizeMin = 12f;
+        background.GetComponent<Image>().color = new Color(0.04f, 0.08f, 0.16f, 1f);
         // A panel after the text in sibling order paints over the text.
         if (effects.transform.GetSiblingIndex() < background.GetSiblingIndex())
             effects.transform.SetSiblingIndex(background.GetSiblingIndex());
