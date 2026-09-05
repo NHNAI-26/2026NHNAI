@@ -386,7 +386,17 @@ Console 오류 0건.
   잠그고, `MenuUiPrefabBuilder.InstallTitleSettings` 가 SettingsButton 을 NewGameButton −130 위치로
   재생성한다. 배치를 바꿀 때 이 두 곳을 같이 본다.
 
-**검증하지 않은 것**: BGM. 타이틀 씬에는 `AudioListener` 가 없어 소리를 넣으려면 그것부터 추가해야 한다.
+**검증하지 않은 것**: BGM. 타이틀의 효과음과 `AudioListener` 처리는 아래 효과음 구현 항목에 반영했다.
+
+### 오프닝 효과음 (2026-09-06)
+
+- `TitleMenu`는 기존 게임의 공간 효과음 `RocketLoop`를 4개 동시에 재생한다. `rocketSoundTarget`이 지정되지 않으면 같은 씬의 루트 `TitleRocket`을 찾아 연결한다.
+- 타이틀 진입 시 리스너가 없으면 메인 카메라에 `AudioListener`를 추가한다. 이때 추가한 리스너만 타이틀이 파괴될 때 제거한다.
+- 게임 시작·설정·게임 종료 버튼은 동작을 처리하기 전에 `click`을 한 번 재생한다. 해당 버튼에는 런타임에 `UIManualClickSound`를 붙여 공통 버튼 훅과의 중복 재생을 막는다. 설정창 내부 버튼은 기존 공통 훅을 사용한다.
+- 종료는 클릭음 재생이 끝난 뒤 실행한다. 새 게임의 클릭음은 씬 전환에도 유지되는 `SoundManager`에서 계속 재생된다.
+- 타이틀 비활성화·씬 전환 시 로켓 루프 4개를 정지하고, 다시 활성화하면 4개만 재생한다. 다른 효과음은 정지하지 않는다.
+- 회귀 테스트: `Assets/Tests/PlayMode/TitleAudioTests.cs`에 루프 개수, 공간 설정, 클릭 중복 방지, 비활성화·재활성화·파괴 시 정리를 확인하는 테스트를 추가했다.
+- 검증: Unity의 기존 컴파일 설정으로 `Border` 어셈블리를 임시 경로에 별도 컴파일했다. 사용자 Play Mode를 유지하기 위해 Unity 내 재생 테스트와 실제 청취 검증은 실행하지 않았다.
 
 ### rev 8 산출물 (배경 이식 · 글자 단위 떨림)
 

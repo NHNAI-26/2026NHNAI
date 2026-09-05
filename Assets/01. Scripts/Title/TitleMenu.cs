@@ -1,3 +1,6 @@
+using System.Collections;
+using Border.Audio;
+using Border.UI;
 using Border.Settings;
 using Border.Research;
 using UnityEngine;
@@ -15,13 +18,19 @@ namespace Border.Title
         [SerializeField] private string mainSceneName = "01_Main";
 
         [SerializeField] private Border.Audio.SoundManager soundManagerPrefab;
+        [SerializeField] private Transform rocketSoundTarget;
 
         private bool loading;
+        private readonly SoundHandle[] rocketLoops = new SoundHandle[4];
+        private AudioListener titleListener;
 
         private void Awake()
         {
             if (Border.Audio.SoundManager.Instance == null && soundManagerPrefab != null)
                 Instantiate(soundManagerPrefab);
+            ConfigureClickSound(newGameButton);
+            ConfigureClickSound(settingsButton);
+            ConfigureClickSound(quitButton);
             if (newGameButton != null) newGameButton.onClick.AddListener(NewGame);
             if (settingsButton != null) settingsButton.onClick.AddListener(OpenSettings);
             if (quitButton != null) quitButton.onClick.AddListener(QuitGame);
@@ -29,8 +38,43 @@ namespace Border.Title
                 Debug.LogError("TitleScreen prefab has missing menu references.", this);
         }
 
+        private static void ConfigureClickSound(Button button)
+        {
+            if (button == null) return;
+            // These actions play before loading a scene or quitting, so skip the global hook.
+            if (button.GetComponent<UIManualClickSound>() == null)
+                button.gameObject.AddComponent<UIManualClickSound>();
+            UISelectableSoundHook.Bind(button);
+        }
+
+        private void OnEnable()
+        {
+            if (FindFirstObjectByType<AudioListener>() == null && Camera.main != null)
+                titleListener = Camera.main.gameObject.AddComponent<AudioListener>();
+
+            if (rocketSoundTarget == null)
+            {
+                foreach (GameObject root in gameObject.scene.GetRootGameObjects())
+                {
+                    if (root.name != "TitleRocket") continue;
+                    rocketSoundTarget = root.transform;
+                    break;
+                }
+            }
+
+            if (rocketSoundTarget == null || SoundManager.Instance == null) return;
+            for (int i = 0; i < rocketLoops.Length; i++)
+                rocketLoops[i] = SoundManager.Instance.PlaySfxAttached("RocketLoop", rocketSoundTarget);
+        }
+
+        private void OnDisable()
+        {
+            foreach (SoundHandle loop in rocketLoops) loop.Stop();
+        }
+
         private void OnDestroy()
         {
+            if (titleListener != null) Destroy(titleListener);
             if (newGameButton != null) newGameButton.onClick.RemoveListener(NewGame);
             if (settingsButton != null) settingsButton.onClick.RemoveListener(OpenSettings);
             if (quitButton != null) quitButton.onClick.RemoveListener(QuitGame);
@@ -40,13 +84,16 @@ namespace Border.Title
         {
             if (loading) return;
             loading = true;
+            SoundManager.Instance?.PlaySfx("click");
             ResearchFlowSession.PrepareNewGame();
             SceneManager.LoadScene(mainSceneName);
         }
 
         private void OpenSettings()
         {
-            if (!loading && settingsMenu != null) settingsMenu.Open();
+            if (loading || settingsMenu == null) return;
+            SoundManager.Instance?.PlaySfx("click");
+            settingsMenu.Open();
         }
 
         // PauseMenuController.QuitGame 과 같은 관용구다. 에디터에서 Application.Quit 은 무동작이라
@@ -55,6 +102,14 @@ namespace Border.Title
         {
             if (loading) return;
             loading = true;
+            StartCoroutine(QuitAfterClick());
+        }
+
+        private IEnumerator QuitAfterClick()
+        {
+            SoundHandle click = SoundManager.Instance != null
+                ? SoundManager.Instance.PlaySfx("click") : SoundHandle.Invalid;
+            while (click.IsPlaying) yield return null;
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
 #else
