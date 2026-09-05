@@ -34,7 +34,8 @@ namespace Border.Editor.Research
         private const string IgnitionReliabilityEnginePreviewPrefabPath = "Assets/05. Arts/FBX/Engine/Reliability/Reliability.prefab";
         private const string VisualLibraryFolderPath = "Assets/02. ScriptableObjects/Research";
         private const string VisualLibraryAssetPath = VisualLibraryFolderPath + "/EnginePresetVisualLibrary.asset";
-        private static readonly Vector3 DefaultPreviewLocalPosition = new(-0.81f, 0.65f, 0f);
+        private static readonly Vector3 DefaultPreviewLocalPosition = new(-0.365f, 1.09f, -0.175f);
+        private static readonly Vector3 DefaultPreviewLocalScale = new(1.7f, 1.7f, 1.7f);
 
         [MenuItem("Border/Research/Install Test Visibility and Outcome Hooks")]
         public static void InstallTestVisibilityAndOutcomeHooks()
@@ -368,6 +369,7 @@ namespace Border.Editor.Research
         private static ResearchEnginePreviewController EnsureEnginePreview(Scene scene, bool registerUndo, out bool changed)
         {
             changed = false;
+            bool createdPreviewRoot = false;
             ResearchEnginePreviewController preview = FindComponentInScene<ResearchEnginePreviewController>(scene);
             if (preview == null)
             {
@@ -395,10 +397,13 @@ namespace Border.Editor.Research
 
                 SceneManager.MoveGameObjectToScene(root, scene);
                 previewRoot = root.transform;
+                createdPreviewRoot = true;
                 changed = true;
             }
 
-            if (placementCube != null)
+            // Only place a root we just created. An existing root's transform is authored by hand in the
+            // scene, and re-enforcing it here wiped those edits on every domain reload.
+            if (createdPreviewRoot && placementCube != null)
             {
                 if (previewRoot.parent != placementCube.parent)
                 {
@@ -412,7 +417,7 @@ namespace Border.Editor.Research
                     changed = true;
                 }
             }
-            else
+            else if (createdPreviewRoot)
             {
                 Quaternion fallbackRotation = Quaternion.identity;
                 if (researchLabTransform != null)
@@ -445,9 +450,9 @@ namespace Border.Editor.Research
                 }
             }
 
-            if (previewRoot.localScale != Vector3.one)
+            if (createdPreviewRoot && previewRoot.localScale != DefaultPreviewLocalScale)
             {
-                previewRoot.localScale = Vector3.one;
+                previewRoot.localScale = DefaultPreviewLocalScale;
                 changed = true;
             }
 
@@ -463,6 +468,7 @@ namespace Border.Editor.Research
             changed |= SetFloat(serializedPreview, "targetPreviewHeight", 1.25f);
             changed |= SetFloat(serializedPreview, "targetPreviewGroundY", -0.5f);
             changed |= SetVector3(serializedPreview, "previewLocalEulerAngles", new Vector3(-90f, 0f, 0f));
+            changed |= SetFloat(serializedPreview, "engineSpinDegreesPerSecond", 16f);
             changed |= SetBool(serializedPreview, "showEditModePreview", true);
             if (serializedPreview.ApplyModifiedProperties())
             {

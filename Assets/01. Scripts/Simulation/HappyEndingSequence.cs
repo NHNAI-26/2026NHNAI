@@ -240,9 +240,13 @@ namespace Simulation
                 skyMaterial.SetFloat("_SpaceBlend", 1f);
                 skyMaterial.SetFloat("_SpaceExposure", 1.6f);
                 skyMaterial.SetFloat("_MidBlend", 0f);
+                // 우주에는 위아래가 없다 — UpFade 0 으로 온 하늘에 고르게 뿌린다.
+                skyMaterial.SetFloat("_StarBlend", 1.8f);
+                skyMaterial.SetFloat("_StarUpFade", 0f);
             }
             RenderSettings.fog = false;
 
+            BuildSpaceDust();
             moon = BuildMoon();
             moon.position = spaceOrigin + new Vector3(-90f, 45f, 1200f);
 
@@ -358,6 +362,10 @@ namespace Simulation
                 // 큐브맵이 파란 성운이라 많이 섞으면 핑크를 먹는다. 별만 남을 만큼만 섞는다.
                 skyMaterial.SetFloat("_SpaceBlend", 0.15f);
                 skyMaterial.SetFloat("_SpaceExposure", 2.2f);
+                // 큐브맵 성운은 천정이 비어 있어 하늘 위쪽이 민무늬가 된다. 절차 별밭으로 채운다.
+                // UpFade 1 이라 지평선 쪽 별은 투명하고 위로 갈수록 진해진다.
+                skyMaterial.SetFloat("_StarBlend", 1.4f);
+                skyMaterial.SetFloat("_StarUpFade", 1f);
             }
 
             if (sun != null)
@@ -448,6 +456,73 @@ namespace Simulation
 
             sphere.GetComponent<Renderer>().sharedMaterial = material;
             return sphere.transform;
+        }
+
+        /// <summary>
+        /// 달 컷의 우주 먼지. 별밭은 스카이박스라 무한원이고 카메라도 서 있어, 이대로면 화면에서
+        /// 움직이는 것이 로켓 하나뿐이다. 카메라 뒤로 흘려보내는 먼지가 항행하고 있다는 감각을 만든다.
+        /// 카메라의 자식이라 <see cref="TearDownStage"/> 가 카메라를 지울 때 같이 사라진다 —
+        /// 별도 정리가 필요 없다. <see cref="SkyEnvironment"/> 의 우주 먼지와 같은 조립 방식이다.
+        /// </summary>
+        private void BuildSpaceDust()
+        {
+            var host = new GameObject("Happy Ending Space Dust");
+            host.transform.SetParent(stageCamera.transform, false);
+
+            var dust = host.AddComponent<ParticleSystem>();
+            dust.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            ParticleSystem.MainModule main = dust.main;
+            // Local 이라 카메라를 따라다닌다. 카메라가 고정이므로 흐름은 아래 velocityOverLifetime 뿐이다.
+            main.simulationSpace = ParticleSystemSimulationSpace.Local;
+            main.startLifetime = 6f;
+            main.startSpeed = 0f;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.22f);
+            main.startColor = new Color(1f, 1f, 1f, 0.55f);
+            main.gravityModifier = 0f;
+            main.playOnAwake = false;
+            main.maxParticles = 300;
+            // 컷이 시작되는 순간 이미 먼지밭 한가운데여야 한다. 안 하면 빈 화면에서 먼지가 차오른다.
+            main.prewarm = true;
+
+            ParticleSystem.EmissionModule emission = dust.emission;
+            emission.rateOverTime = 45f;
+
+            ParticleSystem.ShapeModule shape = dust.shape;
+            shape.shapeType = ParticleSystemShapeType.Box;
+            // 카메라 앞으로 길게 뻗은 상자. z 절반(30)만큼 앞에 두어 뒤쪽에는 태우지 않는다.
+            shape.scale = new Vector3(50f, 30f, 60f);
+            shape.position = new Vector3(0f, 0f, 30f);
+
+            // 카메라 쪽으로(-z) 흘려보낸다. 앞에서 태어나 옆을 스쳐 뒤로 빠진다.
+            ParticleSystem.VelocityOverLifetimeModule drift = dust.velocityOverLifetime;
+            drift.enabled = true;
+            drift.space = ParticleSystemSimulationSpace.Local;
+            drift.z = new ParticleSystem.MinMaxCurve(-11f, -6f);
+
+            // 상자 안 아무 데서나 태어나므로 시야 한가운데에 톡 나타난다. 수명 양끝을 알파로 가린다.
+            ParticleSystem.ColorOverLifetimeModule fade = dust.colorOverLifetime;
+            fade.enabled = true;
+            Gradient ramp = new();
+            ramp.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[]
+                {
+                    new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.2f),
+                    new GradientAlphaKey(1f, 0.8f), new GradientAlphaKey(0f, 1f)
+                });
+            fade.color = new ParticleSystem.MinMaxGradient(ramp);
+
+            var dustRenderer = host.GetComponent<ParticleSystemRenderer>();
+            // 모션 블러가 없어 점으로 두면 끊긴 알갱이로 읽힌다. 흐르는 방향으로 늘인다.
+            dustRenderer.renderMode = ParticleSystemRenderMode.Stretch;
+            dustRenderer.velocityScale = 0.12f;
+            dustRenderer.cameraVelocityScale = 0f;
+            dustRenderer.lengthScale = 2f;
+            dustRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            dustRenderer.receiveShadows = false;
+
+            dust.Play();
         }
 
         /// <summary>

@@ -18,6 +18,15 @@ Shader "Sky/AtmosphereNebulaBlend"
         // 하나도 변하지 않는다. 해피엔딩의 핑크~보라~남색 밤하늘만 이것을 1 로 켠다.
         _MidColor("Mid Color", Color) = (0.5, 0.5, 0.5, 1)
         _MidBlend("Mid Color Blend", Range(0, 1)) = 0
+
+        // 절차 별밭. 큐브맵과 별개로 하늘 위에 더한다 — 성운 큐브맵은 천정이 비어 있어
+        // 밤하늘 위쪽이 민무늬가 된다. _StarBlend 기본값 0 이라 켜지 않으면 기존 결과와 같다.
+        _StarBlend("Star Blend", Range(0, 4)) = 0
+        _StarDensity("Star Density", Range(20, 400)) = 140
+        _StarSize("Star Size", Range(0.01, 0.5)) = 0.12
+        _StarRate("Star Rate", Range(0, 1)) = 0.06
+        // 1 = 지평선 별이 투명하고 천정으로 갈수록 진해진다. 0 = 온 하늘에 고르게.
+        _StarUpFade("Star Up Fade", Range(0, 1)) = 1
     }
 
     SubShader
@@ -49,7 +58,39 @@ Shader "Sky/AtmosphereNebulaBlend"
                 half _SpaceExposure;
                 half4 _MidColor;
                 half _MidBlend;
+                half _StarBlend;
+                float _StarDensity;
+                half _StarSize;
+                half _StarRate;
+                half _StarUpFade;
             CBUFFER_END
+
+            // 셀 좌표 하나에서 0..1 난수 둘. 방향에서만 나오므로 카메라가 어디로 돌아도 같은 별이
+            // 같은 자리에 있다 — 텍스처도 버퍼도 필요 없다.
+            float2 StarHash(float3 cell)
+            {
+                float3 p = frac(cell * float3(0.1031, 0.1030, 0.0973));
+                p += dot(p, p.yzx + 33.33);
+                return frac(float2((p.x + p.y) * p.z, (p.x + p.z) * p.y));
+            }
+
+            // 방향 공간을 격자로 잘라 셀마다 최대 한 점을 찍는다. 셀 중심에서의 거리로 부드럽게
+            // 떨어뜨려 픽셀 하나짜리 반짝임(에일리어싱)이 되지 않게 한다.
+            half3 StarField(float3 dir)
+            {
+                float3 s = dir * _StarDensity;
+                float3 cell = floor(s);
+                float3 offset = frac(s) - 0.5;
+
+                float2 h = StarHash(cell);
+                // h.x 가 문턱을 넘은 셀만 별이다. h.y 는 밝기 편차 — 다 같은 밝기면 격자가 보인다.
+                float present = step(1.0 - _StarRate, h.x);
+                float spark = smoothstep(_StarSize, 0.0, length(offset)) * present * (0.35 + 0.65 * h.y);
+
+                // 지평선 쪽을 눌러 대기광에 묻히게 한다. _StarUpFade 0 이면 온 하늘이 고르다.
+                float up = lerp(1.0, saturate(dir.y) * saturate(dir.y), _StarUpFade);
+                return spark * up;
+            }
 
             struct Attributes
             {
@@ -91,7 +132,9 @@ Shader "Sky/AtmosphereNebulaBlend"
                 half3 atmosphere = lerp(twoTone, threeTone, _MidBlend) * _Exposure;
 
                 half3 space = SAMPLE_TEXTURECUBE(_SpaceCube, sampler_SpaceCube, dir).rgb * _SpaceExposure;
-                return half4(lerp(atmosphere, space, _SpaceBlend), 1.0);
+                half3 color = lerp(atmosphere, space, _SpaceBlend);
+                // 별은 섞지 않고 더한다 — 하늘색을 덮는 것이 아니라 그 위에서 빛나야 한다.
+                return half4(color + StarField(dir) * _StarBlend, 1.0);
             }
             ENDHLSL
         }
