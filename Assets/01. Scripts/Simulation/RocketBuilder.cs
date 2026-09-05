@@ -192,6 +192,10 @@ namespace Simulation
             // 브레인은 코드로 붙인다 — 씬 YAML diff 를 늘리지 않고, additive 로 올라왔을 때
             // 어느 카메라가 잡히든 그 카메라가 브레인을 갖는다.
             if (!cam.TryGetComponent(out _brain)) _brain = cam.gameObject.AddComponent<CinemachineBrain>();
+            // Additive research cameras must not override the camera moved by design input.
+            designCam.OutputChannel = OutputChannels.Channel01;
+            launchCam.OutputChannel = OutputChannels.Channel01;
+            _brain.ChannelMask = OutputChannels.Channel01;
             // 자동 갱신은 순서가 없다 — CinemachineBrain 에는 DefaultExecutionOrder 가 없어서
             // 이 컴포넌트의 LateUpdate 와 앞뒤가 정해지지 않는다. 기즈모가 한 프레임 밀리지 않도록
             // 브레인을 직접 돌린다(LateUpdate 끝).

@@ -263,6 +263,10 @@ Follow/LookAt도, 절차 컴포넌트도 붙이지 않는다. 궤도 회전 입�
 FOV 40 / 0.1 / 5000이고 브레인이 그 값을 카메라에 밀어넣으므로, 비워 두면 화각이 바뀌고
 `cam.fieldOfView`를 쓰는 `GizmoScale()`까지 같이 틀어진다.
 
+설계·발사 vcam과 해당 Brain은 `OutputChannels.Channel01`을 전용으로 사용한다. 연구용 vcam은
+기본 채널에 남는다. 따라서 `시뮬레이션` 토글과 연구의 `설계 진입` 어느 경로로 들어와도 높은
+우선순위의 연구 카메라가 설계 화면을 덮어쓰지 않으며, 기존 우클릭 궤도 회전이 화면에 반영된다.
+
 브레인은 `UpdateMethods.ManualUpdate`다. `CinemachineBrain`에는 `DefaultExecutionOrder`가 없어
 자동 갱신이면 `RocketBuilder.LateUpdate`와 앞뒤가 정해지지 않는데, 기즈모의 화면 고정 크기는 "카메라가
 이번 프레임 자세를 이미 가졌다"를 전제한다. vcam을 옮기고 → `_brain.ManualUpdate()` → `UpdateGizmo()`
