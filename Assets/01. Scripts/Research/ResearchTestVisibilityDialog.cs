@@ -34,9 +34,12 @@ namespace Border.Research
             publicToggle.SetIsOnWithoutNotify(false);
             privateToggle.SetIsOnWithoutNotify(true);
             LaunchMissionConfig mission = model.GetConfiguredMissionConfig(missionId);
-            missionText.text = $"{mission.DisplayName} / 설계 진입 비용 {mission.LaunchCost}";
+            missionText.text = $"MISSION {(int)missionId} : {mission.DisplayName}";
             publicDetails.text = Describe(TestVisibility.Public);
             privateDetails.text = Describe(TestVisibility.Private);
+            TMP_Text confirmLabel = confirmButton.GetComponentInChildren<TMP_Text>(true);
+            if (confirmLabel != null)
+                confirmLabel.text = $"설계 진입\n<size=15>-{model.GetDesignEntryCost(missionId)}$ / +1분기</size>";
             errorText.text = string.Empty;
             confirmButton.interactable = true;
             confirming = false;
@@ -46,18 +49,9 @@ namespace Border.Research
             gameObject.SetActive(true);
         }
 
-        private static string Describe(TestVisibility visibility)
-        {
-            switch (visibility)
-            {
-                case TestVisibility.Public:
-                    return "큰 변동 이벤트\n성공 시 대형 후원 가능\n\n실패 시 여론 역풍과 시설 손실 위험";
-                case TestVisibility.Private:
-                    return "안정적 학습 이벤트\n성공 시 작은 지원과 엔진 개선\n\n실패해도 손실보다 회수와 분석 중심";
-                default:
-                    return "최종 검증";
-            }
-        }
+        private static string Describe(TestVisibility visibility) => visibility == TestVisibility.Private
+            ? "사내에서 비공개로 발사 테스트를 진행합니다.\n\n성공 보수가 적지만 \n실패 시 위험 부담도 적습니다. "
+            : "모두의 앞에서 공개로 발사 테스트를 진행합니다. \n\n성공 시 투자 혹은 연구비 지원을 \n받을 수 있습니다.\n실패 시 연구비가 줄어들수도..?";
 
         private void Confirm()
         {

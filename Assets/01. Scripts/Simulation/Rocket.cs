@@ -78,6 +78,7 @@ namespace Simulation
         public bool Launched { get; private set; }
         public System.Func<bool> AuthorizeLaunch { get; set; }
         public event System.Action LaunchStarted;
+        public event System.Action LiftoffStarted;
         public bool FlightStopped { get; private set; }
         public float TotalBurnSeconds { get; private set; }
 
@@ -242,6 +243,7 @@ namespace Simulation
         /// <summary>클램프 해제. 여기서부터가 시뮬레이션이다 — 램프도 미션 시계도 이 순간이 0 이다.</summary>
         private void BeginLiftoff()
         {
+            LiftoffStarted?.Invoke();
             SetWobble(0f);
             _sinceLaunch = 0f;
             _liftElapsed = _physicsBlendElapsed = 0f;

@@ -1,18 +1,5 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!114 &-3814709384029556586
-MonoBehaviour:
-  m_ObjectHideFlags: 11
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d0353a89b1f911e48b9e16bdc9f2e058, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Editor::UnityEditor.Rendering.Universal.AssetVersion
-  version: 10
 --- !u!21 &2100000
 Material:
   serializedVersion: 8
@@ -20,30 +7,25 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: MAT_station_01
-  m_Shader: {fileID: 4800000, guid: d03bad68e5f94df47a2c30a8822ea41c, type: 3}
+  m_Name: UI_general2
+  m_Shader: {fileID: 4800000, guid: 1aad80d3fa14854488c67ee35f470633, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _HEIGHT_FADE_ON
+  - _DITHER_FADE_ON
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
   m_CustomRenderQueue: -1
-  stringTagMap:
-    RenderType: Opaque
+  stringTagMap: {}
   disabledShaderPasses:
-  - StencilOutline
+  - MOTIONVECTORS
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: 4f31798cdb39e4858bf7facd28c9eb6d, type: 3}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - _BlendMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -71,15 +53,15 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _GrayscaleMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _MainTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MetallicGlossMap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - _MetallicMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -91,11 +73,11 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _RoughnessMap:
+    - _SpecGlossMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _SpecGlossMap:
+    - _TintMask:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -115,54 +97,49 @@ Material:
     m_Floats:
     - _AddPrecomputedVelocity: 0
     - _AlphaClip: 0
+    - _AlphaMultiplier: 1
     - _AlphaToMask: 0
-    - _BaseMap3DBlendSharpness: 4
-    - _BaseMapMapping: 0
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
-    - _BlendSmoothness: 0.25
-    - _BlendThreshold: 0.6
     - _Brightness: 1
     - _BumpScale: 1
-    - _CastShadows: 1
     - _ClearCoatMask: 0
     - _ClearCoatSmoothness: 0
     - _ColorAdjustEnabled: 0
+    - _ColorMask: 15
     - _Contrast: 1
     - _Cull: 2
     - _Cutoff: 0.5
     - _DetailAlbedoMapScale: 1
     - _DetailNormalMapScale: 1
     - _DissolveAmount: 0
+    - _DissolveEdgeColorMode: 0
     - _DissolveEdgeIntensity: 1
     - _DissolveEdgeWidth: 0.05
     - _DissolveEnabled: 0
-    - _DissolveObjectNoiseScale: 1
-    - _DissolveObjectNoiseStrength: 0.15
-    - _DissolveSpace: 0
-    - _DitherFade: 1
-    - _DitherFadeEnabled: 0
+    - _DissolveMode: 0
+    - _DissolveRadialNoiseStrength: 0.15
+    - _DissolveSwipeNoiseStrength: 0.15
+    - _DissolveSwipeRotation: 0
+    - _DitherFade: 0.96
+    - _DitherFadeEnabled: 1
     - _DstBlend: 0
     - _DstBlendAlpha: 0
     - _EmissionEnabled: 0
     - _EmissionIntensity: 1
     - _EnvironmentReflections: 1
-    - _GlassGlowEnabled: 0
-    - _GlassGlowIntensity: 1
-    - _GlassGlowThreshold: 0.5
     - _GlitchEnabled: 0
     - _GlitchFrequency: 0.25
     - _GlitchRGBSplit: 2
-    - _GlitchSpace: 0
     - _GlitchSpeed: 8
     - _GlitchStrength: 8
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
-    - _HeightFadeEnabled: 1
-    - _HeightFadeLower: -2.41
-    - _HeightFadeOffset: 0
-    - _HeightFadeUpper: -0.17
+    - _GrayscaleEnabled: 0
+    - _GrayscaleInvert: 0
+    - _GrayscaleStrength: 1
+    - _HologramEdgeSoftnessPixels: 8
     - _HologramEnabled: 0
     - _HologramFresnelIntensity: 2
     - _HologramFresnelPower: 4
@@ -176,64 +153,94 @@ Material:
     - _HologramScanlineWidth: 0.12
     - _HologramSpace: 0
     - _HueShift: 0
-    - _LightingMode: 0
+    - _LightSweepAmount: 0
+    - _LightSweepBlendMode: 0
+    - _LightSweepEnabled: 0
+    - _LightSweepIntensity: 2
+    - _LightSweepMode: 0
+    - _LightSweepRotation: 0
+    - _LightSweepWidth: 0.15
     - _Metallic: 0
-    - _MetallicMapEnabled: 0
-    - _NormalMapEnabled: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.005
-    - _QueueControl: 0
+    - _PixelGlowIntensity: 1
+    - _PixelGlowWidth: 4
+    - _PixelOutlineAlphaThreshold: 0.5
+    - _PixelOutlineEnabled: 0
+    - _PixelOutlineWidth: 1
     - _QueueOffset: 0
+    - _RGBOverrideEnabled: 0
+    - _RGBOverrideStrength: 1
     - _ReceiveShadows: 1
-    - _RimEnabled: 0
-    - _RimIntensity: 1
-    - _RimPower: 4
-    - _RoughnessMapEnabled: 0
     - _Saturation: 1
-    - _Smoothness: 0.281
+    - _Smoothness: 0.5
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
-    - _StencilOutlineEnabled: 0
-    - _StencilOutlineWidth: 2
+    - _Stencil: 0
+    - _StencilComp: 8
+    - _StencilOp: 0
+    - _StencilOptions: 1
+    - _StencilReadMask: 255
+    - _StencilWriteMask: 255
     - _Surface: 0
     - _SurfaceInputs: 1
-    - _SurfaceOptions: 1
-    - _TextureBlendEnabled: 0
+    - _TintMaskEnabled: 0
+    - _TintMaskInvert: 0
+    - _TintMaskStrength: 1
+    - _UVFadeEnabled: 0
+    - _UVFadeEnd: 1
+    - _UVFadeStart: 0
     - _UberQuality: 0
-    - _WobbleAmplitude: 0
-    - _WobbleEnabled: 0
-    - _WobbleFrequency: 6
-    - _WobbleHalfHeight: 0.5
-    - _WobbleHeight: 0.35
-    - _WobbleWaves: 1.5
+    - _UseUIAlphaClip: 0
     - _WorkflowMode: 1
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1
-    - _ZWriteControl: 0
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BaseMap3DTiling: {r: 1, g: 1, b: 1, a: 0}
-    - _BlendColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BlendTiling: {r: 1, g: 1, b: 0, a: 0}
+    - _BaseSpriteUVRect: {r: 0, g: 0, b: 1, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _DissolveEdgeColor: {r: 1, g: 0.5, b: 0, a: 1}
-    - _DissolveNoiseAmountMovement: {r: 1, g: 0, b: 0, a: 0}
-    - _DissolveObjectRange: {r: 0, g: 1, b: 0, a: 0}
-    - _DissolveObjectUpVector: {r: 0, g: 1, b: 0, a: 0}
+    - _DissolveEdgeGradientAlphaTimes: {r: 0, g: 1, b: 1, a: 1}
+    - _DissolveEdgeGradientAlphas: {r: 1, g: 1, b: 1, a: 1}
+    - _DissolveEdgeGradientColor0: {r: 1, g: 0.5, b: 0, a: 0}
+    - _DissolveEdgeGradientColor1: {r: 1, g: 0.5, b: 0, a: 1}
+    - _DissolveEdgeGradientColor2: {r: 1, g: 0.5, b: 0, a: 1}
+    - _DissolveEdgeGradientColor3: {r: 1, g: 0.5, b: 0, a: 1}
+    - _DissolveEdgeGradientMetadata: {r: 2, g: 2, b: 0, a: 0}
+    - _DissolveNoiseRange: {r: 0, g: 1, b: 0, a: 0}
     - _DissolvePanning: {r: 0, g: 0, b: 0, a: 0}
+    - _DissolveRadialCenter: {r: 0.5, g: 0.5, b: 0, a: 0}
+    - _DissolveRadialRange: {r: 0, g: 0.7071, b: 0, a: 0}
+    - _DissolveSwipeCenter: {r: 0.5, g: 0.5, b: 0, a: 0}
+    - _DissolveSwipeRange: {r: -0.5, g: 0.5, b: 0, a: 0}
     - _DissolveTilingOffset: {r: 1, g: 1, b: 0, a: 0}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _GlassGlowColor: {r: 1, g: 1, b: 1, a: 1}
     - _GlitchBandSizeRange: {r: 4, g: 12, b: 0, a: 0}
-    - _GlitchUpVector: {r: 0, g: 1, b: 0, a: 0}
-    - _HeightFadeColor: {r: 0, g: 0, b: 0, a: 1}
     - _HologramColor: {r: 0, g: 1, b: 1, a: 1}
     - _HologramObjectUpVector: {r: 0, g: 1, b: 0, a: 0}
-    - _RimColor: {r: 1, g: 1, b: 1, a: 1}
+    - _LightSweepCenter: {r: 0.5, g: 0.5, b: 0, a: 0}
+    - _LightSweepColor: {r: 1, g: 1, b: 1, a: 1}
+    - _LightSweepRange: {r: -0.5, g: 0.5, b: 0, a: 0}
+    - _PixelGlowColor: {r: 1, g: 1, b: 1, a: 0.35}
+    - _PixelOutlineColor: {r: 1, g: 1, b: 1, a: 1}
+    - _PixelOutlineMeshPadding: {r: 0, g: 0, b: 0, a: 0}
+    - _RGBOverrideColor: {r: 1, g: 1, b: 1, a: 1}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
-    - _StencilOutlineColor: {r: 1, g: 0.72, b: 0.08, a: 1}
-    - _WobbleAxis: {r: 0, g: 1, b: 0, a: 0}
+    - _UVFadeDirection: {r: 0, g: 1, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
+--- !u!114 &5266910514469429487
+MonoBehaviour:
+  m_ObjectHideFlags: 11
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0353a89b1f911e48b9e16bdc9f2e058, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Editor::UnityEditor.Rendering.Universal.AssetVersion
+  version: 10

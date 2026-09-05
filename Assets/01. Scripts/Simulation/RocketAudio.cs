@@ -1,0 +1,111 @@
+using System.Collections;
+using System.Collections.Generic;
+using Border.Audio;
+using UnityEngine;
+
+namespace Simulation
+{
+    [DisallowMultipleComponent]
+    public sealed class RocketAudio : MonoBehaviour
+    {
+        [SerializeField] private SoundManager soundManagerPrefab;
+        [SerializeField, Min(0.1f)] private float engineStopInterval = 0.6f;
+
+        private Rocket rocket;
+        private readonly Dictionary<RocketPart, SoundHandle> loops = new();
+        private readonly List<RocketPart> stoppedEngines = new();
+        private readonly List<SoundHandle> alerts = new();
+        private SoundHandle spark;
+        private SoundHandle launch;
+
+        private void OnEnable()
+        {
+            rocket = GetComponentInParent<Rocket>();
+            if (rocket == null) return;
+            if (SoundManager.Instance == null && soundManagerPrefab != null)
+                Instantiate(soundManagerPrefab);
+            rocket.LaunchStarted += OnLaunch;
+            rocket.LiftoffStarted += OnLiftoff;
+        }
+
+        private void OnLaunch()
+        {
+            ClearAudio();
+            if (SoundManager.Instance != null)
+                spark = SoundManager.Instance.PlaySfx("SparkStart");
+        }
+
+        private void OnLiftoff()
+        {
+            spark.Stop();
+            if (SoundManager.Instance == null) return;
+            foreach (RocketPart engine in rocket.GetComponentsInChildren<RocketPart>())
+            {
+                if (!engine.Ignited || !engine.HasFuel) continue;
+                loops[engine] = SoundManager.Instance.PlaySfxAttached("RocketLoop", engine.transform);
+            }
+            if (loops.Count > 0) launch = SoundManager.Instance.PlaySfx("RocketLaunch");
+        }
+
+        private void LateUpdate()
+        {
+            if (rocket == null || !rocket.Launched)
+            {
+                ClearAudio();
+                return;
+            }
+
+            if (rocket.FlightStopped || rocket.Splashed)
+            {
+                spark.Stop();
+                launch.Stop();
+            }
+            stoppedEngines.Clear();
+            foreach (var pair in loops)
+            {
+                RocketPart engine = pair.Key;
+                if (engine != null && engine.isActiveAndEnabled && engine.Ignited && engine.HasFuel
+                    && !rocket.FlightStopped && !rocket.Splashed) continue;
+                pair.Value.Stop();
+                stoppedEngines.Add(engine);
+            }
+            foreach (RocketPart engine in stoppedEngines)
+            {
+                loops.Remove(engine);
+                StartCoroutine(PlayStopAlert());
+            }
+            alerts.RemoveAll(handle => !handle.IsValid);
+        }
+
+        private IEnumerator PlayStopAlert()
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                if (SoundManager.Instance != null)
+                    alerts.Add(SoundManager.Instance.PlaySfx("EngineStop"));
+                if (i < 2) yield return new WaitForSeconds(Mathf.Max(0.1f, engineStopInterval));
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (rocket != null)
+            {
+                rocket.LaunchStarted -= OnLaunch;
+                rocket.LiftoffStarted -= OnLiftoff;
+            }
+            ClearAudio();
+        }
+
+        private void ClearAudio()
+        {
+            StopAllCoroutines();
+            spark.Stop();
+            launch.Stop();
+            foreach (SoundHandle handle in loops.Values) handle.Stop();
+            loops.Clear();
+            foreach (SoundHandle handle in alerts) handle.Stop();
+            alerts.Clear();
+        }
+    }
+}

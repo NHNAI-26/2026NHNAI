@@ -16,7 +16,7 @@ MonoBehaviour:
   sfxEntries:
   - id: EngineStop
     clip: {fileID: 8300000, guid: 53b79cfbcfacc4abdbce7f205151f18d, type: 3}
-    volume: 1
+    volume: 0.15
     pitch: 1
     loop: 0
     useSpatialAudio: 0
@@ -38,11 +38,11 @@ MonoBehaviour:
     useSpatialAudio: 0
     minDistance: 1
     maxDistance: 50
-  - id: rocket_inflight_seamless_loop
+  - id: RocketLoop
     clip: {fileID: 8300000, guid: 77e6122fcb5aa45f09ec05e873a27cf0, type: 3}
     volume: 1
     pitch: 1
     loop: 1
-    useSpatialAudio: 0
-    minDistance: 1
-    maxDistance: 50
+    useSpatialAudio: 1
+    minDistance: 5
+    maxDistance: 150

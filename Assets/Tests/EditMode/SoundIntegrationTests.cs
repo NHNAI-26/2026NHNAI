@@ -102,7 +102,14 @@ namespace Border.Audio.Tests
                 Assert.That(volume, Is.Not.Null);
                 Assert.That(database, Is.Not.Null);
                 Assert.That(database.BgmEntries, Is.Empty);
-                Assert.That(database.SfxEntries, Is.Empty);
+                foreach (string id in new[] { "SparkStart", "RocketLaunch", "RocketLoop", "EngineStop" })
+                    Assert.That(database.TryGetSfx(id, out _), Is.True, $"Missing rocket SFX: {id}");
+                Assert.That(database.TryGetSfx("RocketLoop", out SfxEntry loop), Is.True);
+                Assert.That(loop.Loop, Is.True);
+                Assert.That(loop.UseSpatialAudio, Is.True);
+                Assert.That(database.TryGetSfx("EngineStop", out SfxEntry stop), Is.True);
+                Assert.That(stop.Loop, Is.False);
+                Assert.That(stop.UseSpatialAudio, Is.False);
                 Assert.DoesNotThrow(database.RebuildLookup);
                 Assert.That(database.TryGetBgm("missing", out _), Is.False);
                 Assert.That(database.TryGetSfx("missing", out _), Is.False);

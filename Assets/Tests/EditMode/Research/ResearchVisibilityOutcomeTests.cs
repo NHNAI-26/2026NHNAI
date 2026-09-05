@@ -92,10 +92,10 @@ namespace Border.Research.Tests
 
             dialog.Open(model, model.GetCurrentMission(), _ => ResearchActionResult.Success);
 
-            Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Contain("큰 변동 이벤트"));
-            Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Contain("여론 역풍"));
-            Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Contain("안정적 학습 이벤트"));
-            Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Contain("회수와 분석"));
+            Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Contain("투자 혹은 연구비 지원"));
+            Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Contain("연구비가 줄어들수도"));
+            Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Contain("성공 보수가 적지만"));
+            Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Contain("위험 부담도 적습니다"));
             Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Not.Contain("보상 ×"));
             Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Not.Contain("실패 시 분기 연구비"));
         }
