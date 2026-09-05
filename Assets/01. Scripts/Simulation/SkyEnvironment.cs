@@ -1,4 +1,4 @@
-using Border.Core;
+﻿using Border.Core;
 using UnityEngine;
 
 namespace Simulation
@@ -97,11 +97,7 @@ namespace Simulation
                 _cloudRenderer = clouds.GetComponent<ParticleSystemRenderer>();
             }
 
-            if (stars != null)
-            {
-                _starRenderer = stars.GetComponent<ParticleSystemRenderer>();
-                _starBlock = new MaterialPropertyBlock();
-            }
+            if (stars != null) _starRenderer = stars.GetComponent<ParticleSystemRenderer>();
 
             if (earth != null) earth.gameObject.SetActive(false);
         }
@@ -144,6 +140,9 @@ namespace Simulation
             if (_starRenderer != null)
             {
                 stars.transform.position = cam.transform.position;
+                // 도메인 리로드는 _bound/_starRenderer 는 복원해도 직렬화 못 하는 이 블록은 null 로 되돌린다.
+                // Bind 는 _bound 때문에 다시 돌지 않으므로 여기서 채운다.
+                _starBlock ??= new MaterialPropertyBlock();
                 _starRenderer.GetPropertyBlock(_starBlock);
                 _starBlock.SetColor(BaseColorId, new Color(1f, 1f, 1f, starAlpha.Evaluate(t)));
                 _starRenderer.SetPropertyBlock(_starBlock);
