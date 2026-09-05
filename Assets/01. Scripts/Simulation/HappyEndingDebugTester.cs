@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System.Collections;
 using Border.Research;
 using UnityEngine;
@@ -8,8 +7,12 @@ using UnityEngine.SceneManagement;
 namespace Simulation
 {
     /// <summary>
-    /// 엔딩을 6개 미션 클리어 없이 바로 보기 위한 에디터 전용 단축키. 해피엔딩 <b>F8</b>, 배드엔딩 <b>F9</b>.
+    /// 엔딩을 6개 미션 클리어 없이 바로 보기 위한 단축키. 해피엔딩 <b>F8</b>, 배드엔딩 <b>F9</b>.
     /// <c>RuntimeInitializeOnLoadMethod</c> 로 스스로 설치되므로 씬에 아무것도 놓지 않아도 된다.
+    ///
+    /// <b>빌드에서도 동작한다.</b> 시연에서 엔딩만 보여줘야 하는 경우가 있어 일부러 열어 두었다 —
+    /// 배포본을 받은 사람이 F8 을 누르면 그대로 엔딩이 돌아간다. 잠그려면 클래스 전체를
+    /// <c>#if UNITY_EDITOR || DEVELOPMENT_BUILD</c> 로 감싸면 된다.
     ///
     /// 해피엔딩이 실제와 다른 점은 둘이다 — 확인 대기 중인 발사 결과가 없으면 최종 미션 성공 결과를
     /// 지어내 신문을 띄우고, 발사대가 필요하므로 `SimulationTest` 씬이 없으면 직접 additive 로 올린다.
@@ -151,6 +154,8 @@ namespace Simulation
             return true;
         }
 
+        // 메뉴 항목만 에디터 전용이다. UnityEditor 네임스페이스는 빌드에 존재하지 않는다.
+#if UNITY_EDITOR
         [UnityEditor.MenuItem("Tools/Border/Debug/Play Happy Ending")]
         private static void PlayHappyEndingFromMenu()
         {
@@ -162,6 +167,6 @@ namespace Simulation
         {
             PlaySadEnding();
         }
+#endif
     }
 }
-#endif
