@@ -34,7 +34,7 @@ namespace Border.Research
             publicToggle.SetIsOnWithoutNotify(false);
             privateToggle.SetIsOnWithoutNotify(true);
             LaunchMissionConfig mission = model.GetConfiguredMissionConfig(missionId);
-            missionText.text = $"{mission.DisplayName} / 설계 진입 예산 {mission.LaunchCost}";
+            missionText.text = $"{mission.DisplayName} / 설계 진입 비용 {mission.LaunchCost}";
             publicDetails.text = Describe(TestVisibility.Public);
             privateDetails.text = Describe(TestVisibility.Private);
             errorText.text = string.Empty;
@@ -46,8 +46,18 @@ namespace Border.Research
             gameObject.SetActive(true);
         }
 
-        private string Describe(TestVisibility visibility) =>
-            $"보상 ×{model.GetConfiguredRewardMultiplier(visibility):0.##}\n즉시 지원금 · 분기 연구비\n\n실패 시 분기 연구비 {model.GetConfiguredFailureFundingDelta(visibility):+#;-#;0}";
+        private static string Describe(TestVisibility visibility)
+        {
+            switch (visibility)
+            {
+                case TestVisibility.Public:
+                    return "큰 변동 이벤트\n성공 시 대형 후원 가능\n\n실패 시 여론 역풍과 시설 손실 위험";
+                case TestVisibility.Private:
+                    return "안정적 학습 이벤트\n성공 시 작은 지원과 엔진 개선\n\n실패해도 손실보다 회수와 분석 중심";
+                default:
+                    return "최종 검증";
+            }
+        }
 
         private void Confirm()
         {

@@ -51,43 +51,43 @@ MonoBehaviour:
   - grade: 4
     immediateFunding: 0
     quarterlyFundingDelta: -100
-  publicSuccessModifier: -10
-  privateSuccessModifier: 10
+  publicSuccessModifier: 0
+  privateSuccessModifier: 0
   finalMissionSuccessModifier: 0
-  publicRewardMultiplier: 1.5
-  privateRewardMultiplier: 0.5
+  publicRewardMultiplier: 0
+  privateRewardMultiplier: 0
   finalMissionRewardMultiplier: 1
-  publicFailureQuarterlyFundingDelta: -150
-  privateFailureQuarterlyFundingDelta: -50
+  publicFailureQuarterlyFundingDelta: 0
+  privateFailureQuarterlyFundingDelta: 0
   finalMissionFailureQuarterlyFundingDelta: -100
   missions:
   - id: 0
     displayName: "\uC815\uC801 \uC5F0\uC18C \uC2DC\uD5D8"
-    launchCost: 600
+    launchCost: 50
     requirementText: "\uAE30\uBCF8 \uD574\uAE08"
     engineWeight: 0
   - id: 1
     displayName: "\uB0AE\uC740 \uACE0\uB3C4 \uB3C4\uB2EC"
-    launchCost: 800
+    launchCost: 50
     requirementText: "\uC815\uC801 \uC5F0\uC18C \uC2DC\uD5D8 C \uC774\uC0C1"
     engineWeight: 0.55
   - id: 2
     displayName: "\uB192\uC740 \uACE0\uB3C4 \uB3C4\uB2EC"
-    launchCost: 900
+    launchCost: 50
     requirementText: "\uB0AE\uC740 \uACE0\uB3C4 \uB3C4\uB2EC C \uC774\uC0C1"
     engineWeight: 0.5
   - id: 3
     displayName: "\uBAA9\uD45C \uAD6C\uC5ED \uB3C4\uB2EC"
-    launchCost: 1100
+    launchCost: 50
     requirementText: "\uB192\uC740 \uACE0\uB3C4 \uB3C4\uB2EC C \uC774\uC0C1"
     engineWeight: 0.45
   - id: 4
     displayName: "\uBAA9\uD45C \uAD6C\uC5ED \uCCB4\uB958"
-    launchCost: 1300
+    launchCost: 50
     requirementText: "\uBAA9\uD45C \uAD6C\uC5ED \uB3C4\uB2EC C \uC774\uC0C1"
     engineWeight: 0.42
   - id: 5
     displayName: "\uC800\uC804\uB825 \uAC80\uC99D"
-    launchCost: 1500
+    launchCost: 50
     requirementText: "\uBAA9\uD45C \uAD6C\uC5ED \uCCB4\uB958 C \uC774\uC0C1"
     engineWeight: 0.4
