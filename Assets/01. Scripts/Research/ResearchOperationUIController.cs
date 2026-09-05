@@ -23,6 +23,8 @@ namespace Border.Research
         [SerializeField] private ResearchResultReportController resultReport;
         [SerializeField] private ResearchEndingController endingScreen;
         [SerializeField] private ResearchEnginePreviewController enginePreview;
+        [SerializeField] private ResearchMiniGameController miniGameController;
+        [SerializeField] private ResearchDesignScreenController designScreenController;
         [SerializeField] private Transform researchLabRoot;
         [SerializeField] private Transform researchCameraTransform;
         [SerializeField, Min(0f)] private float cameraPitchDriftDegrees = 0.35f;
@@ -73,13 +75,12 @@ namespace Border.Research
         private static void SpawnInMainScene()
         {
             Scene activeScene = SceneManager.GetActiveScene();
-            if (activeScene.name != ResearchFlowSession.MainSceneName || FindFirstObjectByType<ResearchOperationUIController>() != null)
+            if (activeScene.name != ResearchFlowSession.MainSceneName || FindSceneObject<ResearchOperationUIController>() != null)
             {
                 return;
             }
 
-            var host = new GameObject("Research Operation UI Controller");
-            host.AddComponent<ResearchOperationUIController>();
+            Debug.LogError("01_Main has no preplaced ResearchOperationUIController.");
         }
 
         private void Awake()
@@ -193,15 +194,22 @@ namespace Border.Research
             }
 
             GameObject instance;
+            bool createdInstance = false;
             Transform existingCanvas = transform.Find("ResearchOperationCanvas");
             if (existingCanvas != null)
             {
                 instance = existingCanvas.gameObject;
             }
-            else
+            else if (CanCreateRuntimeUiFallback())
             {
                 instance = Instantiate(prefab, transform);
                 instance.name = "ResearchOperationCanvas";
+                createdInstance = true;
+            }
+            else
+            {
+                Debug.LogError("Research operation UI must be preplaced in 01_Main.", this);
+                return false;
             }
 
             canvasTransform = instance.GetComponent<RectTransform>();
@@ -265,7 +273,11 @@ namespace Border.Research
                 || maxOutputButton == null
                 || ignitionReliabilityButton == null)
             {
-                DestroyUnityObject(instance);
+                if (createdInstance)
+                {
+                    DestroyUnityObject(instance);
+                }
+
                 return false;
             }
 
@@ -312,9 +324,27 @@ namespace Border.Research
 
         private EngineCardView CreateEngineCard(RectTransform parent, EnginePresetConfig config)
         {
-            Button button = CreateCardButton(enginePresetCardPrefab, $"EngineCard_{config.Id}", parent, 46f, out TMP_Text title, out TMP_Text detail);
+            string cardName = $"EngineCard_{config.Id}";
+            Button button = FindRequiredButton(parent, cardName);
+            if (button == null)
+            {
+                button = CreateCardButton(enginePresetCardPrefab, cardName, parent, 46f, out TMP_Text title, out TMP_Text detail);
+                if (button == null)
+                {
+                    return new EngineCardView(null, null, null);
+                }
 
-            EnginePresetId presetId = config.Id;
+                button.onClick.RemoveAllListeners();
+                return BindEngineCardButton(button, title, detail, config.Id);
+            }
+
+            ConfigureCardButton(button, 46f, out TMP_Text existingTitle, out TMP_Text existingDetail);
+            button.onClick.RemoveAllListeners();
+            return BindEngineCardButton(button, existingTitle, existingDetail, config.Id);
+        }
+
+        private EngineCardView BindEngineCardButton(Button button, TMP_Text title, TMP_Text detail, EnginePresetId presetId)
+        {
             button.onClick.AddListener(() =>
             {
                 if (isTransitioningToDesign)
@@ -379,9 +409,18 @@ namespace Border.Research
             KillResearchCameraDrift(resetRotation: true);
             HideEnginePreview();
             HideResearchLab();
-            var host = new GameObject("Research Mini Game Controller");
-            host.transform.SetParent(transform, false);
-            activeMiniGameController = host.AddComponent<ResearchMiniGameController>();
+            activeMiniGameController = ResolveMiniGameController();
+            if (activeMiniGameController == null)
+            {
+                Debug.LogError("Research mini game controller must be preplaced in 01_Main.", this);
+                canvasTransform.gameObject.SetActive(true);
+                ShowResearchLab();
+                Refresh();
+                return;
+            }
+
+            activeMiniGameController.gameObject.SetActive(true);
+            activeMiniGameController.enabled = true;
             activeMiniGameController.Initialize(selectedEnginePreset, selectedStat, focused, CompleteMiniGame);
         }
 
@@ -389,7 +428,7 @@ namespace Border.Research
         {
             if (activeMiniGameController != null)
             {
-                DestroyUnityObject(activeMiniGameController.gameObject);
+                activeMiniGameController.HideForReuse();
                 activeMiniGameController = null;
             }
 
@@ -572,7 +611,7 @@ namespace Border.Research
 
             if (activeDesignController != null)
             {
-                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController.HideForReuse();
                 activeDesignController = null;
             }
 
@@ -581,9 +620,16 @@ namespace Border.Research
                 return;
             }
 
-            var host = new GameObject("Research Design Screen Controller");
-            host.transform.SetParent(transform, false);
-            activeDesignController = host.AddComponent<ResearchDesignScreenController>();
+            activeDesignController = ResolveDesignScreenController();
+            if (activeDesignController == null)
+            {
+                Debug.LogError("Research design screen controller must be preplaced in 01_Main.", this);
+                ReturnFromDesignScreen();
+                return;
+            }
+
+            activeDesignController.gameObject.SetActive(true);
+            activeDesignController.enabled = true;
             activeDesignController.Initialize(session, ReturnFromDesignScreen, ShowResultReport);
         }
 
@@ -591,7 +637,7 @@ namespace Border.Research
         {
             if (activeDesignController != null)
             {
-                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController.HideForReuse();
                 activeDesignController = null;
             }
 
@@ -631,7 +677,7 @@ namespace Border.Research
             if (resultReport.gameObject.activeSelf) return;
             if (activeDesignController != null)
             {
-                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController.HideForReuse();
                 activeDesignController = null;
             }
 
@@ -1013,6 +1059,72 @@ namespace Border.Research
             }
         }
 
+        private ResearchMiniGameController ResolveMiniGameController()
+        {
+            if (miniGameController != null)
+            {
+                return miniGameController;
+            }
+
+            miniGameController = GetComponentInChildren<ResearchMiniGameController>(true);
+            if (miniGameController != null)
+            {
+                return miniGameController;
+            }
+
+            miniGameController = FindSceneObject<ResearchMiniGameController>();
+            if (miniGameController != null || !CanCreateRuntimeUiFallback())
+            {
+                return miniGameController;
+            }
+
+            var host = new GameObject("Research Mini Game Controller");
+            host.transform.SetParent(transform, false);
+            miniGameController = host.AddComponent<ResearchMiniGameController>();
+            return miniGameController;
+        }
+
+        private ResearchDesignScreenController ResolveDesignScreenController()
+        {
+            if (designScreenController != null)
+            {
+                return designScreenController;
+            }
+
+            designScreenController = GetComponentInChildren<ResearchDesignScreenController>(true);
+            if (designScreenController != null)
+            {
+                return designScreenController;
+            }
+
+            designScreenController = FindSceneObject<ResearchDesignScreenController>();
+            if (designScreenController != null || !CanCreateRuntimeUiFallback())
+            {
+                return designScreenController;
+            }
+
+            var host = new GameObject("Research Design Screen Controller");
+            host.transform.SetParent(transform, false);
+            designScreenController = host.AddComponent<ResearchDesignScreenController>();
+            return designScreenController;
+        }
+
+        private bool CanCreateRuntimeUiFallback()
+        {
+            return !Application.isPlaying || gameObject.scene.name != ResearchFlowSession.MainSceneName;
+        }
+
+        private static T FindSceneObject<T>()
+            where T : Component
+        {
+            foreach (T component in FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                return component;
+            }
+
+            return null;
+        }
+
         private void EnsureResearchCameraRuntime()
         {
             ResolveResearchCameraTransform();
@@ -1117,7 +1229,12 @@ namespace Border.Research
 
             Button button = Instantiate(prefab, parent);
             button.name = name;
+            ConfigureCardButton(button, preferredHeight, out title, out detail);
+            return button;
+        }
 
+        private static void ConfigureCardButton(Button button, float preferredHeight, out TMP_Text title, out TMP_Text detail)
+        {
             LayoutElement layout = button.GetComponent<LayoutElement>();
             if (layout == null)
             {
@@ -1129,12 +1246,6 @@ namespace Border.Research
 
             title = FindChildText(button.transform, "Title");
             detail = FindChildText(button.transform, "Detail");
-            if (title != null && detail != null)
-            {
-                return button;
-            }
-
-            return button;
         }
 
         private static TMP_Text FindChildText(Transform root, string name)

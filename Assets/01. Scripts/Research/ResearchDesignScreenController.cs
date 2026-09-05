@@ -18,6 +18,7 @@ namespace Border.Research
         private Action returnToResearchCallback;
         private Action<ResearchLaunchResultData> launchCommittedCallback;
         private bool initialized;
+        private bool interfaceBuilt;
         private EnginePresetId selectedEnginePreset;
         private int[] installedEngineCounts;
         private int designFit;
@@ -32,6 +33,7 @@ namespace Border.Research
         private Button privateButton;
         private Button launchButton;
         private Button[] presetButtons;
+        private GameObject interfaceRoot;
 
         public bool RequestedResearchReturn { get; private set; }
 
@@ -57,17 +59,19 @@ namespace Border.Research
 
         public void Initialize(ResearchFlowSession activeSession, Action onReturnToResearch, Action<ResearchLaunchResultData> onLaunchCommitted)
         {
-            if (initialized)
+            session = activeSession ?? ResearchFlowSession.GetOrCreate();
+            returnToResearchCallback = onReturnToResearch;
+            launchCommittedCallback = onLaunchCommitted;
+            RequestedResearchReturn = false;
+
+            if (!interfaceBuilt && !BuildInterface())
             {
                 return;
             }
 
-            session = activeSession ?? ResearchFlowSession.GetOrCreate();
-            returnToResearchCallback = onReturnToResearch;
-            launchCommittedCallback = onLaunchCommitted;
-            if (!BuildInterface())
+            if (interfaceRoot != null)
             {
-                return;
+                interfaceRoot.SetActive(true);
             }
 
             initialized = true;
@@ -82,6 +86,18 @@ namespace Border.Research
 
             LoadDraft(session.PendingDesignEntry);
             Refresh();
+        }
+
+        public void HideForReuse()
+        {
+            returnToResearchCallback = null;
+            launchCommittedCallback = null;
+            if (interfaceRoot != null)
+            {
+                interfaceRoot.SetActive(false);
+            }
+
+            gameObject.SetActive(false);
         }
 
         public void ReturnToResearch()
@@ -120,8 +136,27 @@ namespace Border.Research
                 return false;
             }
 
-            GameObject instance = Instantiate(prefab, transform);
-            instance.name = "ResearchDesignCanvas";
+            GameObject instance;
+            bool createdInstance = false;
+            Transform existingCanvas = transform.Find("ResearchDesignCanvas");
+            if (existingCanvas != null)
+            {
+                instance = existingCanvas.gameObject;
+            }
+            else if (CanCreateRuntimeUiFallback())
+            {
+                instance = Instantiate(prefab, transform);
+                instance.name = "ResearchDesignCanvas";
+                createdInstance = true;
+            }
+            else
+            {
+                Debug.LogError("Research design UI must be preplaced in 01_Main.", this);
+                return false;
+            }
+
+            interfaceRoot = instance;
+            interfaceRoot.SetActive(true);
             if (instance.GetComponent<RectTransform>() == null)
             {
                 instance.AddComponent<RectTransform>();
@@ -169,7 +204,11 @@ namespace Border.Research
                 || fitDownButton == null
                 || fitUpButton == null)
             {
-                DestroyUnityObject(instance);
+                if (createdInstance)
+                {
+                    DestroyUnityObject(instance);
+                }
+
                 return false;
             }
 
@@ -183,6 +222,7 @@ namespace Border.Research
             fitUpButton.onClick.AddListener(() => ChangeDesignFit(10));
             publicButton.onClick.AddListener(() => SetVisibility(TestVisibility.Public));
             privateButton.onClick.AddListener(() => SetVisibility(TestVisibility.Private));
+            interfaceBuilt = true;
             return true;
         }
 
@@ -205,8 +245,19 @@ namespace Border.Research
             for (int i = 0; i < ResearchPrototypeModel.MaxEnginePresetCount; i++)
             {
                 EnginePresetId presetId = (EnginePresetId)i;
-                Button button = CreateButtonFromPrefab(enginePresetButtonPrefab, $"DesignPresetButton_{presetId}", presetRow, (i + 1).ToString("00"), 0f, 34f);
+                string buttonName = $"DesignPresetButton_{presetId}";
+                Button button = FindRequiredButton(presetRow, buttonName);
+                if (button == null)
+                {
+                    button = CreateButtonFromPrefab(enginePresetButtonPrefab, buttonName, presetRow, (i + 1).ToString("00"), 0f, 34f);
+                }
+                else
+                {
+                    ConfigurePresetButton(button, (i + 1).ToString("00"), 0f, 34f);
+                }
+
                 presetButtons[i] = button;
+                button.onClick.RemoveAllListeners();
                 button.onClick.AddListener(() =>
                 {
                     if (!session.Model.IsEnginePresetUnlocked(presetId))
@@ -463,6 +514,12 @@ namespace Border.Research
 
             Button button = Instantiate(prefab, parent);
             button.name = name;
+            ConfigurePresetButton(button, text, preferredWidth, preferredHeight);
+            return button;
+        }
+
+        private static void ConfigurePresetButton(Button button, string text, float preferredWidth, float preferredHeight)
+        {
             LayoutElement layout = button.GetComponent<LayoutElement>() ?? button.gameObject.AddComponent<LayoutElement>();
             if (preferredWidth > 0f)
             {
@@ -479,8 +536,6 @@ namespace Border.Research
             {
                 label.text = text;
             }
-
-            return button;
         }
 
         private static TMP_Text FindRequiredText(Transform root, string name)
@@ -520,6 +575,11 @@ namespace Border.Research
             }
 
             return null;
+        }
+
+        private bool CanCreateRuntimeUiFallback()
+        {
+            return !Application.isPlaying || gameObject.scene.name != ResearchFlowSession.MainSceneName;
         }
 
         private static void EnsureEventSystem()

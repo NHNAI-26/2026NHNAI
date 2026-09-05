@@ -813,7 +813,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void OperationUI_UsesConfiguredCardPrefabs()
+        public void OperationUI_UsesPreplacedEngineCardsBeforeConfiguredFallback()
         {
             var host = new GameObject("Research UI Test Host");
             Button engineTemplate = CreateCardTemplate("Engine Card Template", false);
@@ -825,7 +825,8 @@ namespace Border.Research.Tests
                 controller.ConfigureCardPrefabsForTests(engineTemplate, launchTemplate);
                 controller.InitializeForTests();
 
-                Assert.That(FindTransform(FindButton(host.transform, "EngineCard_Engine01").transform, "PrefabMarker"), Is.Not.Null);
+                Assert.That(FindButton(host.transform, "EngineCard_Engine01"), Is.Not.Null);
+                Assert.That(FindTransform(FindButton(host.transform, "EngineCard_Engine01").transform, "PrefabMarker"), Is.Null);
                 Assert.That(FindTransform(host.transform, "MissionCard_StaticFire"), Is.Null);
             }
             finally

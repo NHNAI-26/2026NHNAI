@@ -11,12 +11,20 @@ namespace Border.Editor.Research
     public static class ResearchPrototypeSceneBootstrap
     {
         private const string ResearchHostName = "Research Operation UI Controller";
+        private const string OperationCanvasName = "ResearchOperationCanvas";
+        private const string MiniGameHostName = "Research Mini Game Controller";
+        private const string MiniGameCanvasName = "ResearchMiniGameCanvas";
+        private const string DesignScreenHostName = "Research Design Screen Controller";
+        private const string DesignCanvasName = "ResearchDesignCanvas";
         private const string ResearchLabName = "Engine Research Lab";
         private const string PreviewHostName = "Research Engine Preview Controller";
         private const string PreviewRootName = "EnginePreviewRoot";
         private const string PreviewPlacementCubeName = "Cube";
         private const string ResearchCinemachineCameraName = "Research Cinemachine Camera";
         private const string MainScenePath = "Assets/00. Scenes/01_Main.unity";
+        private const string OperationScreenPrefabPath = "Assets/03. Prefabs/UI/Resources/ResearchUI/ResearchOperationScreen.prefab";
+        private const string MiniGameScreenPrefabPath = "Assets/03. Prefabs/UI/Resources/ResearchUI/ResearchMiniGameScreen.prefab";
+        private const string DesignScreenPrefabPath = "Assets/03. Prefabs/UI/Resources/ResearchUI/ResearchDesignScreen.prefab";
         private const string ResearchLabPrefabPath = "Assets/03. Prefabs/3D/room.prefab";
         private const string DefaultEnginePreviewPrefabPath = "Assets/05. Arts/FBX/Engine/BaseEngine/Meshy_AI__0904142514_texture.prefab";
         private const string BalancedEnginePreviewPrefabPath = "Assets/05. Arts/FBX/Engine/Full/Full.prefab";
@@ -112,7 +120,11 @@ namespace Border.Editor.Research
 
             if (scene.name == ResearchFlowSession.MainSceneName)
             {
-                InstallResearchController(scene, installEngineLab: true);
+                Border.Research.Editor.ResearchUiPrefabBuilder.EnsureDefaultPrefabsCurrent();
+                if (InstallResearchController(scene, installEngineLab: true))
+                {
+                    EditorSceneManager.SaveScene(scene);
+                }
             }
         }
 
@@ -125,10 +137,18 @@ namespace Border.Editor.Research
                 scene = EditorSceneManager.OpenScene(MainScenePath, OpenSceneMode.Single);
             }
 
+            Border.Research.Editor.ResearchUiPrefabBuilder.EnsureDefaultPrefabsCurrent();
             InstallResearchController(scene, registerUndo: false, installEngineLab: true);
             EditorSceneManager.SaveScene(scene);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+        }
+
+        [MenuItem("Border/Research/Rebuild Research UI And Apply To 01_Main")]
+        public static void RebuildResearchUiAndApplyToMainScene()
+        {
+            Border.Research.Editor.ResearchUiPrefabBuilder.RebuildUiPrefabs();
+            ApplyEngineLabToMainScene();
         }
 
         [MenuItem("Border/Research/Debug/Enter Design In 01_Main")]
@@ -147,23 +167,22 @@ namespace Border.Editor.Research
                 return;
             }
 
-            ResearchOperationUIController controller = UnityEngine.Object.FindFirstObjectByType<ResearchOperationUIController>();
+            ResearchOperationUIController controller = FindComponentInScene<ResearchOperationUIController>(scene);
             if (controller == null)
             {
-                var host = new GameObject(ResearchHostName);
-                SceneManager.MoveGameObjectToScene(host, scene);
-                controller = host.AddComponent<ResearchOperationUIController>();
+                Debug.LogError("01_Main에 미리 배치된 ResearchOperationUIController가 없습니다.");
+                return;
             }
 
             controller.InitializeForTests();
             controller.EnterDesignDebugForEditor();
         }
 
-        private static void InstallResearchController(Scene scene, bool registerUndo = true, bool installEngineLab = false)
+        private static bool InstallResearchController(Scene scene, bool registerUndo = true, bool installEngineLab = false)
         {
             if (!scene.IsValid())
             {
-                return;
+                return false;
             }
 
             bool changed = false;
@@ -181,6 +200,26 @@ namespace Border.Editor.Research
                 changed = true;
             }
 
+            changed |= EnsurePrefabChild(controller.transform, OperationCanvasName, OperationScreenPrefabPath, active: true, registerUndo);
+            ResearchMiniGameController miniGameController = EnsureScreenController<ResearchMiniGameController>(
+                scene,
+                MiniGameHostName,
+                MiniGameCanvasName,
+                MiniGameScreenPrefabPath,
+                active: false,
+                registerUndo,
+                out bool miniGameChanged);
+            changed |= miniGameChanged;
+            ResearchDesignScreenController designScreenController = EnsureScreenController<ResearchDesignScreenController>(
+                scene,
+                DesignScreenHostName,
+                DesignCanvasName,
+                DesignScreenPrefabPath,
+                active: false,
+                registerUndo,
+                out bool designScreenChanged);
+            changed |= designScreenChanged;
+
             if (installEngineLab)
             {
                 Transform researchLabRoot = EnsureResearchLab(scene, registerUndo, out bool researchLabChanged);
@@ -188,7 +227,7 @@ namespace Border.Editor.Research
                 ResearchEnginePreviewController preview = EnsureEnginePreview(scene, registerUndo, out bool previewChanged);
                 changed |= previewChanged;
                 changed |= EnsureResearchCinemachineCamera(scene, registerUndo, out Transform researchCameraTransform);
-                changed |= ConfigureResearchController(controller, preview, researchLabRoot, researchCameraTransform);
+                changed |= ConfigureResearchController(controller, preview, researchLabRoot, researchCameraTransform, miniGameController, designScreenController);
                 EnsureVisibleEditModePreview(preview);
             }
 
@@ -196,6 +235,8 @@ namespace Border.Editor.Research
             {
                 EditorSceneManager.MarkSceneDirty(scene);
             }
+
+            return changed;
         }
 
         private static Transform EnsureResearchLab(Scene scene, bool registerUndo, out bool changed)
@@ -442,7 +483,9 @@ namespace Border.Editor.Research
             ResearchOperationUIController controller,
             ResearchEnginePreviewController preview,
             Transform researchLabRoot,
-            Transform researchCameraTransform)
+            Transform researchCameraTransform,
+            ResearchMiniGameController miniGameController,
+            ResearchDesignScreenController designScreenController)
         {
             if (controller == null || preview == null)
             {
@@ -453,6 +496,8 @@ namespace Border.Editor.Research
             bool changed = SetObjectReference(serializedController, "enginePreview", preview);
             changed |= SetObjectReference(serializedController, "researchLabRoot", researchLabRoot);
             changed |= SetObjectReference(serializedController, "researchCameraTransform", researchCameraTransform);
+            changed |= SetObjectReference(serializedController, "miniGameController", miniGameController);
+            changed |= SetObjectReference(serializedController, "designScreenController", designScreenController);
             if (serializedController.ApplyModifiedProperties())
             {
                 changed = true;
@@ -461,6 +506,112 @@ namespace Border.Editor.Research
             if (changed)
             {
                 EditorUtility.SetDirty(controller);
+            }
+
+            return changed;
+        }
+
+        private static T EnsureScreenController<T>(
+            Scene scene,
+            string hostName,
+            string canvasName,
+            string prefabPath,
+            bool active,
+            bool registerUndo,
+            out bool changed)
+            where T : Component
+        {
+            changed = false;
+            T controller = FindComponentInScene<T>(scene);
+            GameObject host = controller != null ? controller.gameObject : FindRoot(scene, hostName);
+            if (host == null)
+            {
+                host = new GameObject(hostName);
+                if (registerUndo)
+                {
+                    Undo.RegisterCreatedObjectUndo(host, $"Install {hostName}");
+                }
+
+                SceneManager.MoveGameObjectToScene(host, scene);
+                changed = true;
+            }
+
+            if (controller == null)
+            {
+                controller = host.GetComponent<T>();
+                if (controller == null)
+                {
+                    controller = registerUndo ? Undo.AddComponent<T>(host) : host.AddComponent<T>();
+                    changed = true;
+                }
+            }
+
+            if (host.activeSelf != active)
+            {
+                host.SetActive(active);
+                changed = true;
+            }
+
+            changed |= EnsurePrefabChild(host.transform, canvasName, prefabPath, active: true, registerUndo);
+            if (changed)
+            {
+                EditorUtility.SetDirty(host);
+                EditorUtility.SetDirty(controller);
+            }
+
+            return controller;
+        }
+
+        private static bool EnsurePrefabChild(Transform parent, string childName, string prefabPath, bool active, bool registerUndo)
+        {
+            if (parent == null)
+            {
+                return false;
+            }
+
+            bool changed = false;
+            Transform child = parent.Find(childName);
+            if (child == null)
+            {
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                if (prefab == null)
+                {
+                    Debug.LogWarning($"Research UI prefab was not found: {prefabPath}");
+                    return false;
+                }
+
+                GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+                instance.name = childName;
+                if (registerUndo)
+                {
+                    Undo.RegisterCreatedObjectUndo(instance, $"Install {childName}");
+                }
+
+                child = instance.transform;
+                changed = true;
+            }
+
+            if (child.localPosition != Vector3.zero || child.localRotation != Quaternion.identity)
+            {
+                child.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+                changed = true;
+            }
+
+            if (child.localScale != Vector3.one)
+            {
+                child.localScale = Vector3.one;
+                changed = true;
+            }
+
+            if (child.gameObject.activeSelf != active)
+            {
+                child.gameObject.SetActive(active);
+                changed = true;
+            }
+
+            if (changed)
+            {
+                EditorUtility.SetDirty(child);
             }
 
             return changed;
