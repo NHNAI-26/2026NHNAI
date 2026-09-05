@@ -4982,7 +4982,7 @@ MonoBehaviour:
     m_NumAlphaKeys: 2
   fogColor:
     serializedVersion: 2
-    key0: {r: 0.5884706, g: 0.615, b: 0.615, a: 1}
+    key0: {r: 1, g: 1, b: 1, a: 1}
     key1: {r: 0.45, g: 0.58, b: 0.75, a: 1}
     key2: {r: 0.02, g: 0.02, b: 0.05, a: 0}
     key3: {r: 0, g: 0, b: 0, a: 0}
