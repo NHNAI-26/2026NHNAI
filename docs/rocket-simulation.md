@@ -1327,10 +1327,22 @@ UI 도 같이 들어오고, 내리면 같이 나간다 — 코드가 스폰하�
 TopBar          가로 전체, 높이 64   [ARTEMIS CONTROL] [연.Q분기 / 남은 분기] [보유 자금 · 설치]  ← 칸마다 패널
 PresetPanel     좌측 폭 200, 두 바 사이                    발사 전
 FlightInfoPanel 좌측 폭 200, PresetPanel 과 같은 자리       발사 후
-Viewport        200 .. 오른쪽 끝, 스테퍼 위 .. 상단 바 아래   (LaunchPip 이 그 안 우하단)
+Viewport        200 .. 오른쪽 끝, 스테퍼 위 .. 상단 바 아래   (taskPanel 그 안 상단, LaunchPip 우하단)
 StageStrip      Viewport 와 같은 가로, 높이 32              점화 ─ 이륙 ─ 상승 ─ 목표 구역 ─ 체류
-BottomBar       가로 전체, 높이 64   현재 미션 문구 │ [연구 화면] [발사 / 자폭]
+BottomBar       가로 전체, 높이 64   남은 이벤트 효과 / 비행 상태 │ [연구실로] [발사 / 자폭]
 ```
+
+**목표는 `taskPanel`, 상황은 하단 바.** 뷰포트 안 상단의 `taskPanel/txttask` 가
+`TASK {번호} : {목표}` 한 줄을 든다. 번호는 `LaunchMissionId` 값 그대로다 — `StaticFire = 0` 은
+직렬화 호환용 죽은 값이라 실제 미션이 1부터 시작해서 그대로 쓸 수 있다. 목표 문구는
+`LaunchMissionController.Objective`(= `LaunchMissionEvaluator.GetObjectiveDescription`)에서 오고,
+미션 컨트롤러가 아직 없으면 패널을 끈다.
+
+하단 바 `Mission` 은 세 가지를 시점으로 나눠 쓴다. 발사 전에는 **남은 이벤트 효과**
+(`ResearchPrototypeModel.PendingLaunchEffectsText` — 이전 발사 결과 이벤트가 다음 행동까지 끌고 가는
+효과들), 발사 뒤에는 `LaunchMissionController.Status`. 셋이 같은 시점에 겹치지 않아 자리를 다투지 않는다.
+예외는 발사 거부 사유(`SimulationStageHost.LaunchMessage`)인데, 한 번 설정되면 다음 발사 시도까지
+지워지지 않으므로 이벤트 효과 **아래** 줄에 붙인다 — 위에 두면 한 번 거부당한 뒤로 이벤트가 영영 가린다.
 
 **상단 바는 칸마다 패널을 따로 깐다.** `TopBar` 자체는 Graphic 이 없는 껍데기고 `TitleCell`/`DateCell`/
 `FundsCell` 세 개가 각자 패널 스프라이트를 쓴다(`CellGap` 4 만큼 벌린다). 패널 한 장 위에 글자만 셋 얹으면

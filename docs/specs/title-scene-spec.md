@@ -6,15 +6,15 @@
 
 | 항목 | 값 |
 |---|---|
-| 인터뷰 상태 | `active` — 모든 재료 결정 완료. **구현 완료·검증됨.** 명시적 finish 신호 대기 |
+| 인터뷰 상태 | `active` — 모든 재료 결정 완료. **오프닝 연출까지 구현 완료.** 명시적 finish 신호 대기 |
 | 작업 언어 | 한국어 (명시적 finish 시 영문 정본 + `.ko.md` 미러 생성) |
-| Revision | 6 |
-| 최종 갱신 | 2026-09-04 |
+| Revision | 7 |
+| 최종 갱신 | 2026-09-06 |
 | 프로젝트 루트 | `C:\myGame\2026NHNAI` |
 | 기준 경로 (최종 English) | `docs/specs/title-scene-spec.md` |
 | 한국어 미러 경로 (최종) | `docs/specs/title-scene-spec.ko.md` |
 | 명시적 finish 수신 | `no` |
-| 다음 승인된 행동 | 사용자의 명시적 finish 신호 대기. 구현은 rev 6에서 별도 승인("구현해줘")을 받아 완료했다. **커밋은 아직 승인되지 않음.** |
+| 다음 승인된 행동 | 사용자의 명시적 finish 신호 대기. rev 7 오프닝 연출은 별도 승인을 받아 구현했다. **커밋은 아직 승인되지 않음.** |
 
 용어: **GDD** = `docs/artemis-2026-gdd/` 의 게임 기획서 18개 문서(Game Design Document). 커밋 `7a64175`로
 저장소에 들어온 기존 문서다.
@@ -36,15 +36,22 @@
 >
 > **rev 6 — 구현 완료**: 사용자가 "구현해줘"로 별도 승인했다. §17에 산출물과 검증 결과를 기록했다.
 > R-001 ~ R-003, R-007 ~ R-009, R-011, R-012 검증 통과. 커밋은 아직 하지 않았다.
+>
+> **rev 7 — 오프닝 연출**: UD-011로 타이틀이 "텍스트만"에서 벗어났다. 좌측에 3D 로켓이 서고, 카메라가
+> 미세하게 흔들려 발사 중처럼 보이며, 우측 텍스트가 떨린다. 종료 버튼이 들어왔다(AR-002 뒤집힘).
+> UD-012로 설정 버튼은 남는다 — 해상도·볼륨에 닿는 유일한 경로이기 때문이다.
 
 ---
 
 ## 1. 목표 (Outcome)
 
-게임 실행 직후 플레이어가 보는 **텍스트 기반 타이틀 화면**을 만든다. 표시 항목은 최소한이다.
+게임 실행 직후 플레이어가 보는 타이틀 화면을 만든다. rev 7부터 텍스트 전용이 아니라 **발사 직전이 읽히는
+오프닝 화면**이다: 좌측에 로켓, 우측에 메뉴.
 
-- 게임 제목
-- `NEW GAME` — 누르면 `01_Main` 씬으로 진입
+- 화면 좌측: 3D 로켓이 비스듬한 앞각도(코가 기울어 보이는 3/4 뷰)로 서서 엔진 이펙트를 뿜는다
+- 화면 우측: 게임 제목, `게임 시작`, `설정`, `게임 종료`
+- 카메라가 계속 미세하게 흔들려 로켓이 위로 밀려 올라가는 인상을 준다
+- 텍스트는 은은하게 떨린다
 
 저장·불러오기는 만들지 않는다. 게임 시작 버튼은 `ResearchFlowSession.PrepareNewGame()`을 호출한 뒤 메인 씬을 연다. 타이틀로 돌아올 때 남아 있던 세션도 초기화하며, 세션이 없다면 타이틀에서 만들지 않는다. 실행할 때마다 항상 새 게임이다(UD-006).
 
@@ -88,6 +95,9 @@
 | 타이틀 씬을 빌드 세팅 인덱스 0으로 등록 | UD-005 | active | 현재 인덱스 0은 SampleScene (SF-001) |
 | `01_Main` 씬 신설 및 빌드 세팅 등록 | UD-004 | active | GDD 13 §1 권장 이름. 내용은 비어 있어도 됨 |
 | `NEW GAME` 동작: 연구 상태 초기화 후 `01_Main`으로 씬 전환 | UD-001, UD-004, UD-006 | active | 지속 세션의 이전 진행을 지우고 연결된 밸런스 SO를 다시 읽음 |
+| 좌측 3D 로켓 + 엔진 이펙트 | UD-011 | active | 기존 아트 프리팹 정적 조립. `RocketBuilder`·설계 데이터는 쓰지 않는다 |
+| 카메라 미세 흔들림, 텍스트 떨림 | UD-011 | active | 같은 `TitleJitter` 컴포넌트를 카메라와 텍스트에 재사용 |
+| `게임 종료` 버튼 | UD-011 | active | `PauseMenuController.QuitGame` 과 같은 관용구 |
 
 ### 제외 (비목표)
 
@@ -95,10 +105,12 @@
 |---|---|---|---|
 | **CONTINUE 버튼, 세이브, 로드** | UD-006 | active | "세이브 로드는 없고 그냥 항상 새게임으로". GDD 18 §10과도 일치 |
 | 기존 `SaveLoadSystem` 호출 | UD-006, SF-014 | active | 코드는 그대로 두되 이번 화면에서 쓰지 않는다 (AR-008) |
-| 배경 아트, 로고 이미지, 인트로 연출 | UD-001 | active | 사용자가 "일단 텍스트로"라고 명시 |
+| 배경 아트, 로고 이미지 | UD-001 | active | 배경은 여전히 단색이다. 화면을 채우는 것은 로켓 하나 |
+| 인트로 연출 | UD-001 | **cancelled** (UD-011, rev 7) | rev 7에서 오프닝 연출이 범위에 들어왔다 |
 | 프롤로그 재생 | UD-004 | active | Q-002에서 프롤로그 선택지를 고르지 않음. 별도 작업으로 구현됨 — `docs/specs/prologue-spec.md` |
 | 별도 설정 전용 씬 | SF-007 | active | 설정은 타이틀에 연결한 SettingsMenu 프리팹으로 제공. 해상도와 전체/BGM/SFX 볼륨 조절, 닫기 버튼 포함 |
-| 종료(QUIT) 버튼, 크레딧 | AR-002 | proposed | 요청에 없음 |
+| 크레딧 | AR-002 | active | 요청에 없음 |
+| ~~종료(QUIT) 버튼~~ | AR-002 | **cancelled** (UD-011, rev 7) | `게임 종료` 버튼이 범위에 들어왔다 |
 | 로컬라이즈 테이블 구축 | SF-011 | active | 지금은 영문 리터럴로 충분 |
 | `01_Main`의 실제 운영 화면 UI 구현 | UD-004 | active | 이번엔 전환 대상으로서의 빈 씬만 |
 
@@ -137,6 +149,10 @@
 | R-010 | ~~저장 데이터는 재실행해도 유지된다~~ | functional | UD-003 | — | **cancelled** (UD-006, rev 3) | — |
 | R-011 | 타이틀 화면은 어떤 세이브 파일도 읽거나 쓰지 않는다 | quality | UD-006 | must | active | 코드 리뷰: `SaveLoadSystem` / `FileManager` 참조 0건 |
 | R-012 | `NEW GAME` 버튼은 Unity `Button` + `TMP_Text`로 구성하며 `UIGenericButton` / `UILocalizeText`를 부착하지 않는다 | operational | UD-010 | must | active | 프리팹 컴포넌트 확인. SF-010 빈 라벨 재현 안 됨 |
+| R-013 | 타이틀 좌측에 로켓이 비스듬한 앞각도로 보이고 엔진 이펙트가 재생된다 | functional | UD-011 | must | active | Game View 스크린샷 |
+| R-014 | 카메라가 미세하게 흔들려 발사 중 인상을 준다 | functional | UD-011 | should | active | Play Mode 육안 확인 |
+| R-015 | 제목과 세 메뉴 텍스트가 은은하게 떨린다 | functional | UD-011 | should | active | Play Mode 육안 확인 |
+| R-016 | `게임 종료` 클릭 시 애플리케이션이 종료된다(에디터에서는 플레이 모드 종료) | functional | UD-011 | must | active | Play Mode 육안 확인 |
 
 ## 7. 제약
 
@@ -172,6 +188,8 @@
 | UD-007 | 사용자 결정 | Q-005 답변 "GDD 13 §2 GameState 통째로" — 저장 대상 지정 | 사용자 메시지 (rev 3, UD-006 직전) | **superseded** (UD-006) | 저장 자체가 제외됨 |
 | UD-008 | 사용자 결정 | Q-006 답변 "저장 데이터 버전 필드" — 세이브 유효성 판정 방식 | 사용자 메시지 (rev 3, UD-006 직전) | **superseded** (UD-006) | 저장 자체가 제외됨 |
 | UD-009 | 사용자 결정 | Q-007 답변 "이 기획서만으로 충분" — **GDD는 초기 기획 스냅샷으로 두고 수정하지 않는다.** 이후 변경은 `docs/specs/` 기획서가 진실 | 사용자 메시지 (rev 4) | active | OI-005 resolved, GDD 11/13 미수정 |
+| UD-011 | 사용자 결정 | "오프닝 연출을 만들려고 해… 좌측에 로켓, 우측에 게임 시작·게임 종료. 로켓이 위쪽으로 발사되고 있는 것처럼 카메라를 좀 흔들어줘. 글자가 은은하게 부들부들 떨리는 효과" — 로켓은 기존 프리팹 정적 배치 | 사용자 메시지 (rev 7) | active | R-013~R-016, AR-002 뒤집힘 |
+| UD-012 | 사용자 결정 | "아 그러면 설정도 넣어줘 게임시작 게임종료 설정" — 설정 버튼 유지. 제거 시 `MenuPrefabTests` 2건이 깨지고 해상도·볼륨 설정이 게임에서 닿을 수 없게 된다는 점을 확인한 뒤의 결정 | 사용자 메시지 (rev 7) | active | 메뉴 3개 확정 |
 | UD-010 | 사용자 결정 | Q-008 답변 "순수 Button + TMP_Text" — `NEW GAME` 버튼은 Unity 기본 `Button`과 `TMP_Text`로 만든다. `UIGenericButton` / `UILocalizeText`는 쓰지 않는다 | 사용자 메시지 (rev 5) | active | AR-005 accepted, OI-008 resolved, RK-007 resolved, R-002, R-012 |
 | SF-001 | 검증된 사실 | 빌드 세팅 씬은 SampleScene 하나 | `EditorBuildSettings.asset` | active | R-009 |
 | SF-002 | 검증된 사실 | 씬 전환 코드 0건 | grep 결과 | active | 제약, R-007 |
@@ -188,7 +206,7 @@
 | SF-013 | 검증된 사실 | GDD 13 §2 `GameState` / `StageState` 구조 | `13_기술구조_Unity.md:55-100` | active (범위 무관) | — |
 | SF-014 | 검증된 사실 | `SaveLoad`는 업스트림 벤더링 사본. 손대면 로컬 포크 | `CLAUDE.md` | active | AR-008 |
 | AR-001 | 권고 | 타이틀 씬 신설 + 빌드 인덱스 0 | SF-001, SF-012 | **accepted** (UD-005) | R-001 |
-| AR-002 | 권고 | QUIT 버튼은 넣지 않는다 | UD-001 | proposed | 채택 시 새 UD |
+| AR-002 | 권고 | QUIT 버튼은 넣지 않는다 | UD-001 | **rejected** (UD-011, rev 7) | `게임 종료` 버튼 구현됨 |
 | AR-003 | 권고 | 세이브 슬롯 1개 고정 | UD-002 | **cancelled** (UD-006) | — |
 | AR-004 | 권고 | 세션 복원만으로 CONTINUE 구성 | SF-005, SF-006 | **cancelled** (UD-006) | — |
 | AR-005 | 권고 | `UIGenericButton` 대신 순수 `Button` + `TMP_Text`를 쓴다 | SF-010, SF-011 | **accepted** (UD-010) | R-002, R-012 |
@@ -224,6 +242,7 @@
 | 2 | Q-001~Q-003 답변 | UD-003(디스크 저장 허용), UD-004(`01_Main`), UD-005(새 씬 + 프리팹). RK-001·OI-001·OI-006 해소. R-009/R-010 신설. SF-013 조사. OI-007·RK-006 신설 | SF-005/006 superseded, AR-001 accepted, AR-004 superseded | 전 섹션 |
 | 3 | 사용자 정정: "세이브 로드는 없고 그냥 항상 새게임으로 할 수 있게 해줘" | UD-006 신규(저장·불러오기 전면 제외). UD-002·UD-003·UD-007·UD-008 대체. R-004~R-006·R-010 cancelled, R-011 신설. OI-002/003/004/007·RK-002/003/006·AR-003/004/006/007 cancelled. SF-005/SF-006을 active로 복귀(이제 계획과 일치). SF-014 추가 조사. Q-004 cancelled, Q-007 신규 | UD-002, UD-003 → corrected / UD-007, UD-008 → superseded / SF-005, SF-006 → active 복귀 | 목표, 스냅샷, 이해관계자, 범위, 흐름, 요구사항, 제약, 성공 근거, 원장, 질문, 리스크, 미해결, 커버리지, 체크포인트 |
 | 4 | Q-007 답변 "이 기획서만으로 충분" | UD-009 신규(GDD 미수정, `docs/specs/` 기획서가 변경분의 진실). OI-005 resolved. GDD 11 §1 제약 resolved. Q-008 신규(버튼 컴포넌트 선택, RK-007 대응) | OI-005 → resolved / Q-007 → answered | 배너, Document State, 제약, 원장, 질문, 미해결, 리스크, 커버리지, 체크포인트 |
+| 7 | 사용자 요청: 오프닝 연출 | UD-011·UD-012 신규. R-013~R-016 신설. AR-002 rejected. "인트로 연출" 제외 항목 cancelled. §17에 rev 7 산출물 추가 | AR-002 → rejected | 배너, Document State, 목표, 범위, 요구사항, 원장, 개정 이력, 산출물 |
 | 5 | Q-008 답변 "순수 Button + TMP_Text" | UD-010 신규. R-012 신설. AR-005 accepted. OI-008·RK-007 resolved. `UIGenericButton` 제약 resolved. 활성 미해결 0건 | AR-005 → accepted / OI-008, RK-007 → resolved / Q-008 → answered | 배너, Document State, 요구사항, 제약, 원장, 질문, 미해결, 리스크, 커버리지, 체크포인트 |
 
 ## 12. 리스크·충돌·의존성
@@ -314,6 +333,32 @@ Console 오류 0건.
 **검증하지 않은 것**: 실제 마우스 클릭 입력 경로(`InputSystemUIInputModule` 경유)는 테스트하지 않았다.
 `onClick`을 코드로 직접 호출해 검증했으므로 레이캐스트·입력 모듈 구간은 미검증이다. 플레이어 빌드도
 만들지 않았다. EditMode/PlayMode 테스트 스위트는 이 기능에 대해 추가하지 않았다.
+
+### rev 7 산출물 (오프닝 연출)
+
+| 경로 | 내용 |
+|---|---|
+| `Assets/01. Scripts/Title/TitleJitter.cs` | Perlin 노이즈로 `localPosition`/`localEulerAngles` 에 오프셋을 얹는 컴포넌트 하나. 카메라(진폭 크게, 회전 포함)와 텍스트(위치만, 픽셀 단위)가 **같은 스크립트를 공유**한다 |
+| `Assets/01. Scripts/Title/TitleMenu.cs` | `quitButton` 필드 + `QuitGame()`. `PauseMenuController.QuitGame` 과 같은 `#if UNITY_EDITOR` 관용구, `loading` 가드로 연타 차단 |
+| `Assets/03. Prefabs/3D/TitleRocket.prefab` | `RocketBody`(스케일 400, X −90) + `RocketEngine` 3기(스케일 0.6, 반경 0.17 클러스터). 높이 4.5 유닛, 바닥 y −0.5 |
+| `Assets/03. Prefabs/UI/TitleScreen.prefab` | 우측 컬럼 재배치, `QuitButton` 신설, 배경 `Image` 알파 0, `Button.targetGraphic` 을 라벨로 교체, 텍스트 4개에 `TitleJitter` |
+| `Assets/00. Scenes/00_Title.unity` | 카메라 perspective 전환 + 포즈, `TitleJitter`, `Directional Light` 신설, `TitleRocket` 인스턴스 |
+| `Assets/Tests/EditMode/Research/MenuPrefabTests.cs` | 종료 버튼 어서션 3줄 추가 |
+
+설계 판단:
+
+- **`RocketBuilder` 를 쓰지 않는다.** 그것은 팩토리가 아니라 드래그 입력·Cinemachine·`Rocket` 리지드바디를
+  끌고 오는 씬 컨트롤러다. 타이틀 로켓은 아트 프리팹을 손으로 조립한 정적 프리팹이면 충분하다.
+  `RocketPart` 는 `Awake`/`Update` 가 없어 붙어 있어도 완전히 무동작이므로 떼지 않았다.
+- **엔진 이펙트는 `playOnAwake` 오버라이드가 전부다.** `RocketEngine.prefab` 의 `Flame`/`Smoke` 는
+  `playOnAwake: 0` 이라 평소엔 `RocketPart` 가 켜 준다. 타이틀에서는 그 한 값만 뒤집었다.
+- **호버 피드백에 코드를 쓰지 않았다.** `Button.targetGraphic` 을 배경 `Image` 대신 자식 라벨로 바꾸면
+  기존 ColorTint 가 그대로 텍스트를 물들인다.
+- **버튼 크기 460×110 과 라벨 "설정" 은 고정이다.** `MenuPrefabTests` 가 세 버튼의 `sizeDelta` 일치를
+  잠그고, `MenuUiPrefabBuilder.InstallTitleSettings` 가 SettingsButton 을 NewGameButton −130 위치로
+  재생성한다. 배치를 바꿀 때 이 두 곳을 같이 본다.
+
+**검증하지 않은 것**: BGM. 타이틀 씬에는 `AudioListener` 가 없어 소리를 넣으려면 그것부터 추가해야 한다.
 
 ## 16. 확정 및 핸드오프
 

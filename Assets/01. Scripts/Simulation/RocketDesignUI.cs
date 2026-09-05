@@ -74,6 +74,8 @@ namespace Simulation
         private TMP_Text fundsText;
         private readonly int[] installedPresetCounts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
         private TMP_Text missionText;
+        private RectTransform taskPanel;
+        private TMP_Text taskText;
         private RectTransform stageStrip;
         private Image[] stageDots;
         private Image[] stageLines;
@@ -476,11 +478,28 @@ namespace Simulation
             dateText.text = $"{model.Year}.Q{model.Quarter} / 남은 분기 : {model.RemainingTurns}";
             fundsText.text = $"보유 자금 : {model.Funds:N0} $\n설치 : {installed:N0} $";
 
+            // 목표는 뷰 안 상단 TASK 패널이 맡는다. 번호는 LaunchMissionId 값 그대로다 —
+            // StaticFire=0 은 직렬화 호환용 죽은 값이라 실제 미션은 1부터 시작한다.
+            LaunchMissionId missionId = session.HasPendingDesignEntry
+                ? session.PendingDesignEntry.MissionId
+                : model.GetCurrentMission();
+            bool hasObjective = mission != null && !string.IsNullOrEmpty(mission.Objective);
+            taskPanel.gameObject.SetActive(hasObjective);
+            if (hasObjective) taskText.text = $"TASK {(int)missionId} : {mission.Objective}";
+
+            // 하단 바는 발사 전에는 남은 이벤트 효과와 발사 거부 사유를, 발사 뒤에는 비행 상태를 쓴다.
+            // 셋은 서로 다른 시점에만 나와 자리를 다투지 않는다. 거부 사유만은 다음 발사 시도까지
+            // 지워지지 않으므로 이벤트 아래에 붙인다 — 위에 두면 한 번 거부당한 뒤로 이벤트가 영영 가린다.
             missionText.text = launched && mission != null
-                ? mission.Objective + "\n" + mission.Status
-                : stageHost != null && !string.IsNullOrEmpty(stageHost.LaunchMessage)
-                    ? stageHost.LaunchMessage
-                    : mission != null ? mission.Objective : string.Empty;
+                ? mission.Status
+                : JoinLines(model.PendingLaunchEffectsText, stageHost != null ? stageHost.LaunchMessage : null);
+        }
+
+        private static string JoinLines(string first, string second)
+        {
+            if (string.IsNullOrEmpty(first)) return second ?? string.Empty;
+            if (string.IsNullOrEmpty(second)) return first;
+            return first + "\n" + second;
         }
 
         /// <summary>
@@ -700,6 +719,8 @@ namespace Simulation
             fundsText = topBar.Find("FundsCell/Funds").GetComponent<TMP_Text>();
 
             viewport = (RectTransform)canvasRect.Find("Viewport");
+            taskPanel = (RectTransform)viewport.Find("taskPanel");
+            taskText = taskPanel.GetComponentInChildren<TMP_Text>(true);
 
             stageStrip = (RectTransform)canvasRect.Find("StageStrip");
             int count = LaunchMissionEvaluator.StageNames.Length;

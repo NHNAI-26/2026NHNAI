@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Reflection;
 using Border.Settings;
 using Border.Title;
@@ -25,6 +25,10 @@ namespace Border.Research.Tests
             Assert.That(((RectTransform)settings.transform).sizeDelta, Is.EqualTo(((RectTransform)start.transform).sizeDelta));
             Assert.That(settings.GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("설정"));
             Assert.That(title.FindProperty("settingsMenu").objectReferenceValue, Is.Not.Null);
+            var quit = (Button)title.FindProperty("quitButton").objectReferenceValue;
+            Assert.That(quit, Is.Not.Null);
+            Assert.That(((RectTransform)quit.transform).sizeDelta, Is.EqualTo(((RectTransform)start.transform).sizeDelta));
+            Assert.That(quit.GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("게임 종료"));
         }
 
         [Test]
