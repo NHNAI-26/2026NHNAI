@@ -4,6 +4,7 @@
     "references": [
         "Border",
         "Simulation",
+        "Unity.RenderPipelines.Universal.Runtime",
         "Border.Editor",
         "UnityEngine.UI"
     ],

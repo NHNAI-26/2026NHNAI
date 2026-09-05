@@ -35,6 +35,8 @@ namespace Simulation
                 Instantiate(soundManagerPrefab);
             rocket.LaunchStarted += OnLaunch;
             rocket.LiftoffStarted += OnLiftoff;
+            rocket.SplashdownStarted += OnSplashdown;
+            rocket.ExplosionStarted += OnExplosion;
         }
 
         private void OnLaunch()
@@ -56,6 +58,19 @@ namespace Simulation
                 SoundManager.Instance.PlayBgm("Launch");
                 spark = SoundManager.Instance.PlaySfx("SparkStart");
             }
+        }
+
+        private void OnExplosion()
+        {
+            ClearAudio();
+            for (int i = 0; i < 4; i++)
+                SoundManager.Instance?.PlaySfx("RocketExplosion");
+        }
+
+        private void OnSplashdown(Vector3 impactPoint)
+        {
+            // Keep the 2D impact alive after the rocket sinks or the scene unloads.
+            SoundManager.Instance?.PlaySfx("HeavyWave");
         }
 
         private void OnLiftoff()
@@ -124,6 +139,8 @@ namespace Simulation
             {
                 rocket.LaunchStarted -= OnLaunch;
                 rocket.LiftoffStarted -= OnLiftoff;
+                rocket.SplashdownStarted -= OnSplashdown;
+                rocket.ExplosionStarted -= OnExplosion;
             }
             ClearAudio();
         }

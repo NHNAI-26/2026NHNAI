@@ -15,6 +15,7 @@ namespace Simulation
         private bool[] rendererVisibility;
         public bool Exploded { get; private set; }
         public event System.Action OverheatExplosionStarted;
+        public event System.Action ExplosionStarted;
         public event System.Action<bool> ExplosionPhotoRequested;
         // ponytail: 계수 하나를 모든 엔진이 공유한다. 프리셋마다 탱크 밀도를 다르게 하고 싶어지면 그때
         // EngineStatsSO 필드로 내린다 — CreateRuntimeCopy 와 리서치 브리지도 같이 넓어진다.
@@ -105,6 +106,8 @@ namespace Simulation
 
         /// <summary>수면 아래로 내려갔는지. 추력은 여기서 끝난다.</summary>
         public bool Splashed { get; private set; }
+
+        public event System.Action<Vector3> SplashdownStarted;
 
         /// <summary>
         /// 점화 후 <paramref name="elapsedSeconds"/> 시점의 추력 배율. 램프 시계는 로켓에 하나뿐이다 —
@@ -361,6 +364,9 @@ namespace Simulation
             if (!Splashed)
             {
                 Splashed = true;
+                Vector3 impactPoint = transform.position;
+                impactPoint.y = waterLevel;
+                SplashdownStarted?.Invoke(impactPoint);
                 _body.linearDamping = waterDamping;
                 _body.angularDamping = waterDamping;
                 Log.D($"Splashdown at y={y:0.#}", this);
@@ -388,6 +394,7 @@ namespace Simulation
         {
             if (Exploded || !Launched) return;
             Exploded = true;
+            ExplosionStarted?.Invoke();
             if (explosionPrefab == null) ExplosionPhotoRequested?.Invoke(false);
             StopFlight();
             ThrustFraction = 0f;

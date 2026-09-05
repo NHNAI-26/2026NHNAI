@@ -29,19 +29,16 @@ namespace Simulation
         [SerializeField] private Transform meshRoot;
         [SerializeField] private EnginePresetVisualLibrarySO visualLibrary;
 
-        // Uber 3D Object 셰이더의 두 기능을 부품 단위로 켠다. MaterialPropertyBlock 은 못 쓴다 —
-        // _StencilOutlineEnabled 는 포워드 패스의 스텐실 WriteMask 라 렌더 스테이트고, 키워드도
-        // 블록으로는 못 바꾼다. 그래서 렌더러당 머티리얼 인스턴스를 하나 만들어 들고 있는다.
-        private static readonly int OutlineEnabledId = Shader.PropertyToID("_StencilOutlineEnabled");
+        // 홀로그램과 과열 림을 부품 단위로 켠다. MaterialPropertyBlock 은 못 쓴다 — 둘 다 키워드로
+        // 갈리는데 키워드는 블록으로 바꿀 수 없다. 그래서 렌더러당 머티리얼 인스턴스를 하나 만들어
+        // 들고 있는다. 선택 아웃라인은 여기 없다 — SelectionOutlineFeature 가 화면 공간에서 그린다.
         private static readonly int HologramEnabledId = Shader.PropertyToID("_HologramEnabled");
         private static readonly int RimEnabledId = Shader.PropertyToID("_RimEnabled");
         private static readonly int RimColorId = Shader.PropertyToID("_RimColor");
         private static readonly int RimPowerId = Shader.PropertyToID("_RimPower");
         private static readonly int RimIntensityId = Shader.PropertyToID("_RimIntensity");
-        private const string OutlineKeyword = "_STENCIL_OUTLINE_ON";
         private const string HologramKeyword = "_HOLOGRAM_ON";
         private const string RimKeyword = "_RIM_ON";
-        private const string OutlinePass = "StencilOutline";
         private const float OverheatVisualMaxIntensity = 8f;
         private const float OverheatVisualColdPower = 5.5f;
         private const float OverheatVisualHotPower = 1.4f;
@@ -291,21 +288,6 @@ namespace Simulation
         }
 
         /// <summary>
-        /// 선택 표시. 셰이더의 스텐실 아웃라인을 켠다. 머티리얼 에셋(<c>MAT_BaseEngine</c>)은
-        /// <c>disabledShaderPasses</c> 에 아웃라인 패스를 꺼둔 상태라 패스도 같이 켜야 한다.
-        /// </summary>
-        public void SetOutline(bool on)
-        {
-            foreach (Material material in UberMaterials)
-            {
-                material.SetFloat(OutlineEnabledId, on ? 1f : 0f);
-                if (on) material.EnableKeyword(OutlineKeyword);
-                else material.DisableKeyword(OutlineKeyword);
-                material.SetShaderPassEnabled(OutlinePass, on);
-            }
-        }
-
-        /// <summary>
         /// 로켓에서 떨어져 있는 동안의 표시. 머티리얼이 이미 Transparent 라 블렌드나 렌더 큐는
         /// 건드릴 필요가 없고, 홀로그램 수치도 에셋에 이미 들어 있다 — 스위치만 올린다.
         /// </summary>
@@ -351,7 +333,7 @@ namespace Simulation
                 var found = new List<Material>();
                 foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
                 foreach (Material material in renderer.materials) // 여기서 인스턴스가 만들어진다
-                    if (material != null && material.HasProperty(OutlineEnabledId))
+                    if (material != null && material.HasProperty(HologramEnabledId))
                         found.Add(material);
 
                 _uberMaterials = found.ToArray();

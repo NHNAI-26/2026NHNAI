@@ -4,6 +4,8 @@
     "references": [
         "Border",
         "Unity.Cinemachine",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime",
         "Unity.InputSystem",
         "Unity.TextMeshPro",
         "UnityEngine.UI"

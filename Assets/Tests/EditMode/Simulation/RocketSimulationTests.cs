@@ -19,6 +19,8 @@ namespace Simulation.Tests
         [TearDown]
         public void TearDown()
         {
+            SelectionOutlineFeature.Select(null, null); // 정적 레지스트리 — 테스트 사이에 남으면 안 된다
+
             for (int i = 0; i < _spawned.Count; i++)
                 if (_spawned[i] != null)
                     Object.DestroyImmediate(_spawned[i]);
@@ -1259,7 +1261,7 @@ namespace Simulation.Tests
         }
 
         [Test]
-        public void OutlineAndHologram_ToggleShaderStateOnTheInstancedMaterial()
+        public void Hologram_TogglesShaderStateOnTheInstancedMaterial()
         {
             RocketPart part = CreateEngine(Stats(fuel: 10f, cooling: 10f, output: BaselineOutput, ignition: 100f));
             Material shared = Track(new Material(Shader.Find("Shader/Uber/3D Object")));
@@ -1268,27 +1270,39 @@ namespace Simulation.Tests
             // EditMode 에서는 renderer.materials 인스턴스화가 에러 로그를 남긴다. 플레이 중에는 정상 경로다.
             LogAssert.Expect(LogType.Error, new Regex("Instantiating material"));
 
-            part.SetOutline(true);
             part.SetHologram(true);
 
             Material instance = part.GetComponent<MeshRenderer>().sharedMaterial;
             Assert.AreNotSame(shared, instance, "공유 머티리얼을 건드리면 붙어 있는 엔진 전부가 같이 켜진다.");
-            Assert.IsTrue(instance.IsKeywordEnabled("_STENCIL_OUTLINE_ON"));
-            Assert.AreEqual(1f, instance.GetFloat("_StencilOutlineEnabled"), 1e-4f,
-                "이 값은 포워드 패스의 스텐실 WriteMask 다 — 0 이면 아웃라인 패스가 아무것도 못 그린다.");
-            Assert.IsTrue(instance.GetShaderPassEnabled("StencilOutline"),
-                "머티리얼 에셋이 아웃라인 패스를 꺼둔 채로 들어오므로 패스도 같이 켜야 한다.");
             Assert.IsTrue(instance.IsKeywordEnabled("_HOLOGRAM_ON"));
             Assert.AreEqual(1f, instance.GetFloat("_HologramEnabled"), 1e-4f);
 
-            part.SetOutline(false);
             part.SetHologram(false);
 
-            Assert.IsFalse(instance.IsKeywordEnabled("_STENCIL_OUTLINE_ON"));
-            Assert.AreEqual(0f, instance.GetFloat("_StencilOutlineEnabled"), 1e-4f);
-            Assert.IsFalse(instance.GetShaderPassEnabled("StencilOutline"));
             Assert.IsFalse(instance.IsKeywordEnabled("_HOLOGRAM_ON"));
             Assert.AreEqual(0f, instance.GetFloat("_HologramEnabled"), 1e-4f);
+        }
+
+        /// <summary>
+        /// 선택 아웃라인은 머티리얼이 아니라 렌더러 피처가 그린다. 레지스트리는 정적이라
+        /// 등록과 해제가 짝이 맞는지가 전부다 — 그리기 자체는 GPU 검증(게임 뷰) 몫이다.
+        /// </summary>
+        [Test]
+        public void SelectionOutline_RegistersMeshRenderersAndClearsOnDeselect()
+        {
+            RocketPart part = CreateEngine(Stats(fuel: 10f, cooling: 10f, output: BaselineOutput, ignition: 100f));
+            MeshRenderer renderer = part.gameObject.AddComponent<MeshRenderer>();
+            Camera camera = Track(new GameObject("SelectionOutlineCamera")).AddComponent<Camera>();
+
+            SelectionOutlineFeature.Select(camera, part.gameObject);
+
+            Assert.AreSame(camera, SelectionOutlineFeature.Camera);
+            CollectionAssert.AreEquivalent(new[] { renderer }, SelectionOutlineFeature.Renderers);
+
+            SelectionOutlineFeature.Select(null, null);
+
+            Assert.IsNull(SelectionOutlineFeature.Camera);
+            CollectionAssert.IsEmpty(SelectionOutlineFeature.Renderers);
         }
 
         [Test]

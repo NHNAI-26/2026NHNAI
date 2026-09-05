@@ -175,6 +175,17 @@ ID와 파일의 대응은 아래 표와 같으며, 볼륨과 피치는 1, 공간
 클릭음 Play Mode 테스트 4개와 기존 타이핑 테스트 3개를 함께 통과했다. 중복 바인딩,
 리스너 초기화, 뒤늦은 활성화, 비활성·우클릭 무음과 Submit 시 패널 닫힘을 확인했다.
 
+### 엔진 장착·분리 효과음
+
+`engine_attach.mp3`, `engine_detach.mp3`를 같은 이름 ID로 등록했다. 볼륨·피치 1,
+비루프·일반 2D 효과음이다. 장착음은 드래그 후 마우스를 놓아 로켓 장착이 확정될 때
+동일한 소리 2개를 동시에 재생한다. 분리음은 기존 엔진을 실제로 끌기 시작하는 첫 프레임에 한 번 재생하며,
+장착된 엔진을 삭제할 때도 재생한다. 단순 선택 클릭, 새 프리셋 꺼내기에는 분리음을 내지
+않으며 로켓 밖에 놓아 장착에 실패하면 장착음을 내지 않는다.
+
+`EngineAttachmentAudioTests` Play Mode 테스트 2개로 1회 분리·장착음 2개 동시 재생과 선택·실패·
+새 프리셋 분리음 억제를 확인했다. 실제 마우스 조작 청취는 별도로 확인하지 않았다.
+
 ### 엔진 회전 효과음
 
 `Assets/04. Audios/SFX/gear.mp3`를 `gear` ID로 등록했다. 볼륨 0.65, 피치 1,
@@ -187,6 +198,53 @@ ID와 파일의 대응은 아래 표와 같으며, 볼륨과 피치는 1, 공간
 `RocketBuilderGearAudioTests` Play Mode 테스트 2개로 단일 루프 유지, 즉시 정지·재시작,
 다른 효과음 유지, 비활성화·포커스 상실 정지를 확인했다. Unity 컴파일을 통과했다.
 실제 마우스로 회전 핸들을 드래그하는 전체 조작은 이번 테스트에 포함하지 않았다.
+
+### 바다 충돌 효과음
+
+`Heavy_water_impact_2.wav`를 `HeavyWave` ID로 등록했다. 비루프, 볼륨 1,
+Steam Audio 공간화를 사용하지 않는 2D 효과음이다. 모노로 가져오고
+Decompress On Load와 Preload Audio Data를 사용한다.
+
+바다에는 콜라이더가 없으므로 기존 `Rocket.TickWater`의 최초 수면 진입 판정에서
+`SplashdownStarted`를 한 번 발행한다. 재생 위치는 당시 로켓의 X/Z와 `waterLevel` 높이다.
+`RocketAudio`가 `PlaySfx`으로 재생하며 `spatialize = false`, `spatialBlend = 0`을 사용한다.
+거리·방향에 따른 공간화 없이 재생하고, 로켓이 침강하거나 씬에서 제거되어도 자연스럽게 끝난다. 비행 초기화 후에는 다음 입수 효과음을 다시 재생할 수 있다.
+
+`RocketSplashAudioTests` Play Mode 테스트 2개로 1회 재생·Steam Audio 미사용·2D 설정,
+침강 후 재생 유지, 초기화 후 재생과 재활성화 시 중복 구독 방지를 확인했다.
+Unity 컴파일을 통과했으며, 실제 비행부터 입수까지의 전체 플레이는 재실행하지 않았다.
+
+### 바다 충돌 파티클
+
+Break Shoot (`NexonGame20251`) 비치볼의 `Assets/Effects/Wave` 텍스처 4장을
+`Assets/05. Arts/VFX/RocketSplash/`로 가져왔다. 원본 VFX Graph의 바깥 파도와 안쪽 거품을
+`RocketSplash.prefab`의 일반 Particle System 4개로 재구성했다. 원본 텍스처의 밝기를
+알파로 가져와 검은 사각형이 보이지 않게 하고 URP Particles/Unlit 재질로 렌더링한다.
+
+수평 파티클은 시작 지연과 페이드인 없이 즉시 나타나 최대 지름 18 월드 유닛까지 빠르게 커지며
+약 1.35초 동안 사라진다. 추가한 `Water Droplets` Particle System은 물방울 메시 72개를
+원뿔 형태로 위로 방출하고 중력으로 떨어뜨린다. 수명 0.55~1.1초, 초기 속도 5~11로
+파도와 동시에 물보라를 만들며 별도 텍스처 없이 푸른 물방울 재질을 사용한다.
+`RocketBody.prefab`의 `RocketSplashVfx`가 `SplashdownStarted`를 구독해 수면보다 0.15유닛
+위에서 한 번 재생한다. 로켓에 부모로 붙이지 않아 침강을 따라가지 않고, Particle System의
+Stop Action으로 스스로 제거된다. 씬이 먼저 종료되면 해당 시뮬레이션 씬과 함께 제거된다.
+바다 충돌음의 기존 일반 2D 재생은 유지한다.
+
+0.22초 시점의 카메라 렌더로 즉시 퍼지는 파도·거품과 위로 튀는 물방울을 확인했다.
+`RocketSplashVfxTests` 1개와 기존 입수 오디오 테스트 2개를 통과했으며,
+생성 위치·1회 생성·로켓과 독립된 위치·재입수·자동 제거를 확인했다.
+실제 비행부터 바다 진입까지 전체 플레이는 이번 검증에 포함하지 않았다.
+
+### 로켓 폭발 효과음
+
+Break Shoot의 폭발 공·스티커·지뢰에서 사용하는 `SFX15_Terrorist.mp3`를 가져와
+`RocketExplosion` ID로 등록했다. 볼륨·피치 1, 비루프, Steam Audio 없는 일반 2D 재생이다.
+`Rocket.Explode()`가 최초 폭발 시 `ExplosionStarted`를 발행하고, `RocketAudio`는 기존
+점화·엔진 루프·정지 알림을 끈 뒤 동일한 폭발음 4개를 동시에 재생한다. 자폭과 과열 폭발에 공통 적용하며,
+중복 폭발 요청에는 다시 재생하지 않는다. 로켓 정리 후에도 폭발음은 자연스럽게 끝난다.
+
+`RocketExplosionAudioTests` Play Mode 테스트로 발사 전 무음, 폭발당 4개 동시 재생과 중복 요청 차단, 초기화 후
+재생, 2D 설정과 정리 후 재생 유지를 확인했다. 실제 비행 중 청취는 별도로 확인하지 않았다.
 
 ### 운영 화면
 
