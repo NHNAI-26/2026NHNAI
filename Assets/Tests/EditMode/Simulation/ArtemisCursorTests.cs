@@ -144,6 +144,7 @@ namespace Simulation.Tests
 
         [TestCase("default", ArtemisCursor.Visual.Default)]
         [TestCase("hover", ArtemisCursor.Visual.Hover)]
+        [TestCase("click_hold", ArtemisCursor.Visual.ClickHold)]
         [TestCase("drag", ArtemisCursor.Visual.Drag)]
         [TestCase("attach_valid", ArtemisCursor.Visual.AttachValid)]
         [TestCase("attach_invalid", ArtemisCursor.Visual.AttachInvalid)]
@@ -162,6 +163,20 @@ namespace Simulation.Tests
                 .GetField("sprites", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(cursor);
             object sprite = sprites[visual];
             Assert.That(sprite.GetType().GetProperty("Texture").GetValue(sprite), Is.SameAs(texture));
+        }
+
+        [TestCase(true, false, ArtemisCursor.Visual.ClickHold)]
+        [TestCase(true, true, ArtemisCursor.Visual.ClickHold)]
+        [TestCase(false, true, ArtemisCursor.Visual.Hover)]
+        [TestCase(false, false, ArtemisCursor.Visual.Default)]
+        public void UnrequestedVisual_PrefersHeldClickOverHover(
+            bool primaryPressed, bool overInteractive, ArtemisCursor.Visual expected)
+        {
+            object actual = typeof(ArtemisCursor)
+                .GetMethod("ResolveUnrequestedVisual", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new object[] { primaryPressed, overInteractive });
+
+            Assert.That(actual, Is.EqualTo(expected));
         }
 
         /// <summary>
