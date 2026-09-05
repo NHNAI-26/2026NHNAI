@@ -14,7 +14,7 @@ namespace Simulation
     public sealed class LaunchMissionRules
     {
         public float LowAltitude { get; set; } = 100f;
-        public float HighAltitude { get; set; } = 300f;
+        public float HighAltitude { get; set; } = 250f;
         public float TargetAltitude { get; set; } = 200f;
         public float TargetHorizontalMin { get; set; } = 80f;
         public float TargetHorizontalMax { get; set; } = 120f;

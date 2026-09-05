@@ -7,7 +7,7 @@ namespace Simulation.Tests
     public sealed class LaunchMissionEvaluatorTests
     {
         [TestCase(LaunchMissionId.LowAltitude, 100f)]
-        [TestCase(LaunchMissionId.HighAltitude, 300f)]
+        [TestCase(LaunchMissionId.HighAltitude, 250f)]
         public void AltitudeMission_SucceedsAtInclusiveThreshold(LaunchMissionId mission, float target)
         {
             var evaluator = new LaunchMissionEvaluator(mission);
@@ -254,7 +254,7 @@ namespace Simulation.Tests
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
             evaluator.Step(0.1f, 200f, 100f, 10f, 0f, 0f);
             Assert.That(evaluator.StageIndex, Is.EqualTo(2),
-                "고도 미션에는 목표 구역 단계가 없고 상승 기준은 300 m 다 — 이륙까지만 센다.");
+                "고도 미션에는 목표 구역 단계가 없고 상승 기준은 250 m 다 — 이륙까지만 센다.");
         }
 
         [Test]
