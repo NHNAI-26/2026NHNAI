@@ -302,10 +302,9 @@ namespace Border.Research.Editor
 
             CreateInfoChip("Date", topBar, 210f);
 
-            // 분기 예산은 자기 칩을 잃고 보유 자금 칩의 둘째 줄이 된다. 텍스트 노드 이름은 그대로 둔다 —
-            // 컨트롤러가 "QuarterlyFunding" 을 필수로 찾고, 없으면 화면 초기화 자체가 실패한다.
-            RectTransform fundsChip = CreateInfoChip("Funds", topBar, 200f).transform.parent as RectTransform;
-            CreateText("QuarterlyFunding", fundsChip, 12, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
+            // 다음 분기 예산은 자기 노드 없이 "Funds" 텍스트의 둘째 줄로 들어간다 — 컨트롤러가 두 줄을
+            // 한 문자열로 채운다. 노드를 다시 나누면 컨트롤러도 같이 고쳐야 한다.
+            CreateInfoChip("Funds", topBar, 200f);
 
             RectTransform previewReservedArea = CreateGroup("EnginePreviewReservedArea", root);
             previewReservedArea.anchorMin = Vector2.zero;

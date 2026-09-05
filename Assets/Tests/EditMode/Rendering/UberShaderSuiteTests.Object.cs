@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -257,12 +257,12 @@ namespace Border.Rendering.Tests
 
                 Material ground = AssetDatabase.LoadAssetAtPath<Material>(
                     "Assets/05. Arts/Material/RocketBase/MAT_ground.mat");
-                Texture2D dirt = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                    "Assets/05. Arts/Texture/RocketBase/dirt.png");
+                Texture2D sand = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Assets/05. Arts/Texture/RocketBase/sand.png");
                 Texture2D grass = AssetDatabase.LoadAssetAtPath<Texture2D>(
                     "Assets/05. Arts/Texture/RocketBase/grass.png");
                 Assert.That(ground, Is.Not.Null);
-                Assert.That(ground.GetTexture("_BaseMap"), Is.SameAs(dirt));
+                Assert.That(ground.GetTexture("_BaseMap"), Is.SameAs(sand));
                 Assert.That(ground.GetTexture("_BlendMap"), Is.SameAs(grass));
                 Assert.That(ground.IsKeywordEnabled("_TEXTURE_BLEND_ON"), Is.True);
                 Assert.That(ground.IsKeywordEnabled("_BASE_MAP_TRIPLANAR"), Is.True);

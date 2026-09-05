@@ -61,7 +61,6 @@ namespace Border.Research
         private GameObject detailColumnRoot;
         private TMP_Text dateText;
         private TMP_Text fundsText;
-        private TMP_Text quarterlyFundingText;
         private TMP_Text selectedEngineNameText;
         private TMP_Text selectedEnginePerformanceText;
         private TMP_Text selectedEngineInstallCostText;
@@ -263,7 +262,6 @@ namespace Border.Research
             detailColumnRoot = FindChildRectTransform(canvasTransform, "DetailColumn")?.gameObject;
             dateText = FindRequiredText(canvasTransform, "Date");
             fundsText = FindRequiredText(canvasTransform, "Funds");
-            quarterlyFundingText = FindRequiredText(canvasTransform, "QuarterlyFunding");
             selectedEngineNameText = FindRequiredText(canvasTransform, "SelectedEngineName");
             selectedEnginePerformanceText = FindRequiredText(canvasTransform, "SelectedEnginePerformance");
             selectedEngineInstallCostText = FindRequiredText(canvasTransform, "SelectedEngineInstallCost");
@@ -294,7 +292,6 @@ namespace Border.Research
                 || detailColumnRoot == null
                 || dateText == null
                 || fundsText == null
-                || quarterlyFundingText == null
                 || selectedEngineNameText == null
                 || selectedEnginePerformanceText == null
                 || selectedEngineInstallCostText == null
@@ -585,10 +582,10 @@ namespace Border.Research
             ShowResearchLab();
             PlayResearchCameraDrift();
             ShowEnginePreview();
-            dateText.text = $"날짜\n{model.Year} Q{model.Quarter} · 남은 {model.RemainingTurns}분기";
-            fundsText.text = $"보유 자금\n{model.Funds}";
-            // 보유 자금과 같은 칩을 쓰므로 한 줄로 둔다 — 두 줄씩 네 줄이 되면 상단 바 높이를 넘는다.
-            quarterlyFundingText.text = $"분기 예산 +{model.QuarterlyFunding}";
+            dateText.text = $"{model.Year}.Q{model.Quarter} / 남은 분기 : {model.RemainingTurns}";
+            // 다음 분기 예산은 자기 노드를 잃고 보유 자금 텍스트의 둘째 줄이 됐다 — 프리팹에
+            // "QuarterlyFunding" 노드가 더는 없으므로 여기서 찾으면 화면 초기화가 실패한다.
+            fundsText.text = $"보유 자금 : {model.Funds} $\n다음 분기 : {model.QuarterlyFunding:+#;-#;0} $";
 
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
@@ -625,16 +622,16 @@ namespace Border.Research
                 focusedResearchSelected = false;
             }
 
-            normalResearchButtonText.text = $"기본 연구\n{model.ConfiguredEngineNormalResearchCost} / 시간 {(model.HasFreeNormalResearch(selectedEnginePreset) ? 0 : 1)}분기 / 완성도 +{model.ConfiguredResearchCompletionGain}";
-            focusedResearchButtonText.text = $"집중 연구\n{model.ConfiguredEngineFocusedResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
+            normalResearchButtonText.text = $"기본 연구\n-{model.ConfiguredEngineNormalResearchCost} $";
+            focusedResearchButtonText.text = $"집중 연구\n-{model.ConfiguredEngineFocusedResearchCost} $";
             SetSelectedTint(normalResearchButton, !focusedResearchSelected);
             SetSelectedTint(focusedResearchButton, focusedResearchSelected);
             createEnginePresetButtonText.text = model.ActiveEnginePresetCount >= ResearchPrototypeModel.MaxEnginePresetCount
                 ? "새로운 엔진 개발\n최대 10개"
-                : $"새로운 엔진 개발\n{model.ConfiguredNewEnginePresetCost} / 시간 0분기";
-            partDevelopmentButtonText.text = $"부품 개발\n{model.ConfiguredEngineNormalResearchCost}~";
-            enterDesignButtonText.text = $"로켓 설계\n{designEntryCost}";
-            waitButtonText.text = $"건너뛰기\n+{model.NextWaitFunding}";
+                : $"새로운 엔진 개발\n-{model.ConfiguredNewEnginePresetCost} $";
+            partDevelopmentButtonText.text = $"부품 개발\n-{model.ConfiguredEngineNormalResearchCost} $~";
+            enterDesignButtonText.text = $"로켓 설계\n-{designEntryCost} $";
+            waitButtonText.text = $"건너뛰기\n+{model.NextWaitFunding} $";
 
             RefreshPendingEffects();
 
