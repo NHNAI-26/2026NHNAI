@@ -49,6 +49,7 @@ namespace Simulation
         /// <summary>미션이 끝났는지, 끝났다면 성공인지. <see cref="Status"/> 문자열을 파싱하지 않기 위한 것이다.</summary>
         public bool Finished { get; private set; }
         public bool Succeeded { get; private set; }
+        public Vector3 CompletionVelocity { get; private set; }
 
         /// <summary>관제 화면 스테퍼가 읽는 진행 단계. 발사 전에는 0 이다.</summary>
         public int Stage => evaluator != null ? evaluator.StageIndex : 0;
@@ -171,6 +172,7 @@ namespace Simulation
             Succeeded = success;
             if (targetGuide != null) targetGuide.Dispose();
             GetComponent<LaunchPhotoCapture>()?.CaptureOutcome();
+            CompletionVelocity = body.linearVelocity;
             rocket.StopFlight();
             Status = success ? "미션 성공" : evaluator.FailureReason;
             completed?.Invoke(success);

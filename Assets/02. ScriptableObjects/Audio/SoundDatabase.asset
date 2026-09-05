@@ -33,6 +33,11 @@ MonoBehaviour:
     volume: 1
     pitch: 1
     loop: 1
+  - id: parachuteBGM
+    clip: {fileID: 8300000, guid: 630641a2516804dd2bb630ff7873a859, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
   sfxEntries:
   - id: EngineStop
     clip: {fileID: 8300000, guid: 53b79cfbcfacc4abdbce7f205151f18d, type: 3}
@@ -164,6 +169,14 @@ MonoBehaviour:
     maxDistance: 50
   - id: hammer_collision_sound
     clip: {fileID: 8300000, guid: bcaf2a8cccc8e4093b46bb8b524ba804, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: parachute
+    clip: {fileID: 8300000, guid: 1ba8c8822c6a0471780ce7efdecb7c41, type: 3}
     volume: 1
     pitch: 1
     loop: 0
