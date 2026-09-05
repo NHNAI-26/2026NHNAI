@@ -41,9 +41,61 @@ public static class NewspaperRevealBuilder
         var controller = report.GetComponent<ResearchResultReportController>();
         if (controller == null) return;
         var serialized = new SerializedObject(controller);
-        if (serialized.FindProperty("mail").objectReferenceValue != null) return;
+        if (serialized.FindProperty("mail").objectReferenceValue != null)
+        {
+            UpdateMailReadability();
+            return;
+        }
         ApplyLaunchNewspaper();
         Debug.Log("Created and connected the missing MailReveal prefab for private launch results.");
+    }
+
+    private static void UpdateMailReadability()
+    {
+        GameObject root = PrefabUtility.LoadPrefabContents(MailPrefabPath);
+        try
+        {
+            var serialized = new SerializedObject(root.GetComponent<NewspaperReveal>());
+            var heading = (TMP_Text)serialized.FindProperty("headlineText").objectReferenceValue;
+            var sprite = (Sprite)serialized.FindProperty("newspaperSprite").objectReferenceValue;
+            if (heading == null || sprite == null) return;
+            bool changed = false;
+            // Migrate only the old wrapping title once; preserve later prefab edits.
+            if (heading.textWrappingMode != TextWrappingModes.NoWrap)
+            {
+                ConfigureMailHeadline(heading, sprite);
+                changed = true;
+            }
+            var effects = (TMP_Text)serialized.FindProperty("effectsText").objectReferenceValue;
+            var background = (RectTransform)serialized.FindProperty("effectsBackground").objectReferenceValue;
+            if (effects != null && background != null
+                && (effects.color == new Color(0.08f, 0.075f, 0.065f, 1f)
+                    || effects.transform.GetSiblingIndex() < background.GetSiblingIndex()))
+            {
+                ConfigureMailEffects(effects, background);
+                changed = true;
+            }
+            if (changed) PrefabUtility.SaveAsPrefabAsset(root, MailPrefabPath);
+        }
+        finally { PrefabUtility.UnloadPrefabContents(root); }
+    }
+
+    private static void ConfigureMailHeadline(TMP_Text heading, Sprite sprite)
+    {
+        PlaceOnPaper(heading.rectTransform, sprite, 430, 306, 760, 64);
+        heading.enableAutoSizing = true;
+        heading.fontSizeMin = 10f;
+        heading.fontSizeMax = 20f;
+        heading.textWrappingMode = TextWrappingModes.NoWrap;
+        heading.overflowMode = TextOverflowModes.Overflow;
+    }
+
+    private static void ConfigureMailEffects(TMP_Text effects, RectTransform background)
+    {
+        effects.color = Color.black;
+        // A panel after the text in sibling order paints over the text.
+        if (effects.transform.GetSiblingIndex() < background.GetSiblingIndex())
+            effects.transform.SetSiblingIndex(background.GetSiblingIndex());
     }
 
     [MenuItem("Border/UI/Apply Launch Newspaper")]
@@ -102,7 +154,8 @@ public static class NewspaperRevealBuilder
             serialized.FindProperty("newspaperSprite").objectReferenceValue = mailSprite;
             serialized.FindProperty("showEvent").objectReferenceValue = null;
 
-            TMP_Text heading = PaperText("Headline", content, font, mailSprite, 430, 318, 760, 64, 20, 16);
+            TMP_Text heading = PaperText("Headline", content, font, mailSprite, 430, 306, 760, 64, 20, 10);
+            ConfigureMailHeadline(heading, mailSprite);
             heading.fontStyle = FontStyles.Bold;
             heading.alignment = TextAlignmentOptions.Left;
             TMP_Text edition = PaperText("Edition", content, font, mailSprite, 430, 392, 760, 34, 13, 11);
@@ -116,7 +169,7 @@ public static class NewspaperRevealBuilder
             var background = effectsBackground.GetComponent<Image>() ?? effectsBackground.gameObject.AddComponent<Image>();
             background.color = new Color(0.92f, 0.96f, 1f, 0.92f);
             background.raycastTarget = false;
-            effectsBackground.SetSiblingIndex(effects.transform.GetSiblingIndex());
+            ConfigureMailEffects(effects, effectsBackground);
             var photoRect = EnsureRect("Photo", content);
             PlaceOnPaper(photoRect, mailSprite, 430, 715, 300, 225);
             var photo = photoRect.GetComponent<RawImage>() ?? photoRect.gameObject.AddComponent<RawImage>();
