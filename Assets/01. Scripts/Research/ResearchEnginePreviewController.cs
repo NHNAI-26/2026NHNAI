@@ -13,10 +13,39 @@ namespace Border.Research
     [DisallowMultipleComponent]
     public sealed class ResearchEnginePreviewController : MonoBehaviour
     {
+        private const string Uber3DObjectShaderName = "Shader/Uber/3D Object";
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int SurfaceId = Shader.PropertyToID("_Surface");
+        private static readonly int BlendId = Shader.PropertyToID("_Blend");
+        private static readonly int LightingModeId = Shader.PropertyToID("_LightingMode");
+        private static readonly int SrcBlendId = Shader.PropertyToID("_SrcBlend");
+        private static readonly int DstBlendId = Shader.PropertyToID("_DstBlend");
+        private static readonly int SrcBlendAlphaId = Shader.PropertyToID("_SrcBlendAlpha");
+        private static readonly int DstBlendAlphaId = Shader.PropertyToID("_DstBlendAlpha");
+        private static readonly int ZWriteId = Shader.PropertyToID("_ZWrite");
+        private static readonly int CastShadowsId = Shader.PropertyToID("_CastShadows");
+        private static readonly int ReceiveShadowsId = Shader.PropertyToID("_ReceiveShadows");
+        private static readonly int HologramEnabledId = Shader.PropertyToID("_HologramEnabled");
+        private static readonly int HologramColorId = Shader.PropertyToID("_HologramColor");
+        private static readonly int HologramOpacityId = Shader.PropertyToID("_HologramOpacity");
+        private static readonly int HologramFresnelPowerId = Shader.PropertyToID("_HologramFresnelPower");
+        private static readonly int HologramFresnelIntensityId = Shader.PropertyToID("_HologramFresnelIntensity");
+        private static readonly int HologramScanlineDensityId = Shader.PropertyToID("_HologramScanlineDensity");
+        private static readonly int HologramScanlineSpeedId = Shader.PropertyToID("_HologramScanlineSpeed");
+        private static readonly int HologramScanlineWidthId = Shader.PropertyToID("_HologramScanlineWidth");
+        private static readonly int HologramScanlineIntensityId = Shader.PropertyToID("_HologramScanlineIntensity");
+        private static readonly int HologramNoiseScaleId = Shader.PropertyToID("_HologramNoiseScale");
+        private static readonly int HologramNoiseStrengthId = Shader.PropertyToID("_HologramNoiseStrength");
+        private static readonly int HologramNoiseSpeedId = Shader.PropertyToID("_HologramNoiseSpeed");
+
         [SerializeField] private Transform previewRoot;
         [SerializeField] private EnginePresetVisualLibrarySO visualLibrary;
         [SerializeField] private GameObject defaultPreviewPrefab;
         [SerializeField] private Material hologramMaterial;
+        [SerializeField] private Shader hologramFallbackShader;
         [SerializeField] private Color hologramColor = new(0.16f, 0.9f, 1f, 0.72f);
         [SerializeField] private Color hologramEmissionColor = new(0.35f, 1.2f, 1.4f, 1f);
         [SerializeField, Min(0f)] private float materializeDuration = 0.7f;
@@ -84,10 +113,6 @@ namespace Border.Research
             }
 
             ApplyHologramVisuals(activeInstance, hologramColor);
-            if (Application.isPlaying)
-            {
-                StartHologramPulse(activeInstance);
-            }
         }
 
         public void PlayMaterialize(EnginePresetId presetId, EngineVisualArchetype archetype, Action onComplete = null)
@@ -323,12 +348,36 @@ namespace Border.Research
             }
 
             float halfDuration = hologramPulseDuration * 0.5f;
-            Vector3 baseScale = instance.transform.localScale;
-            activePulseSequence = DOTween.Sequence()
-                .SetTarget(instance)
-                .Append(instance.transform.DOScale(baseScale * 1.025f, halfDuration).SetEase(Ease.InOutSine))
-                .Append(instance.transform.DOScale(baseScale, halfDuration).SetEase(Ease.InOutSine))
-                .SetLoops(-1, LoopType.Restart);
+            Material[] materials = CollectHologramMaterials(instance);
+            if (materials.Length == 0)
+            {
+                return;
+            }
+
+            activePulseSequence = DOTween.Sequence().SetTarget(instance);
+            for (int i = 0; i < materials.Length; i++)
+            {
+                Material material = materials[i];
+                if (material == null || !material.HasProperty(HologramScanlineIntensityId))
+                {
+                    continue;
+                }
+
+                float baseIntensity = material.GetFloat(HologramScanlineIntensityId);
+                float peakIntensity = baseIntensity * 1.28f;
+                activePulseSequence.Join(DOTween.To(
+                    () => material.GetFloat(HologramScanlineIntensityId),
+                    value => material.SetFloat(HologramScanlineIntensityId, value),
+                    peakIntensity,
+                    halfDuration).SetEase(Ease.InOutSine));
+                activePulseSequence.Insert(halfDuration, DOTween.To(
+                    () => material.GetFloat(HologramScanlineIntensityId),
+                    value => material.SetFloat(HologramScanlineIntensityId, value),
+                    baseIntensity,
+                    halfDuration).SetEase(Ease.InOutSine));
+            }
+
+            activePulseSequence.SetLoops(-1, LoopType.Restart);
         }
 
         private void NormalizePreviewInstance(GameObject instance)
@@ -424,7 +473,7 @@ namespace Border.Research
                     }
                     else if (materials[i] != null)
                     {
-                        materials[i] = new Material(materials[i]);
+                        materials[i] = CreateFallbackHologramMaterial(materials[i]);
                     }
                     else
                     {
@@ -435,7 +484,66 @@ namespace Border.Research
                 }
 
                 renderer.materials = materials;
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
             }
+        }
+
+        private Material CreateFallbackHologramMaterial(Material source)
+        {
+            Shader shader = hologramFallbackShader != null
+                ? hologramFallbackShader
+                : Shader.Find(Uber3DObjectShaderName);
+            if (shader == null)
+            {
+                return new Material(source);
+            }
+
+            Material material = new(shader)
+            {
+                name = $"{source.name}_Hologram",
+            };
+            CopyMainTexture(source, material);
+            return material;
+        }
+
+        private static void CopyMainTexture(Material source, Material target)
+        {
+            if (source == null || target == null || !target.HasProperty(BaseMapId))
+            {
+                return;
+            }
+
+            Texture texture = null;
+            if (source.HasProperty(BaseMapId))
+            {
+                texture = source.GetTexture(BaseMapId);
+            }
+            else if (source.HasProperty(MainTexId))
+            {
+                texture = source.GetTexture(MainTexId);
+            }
+
+            if (texture != null)
+            {
+                target.SetTexture(BaseMapId, texture);
+            }
+        }
+
+        private static Material[] CollectHologramMaterials(GameObject instance)
+        {
+            if (instance == null)
+            {
+                return Array.Empty<Material>();
+            }
+
+            var materials = new List<Material>();
+            foreach (Renderer renderer in instance.GetComponentsInChildren<Renderer>(true))
+            {
+                materials.AddRange(renderer.materials);
+            }
+
+            return materials.ToArray();
         }
 
         private static MaterialColorBinding[] PrepareAlphaBindings(GameObject instance, float alpha)
@@ -516,35 +624,123 @@ namespace Border.Research
                 material.SetColor(propertyName, color);
             }
 
+            if (material.HasProperty(HologramEnabledId))
+            {
+                material.SetFloat(HologramEnabledId, 1f);
+                material.EnableKeyword("_HOLOGRAM_ON");
+            }
+
+            if (material.HasProperty(HologramColorId))
+            {
+                material.SetColor(HologramColorId, emissionColor);
+            }
+
+            if (material.HasProperty(HologramOpacityId))
+            {
+                material.SetFloat(HologramOpacityId, Mathf.Clamp01(color.a * 0.68f));
+            }
+
+            if (material.HasProperty(HologramFresnelPowerId))
+            {
+                material.SetFloat(HologramFresnelPowerId, 2.1f);
+            }
+
+            if (material.HasProperty(HologramFresnelIntensityId))
+            {
+                material.SetFloat(HologramFresnelIntensityId, 3.4f);
+            }
+
+            if (material.HasProperty(HologramScanlineDensityId))
+            {
+                material.SetFloat(HologramScanlineDensityId, 34f);
+            }
+
+            if (material.HasProperty(HologramScanlineSpeedId))
+            {
+                material.SetFloat(HologramScanlineSpeedId, 0f);
+            }
+
+            if (material.HasProperty(HologramScanlineWidthId))
+            {
+                material.SetFloat(HologramScanlineWidthId, 0.16f);
+            }
+
+            if (material.HasProperty(HologramScanlineIntensityId))
+            {
+                material.SetFloat(HologramScanlineIntensityId, 2.4f);
+            }
+
+            if (material.HasProperty(HologramNoiseScaleId))
+            {
+                material.SetFloat(HologramNoiseScaleId, 7f);
+            }
+
+            if (material.HasProperty(HologramNoiseStrengthId))
+            {
+                material.SetFloat(HologramNoiseStrengthId, 0.28f);
+            }
+
+            if (material.HasProperty(HologramNoiseSpeedId))
+            {
+                material.SetFloat(HologramNoiseSpeedId, 0f);
+            }
+
             if (material.HasProperty("_EmissionColor"))
             {
                 material.EnableKeyword("_EMISSION");
                 material.SetColor("_EmissionColor", emissionColor);
             }
 
-            if (material.HasProperty("_Surface"))
+            if (material.HasProperty(SurfaceId))
             {
-                material.SetFloat("_Surface", 1f);
+                material.SetFloat(SurfaceId, 1f);
+                material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             }
 
-            if (material.HasProperty("_Blend"))
+            if (material.HasProperty(BlendId))
             {
-                material.SetFloat("_Blend", 0f);
+                material.SetFloat(BlendId, 2f);
             }
 
-            if (material.HasProperty("_SrcBlend"))
+            if (material.HasProperty(LightingModeId))
             {
-                material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                material.SetFloat(LightingModeId, 1f);
+                material.EnableKeyword("_UNLIT_ON");
             }
 
-            if (material.HasProperty("_DstBlend"))
+            if (material.HasProperty(SrcBlendId))
             {
-                material.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                material.SetFloat(SrcBlendId, (float)BlendMode.SrcAlpha);
             }
 
-            if (material.HasProperty("_ZWrite"))
+            if (material.HasProperty(DstBlendId))
             {
-                material.SetFloat("_ZWrite", 0f);
+                material.SetFloat(DstBlendId, (float)BlendMode.One);
+            }
+
+            if (material.HasProperty(SrcBlendAlphaId))
+            {
+                material.SetFloat(SrcBlendAlphaId, (float)BlendMode.One);
+            }
+
+            if (material.HasProperty(DstBlendAlphaId))
+            {
+                material.SetFloat(DstBlendAlphaId, (float)BlendMode.OneMinusSrcAlpha);
+            }
+
+            if (material.HasProperty(ZWriteId))
+            {
+                material.SetFloat(ZWriteId, 0f);
+            }
+
+            if (material.HasProperty(CastShadowsId))
+            {
+                material.SetFloat(CastShadowsId, 0f);
+            }
+
+            if (material.HasProperty(ReceiveShadowsId))
+            {
+                material.SetFloat(ReceiveShadowsId, 0f);
             }
 
             material.SetOverrideTag("RenderType", "Transparent");
