@@ -119,6 +119,19 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!134 &185137124
+PhysicsMaterial:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  serializedVersion: 2
+  m_DynamicFriction: 0.6
+  m_StaticFriction: 0.6
+  m_Bounciness: 0
+  m_FrictionCombine: 0
+  m_BounceCombine: 0
 --- !u!1 &532699708
 GameObject:
   m_ObjectHideFlags: 0
@@ -159,7 +172,7 @@ CapsuleCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 532699708}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 745407925}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -207,6 +220,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Border.Simulation::Border.Simulation.Rocket
   launchSeed: 20260904
   tankMassPerFuel: 0.25
+  ignitionRampSeconds: 1.2
   waterLevel: -8.9
   waterDamping: 4
   sinkDepth: 30
@@ -253,6 +267,19 @@ Transform:
   - {fileID: 532699709}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!134 &745407925
+PhysicsMaterial:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  serializedVersion: 2
+  m_DynamicFriction: 0.6
+  m_StaticFriction: 0.6
+  m_Bounciness: 0
+  m_FrictionCombine: 0
+  m_BounceCombine: 0
 --- !u!1 &810700271
 GameObject:
   m_ObjectHideFlags: 0
@@ -548,7 +575,7 @@ Transform:
   m_GameObject: {fileID: 1338176682}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -8.9, z: 0}
+  m_LocalPosition: {x: 0, y: -6.71, z: 0}
   m_LocalScale: {x: 42, y: 1, z: 42}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -576,11 +603,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4233347052645007185, guid: 730c12c4684c1e84b8f311ead370138b, type: 3}
       propertyPath: InitialModule.startRotationX.minMaxState
-      value: 3
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4233347052645007185, guid: 730c12c4684c1e84b8f311ead370138b, type: 3}
       propertyPath: InitialModule.startRotationY.minMaxState
-      value: 3
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5910329851164487975, guid: 730c12c4684c1e84b8f311ead370138b, type: 3}
       propertyPath: cam
@@ -790,6 +817,10 @@ PrefabInstance:
       propertyPath: m_LocalPosition.z
       value: -1.03
       objectReference: {fileID: 0}
+    - target: {fileID: 3696062030070131575, guid: b8d80b60585174f53abf205d6eb682c2, type: 3}
+      propertyPath: m_Material
+      value: 
+      objectReference: {fileID: 185137124}
     - target: {fileID: 7196653453377589377, guid: b8d80b60585174f53abf205d6eb682c2, type: 3}
       propertyPath: m_Name
       value: RocketBase

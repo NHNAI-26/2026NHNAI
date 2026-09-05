@@ -11,6 +11,9 @@ namespace Simulation
     {
         [SerializeField] private bool enableAutomaticFailure = true;
         [SerializeField, Min(0f)] private float failureSpeed = 1f;
+        [SerializeField, Min(0f)] private float maxSettledAngularSpeed = 5f;
+        [SerializeField, Min(0.1f)] private float groundedFailureSeconds = 3f;
+        [SerializeField, Min(0.1f)] private float splashdownFailureSeconds = 3f;
         [SerializeField, Min(0.1f)] private float noLiftoffTimeout = 10f;
         [SerializeField] private UnityEvent explosionRequested = new();
         [SerializeField] private bool waitForExplosionCompletion;
@@ -35,7 +38,14 @@ namespace Simulation
             rocket = GetComponent<Rocket>();
             body = GetComponent<Rigidbody>();
             origin = transform.position;
-            var rules = new LaunchMissionRules { FailureSpeed = failureSpeed, NoLiftoffTimeout = noLiftoffTimeout };
+            var rules = new LaunchMissionRules
+            {
+                FailureSpeed = failureSpeed,
+                MaxSettledAngularSpeed = maxSettledAngularSpeed,
+                GroundedFailureSeconds = groundedFailureSeconds,
+                SplashdownFailureSeconds = splashdownFailureSeconds,
+                NoLiftoffTimeout = noLiftoffTimeout
+            };
             evaluator = new LaunchMissionEvaluator(mission, rules);
             Objective = LaunchMissionEvaluator.GetObjectiveDescription(mission, rules);
             completed = onCompleted;
@@ -48,7 +58,8 @@ namespace Simulation
             Vector3 offset = transform.position - origin;
             float distance = new Vector2(offset.x, offset.z).magnitude;
             var outcome = evaluator.Step(Time.fixedDeltaTime, Altitude, distance, Speed,
-                Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds, enableAutomaticFailure);
+                Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds, enableAutomaticFailure,
+                rocket.IsGrounded, rocket.Splashed, body.angularVelocity.magnitude * Mathf.Rad2Deg);
             Status = $"고도 {Altitude:0.0}m / 속력 {Speed:0.0}m/s\n거리 {distance:0.0}m / 체류 {evaluator.HoldSeconds:0.0}s / 총 연소 {rocket.TotalBurnSeconds:0.0}s";
             if (outcome != LaunchMissionOutcome.Running) Finish(outcome == LaunchMissionOutcome.Succeeded);
         }

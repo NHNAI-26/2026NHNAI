@@ -23,9 +23,10 @@ namespace Simulation
         public float MaxBurnSeconds { get; set; } = 8f;
         public float FailureSpeed { get; set; } = 1f;
         public float NoLiftoffTimeout { get; set; } = 10f;
-        public float FailureGraceSeconds { get; set; } = 3f;
         public float LiftoffAltitude { get; set; } = 3f;
-        public float LowSpeedSeconds { get; set; } = 0.1f;
+        public float MaxSettledAngularSpeed { get; set; } = 5f;
+        public float GroundedFailureSeconds { get; set; } = 3f;
+        public float SplashdownFailureSeconds { get; set; } = 3f;
 
         internal LaunchMissionRules Snapshot()
         {
@@ -41,15 +42,17 @@ namespace Simulation
             RequireNonnegative(copy.MaxBurnSeconds, nameof(MaxBurnSeconds));
             RequireNonnegative(copy.FailureSpeed, nameof(FailureSpeed));
             RequireNonnegative(copy.NoLiftoffTimeout, nameof(NoLiftoffTimeout));
-            RequireNonnegative(copy.FailureGraceSeconds, nameof(FailureGraceSeconds));
             RequireNonnegative(copy.LiftoffAltitude, nameof(LiftoffAltitude));
-            RequireNonnegative(copy.LowSpeedSeconds, nameof(LowSpeedSeconds));
+            RequireNonnegative(copy.MaxSettledAngularSpeed, nameof(MaxSettledAngularSpeed));
+            RequireNonnegative(copy.GroundedFailureSeconds, nameof(GroundedFailureSeconds));
+            RequireNonnegative(copy.SplashdownFailureSeconds, nameof(SplashdownFailureSeconds));
             if (copy.TargetHorizontalMax < copy.TargetHorizontalMin)
                 throw new ArgumentException("Target horizontal maximum must be at least the minimum.");
             if (copy.HighAltitude < copy.LowAltitude)
                 throw new ArgumentException("High altitude must be at least low altitude.");
-            if (copy.RequiredHoldSeconds == 0f || copy.NoLiftoffTimeout == 0f || copy.LowSpeedSeconds == 0f)
-                throw new ArgumentException("Hold duration and liftoff timeout must be positive.");
+            if (copy.RequiredHoldSeconds == 0f || copy.NoLiftoffTimeout == 0f
+                || copy.GroundedFailureSeconds == 0f || copy.SplashdownFailureSeconds == 0f)
+                throw new ArgumentException("Hold duration, failure delays and liftoff timeout must be positive.");
             return copy;
         }
 
@@ -67,8 +70,8 @@ namespace Simulation
         private readonly LaunchMissionRules _rules;
         private float _elapsedSeconds;
         private bool _hasLiftedOff;
-        private float _previousAltitude;
-        private float _lowSpeedSeconds;
+        private float _groundedSeconds;
+        private float _splashedSeconds;
 
         public LaunchMissionOutcome Outcome { get; private set; }
         public float HoldSeconds { get; private set; }
@@ -82,7 +85,8 @@ namespace Simulation
         }
 
         public LaunchMissionOutcome Step(float deltaTime, float altitude, float horizontalDistance,
-            float speed, float attitudeError, float totalBurnSeconds, bool evaluateFailure = true)
+            float speed, float attitudeError, float totalBurnSeconds, bool evaluateFailure = true,
+            bool isGrounded = false, bool hasSplashed = false, float angularSpeed = 0f)
         {
             if (Outcome != LaunchMissionOutcome.Running)
                 return Outcome;
@@ -94,11 +98,10 @@ namespace Simulation
             LaunchMissionRules.RequireNonnegative(speed, nameof(speed));
             LaunchMissionRules.RequireNonnegative(attitudeError, nameof(attitudeError));
             LaunchMissionRules.RequireNonnegative(totalBurnSeconds, nameof(totalBurnSeconds));
+            LaunchMissionRules.RequireNonnegative(angularSpeed, nameof(angularSpeed));
 
             _elapsedSeconds += deltaTime;
             _hasLiftedOff |= altitude >= _rules.LiftoffAltitude;
-            bool rising = altitude > _previousAltitude + 0.001f;
-            _previousAltitude = altitude;
             bool inZone = altitude >= _rules.TargetAltitude
                 && horizontalDistance >= _rules.TargetHorizontalMin
                 && horizontalDistance <= _rules.TargetHorizontalMax;
@@ -108,9 +111,10 @@ namespace Simulation
                 && speed <= _rules.MaxHoldSpeed
                 && (_missionId != LaunchMissionId.LowPowerZoneHold || totalBurnSeconds <= _rules.MaxBurnSeconds);
             HoldSeconds = holding ? HoldSeconds + deltaTime : 0f;
-            bool lowSpeed = evaluateFailure && _elapsedSeconds >= _rules.FailureGraceSeconds
-                && _hasLiftedOff && !holding && !rising && speed <= _rules.FailureSpeed;
-            _lowSpeedSeconds = lowSpeed ? _lowSpeedSeconds + deltaTime : 0f;
+            bool settled = evaluateFailure && !holding && !hasSplashed && isGrounded
+                && speed <= _rules.FailureSpeed && angularSpeed <= _rules.MaxSettledAngularSpeed;
+            _groundedSeconds = settled ? _groundedSeconds + deltaTime : 0f;
+            _splashedSeconds = evaluateFailure && hasSplashed ? _splashedSeconds + deltaTime : 0f;
 
             bool succeeded;
             switch (_missionId)
@@ -131,11 +135,11 @@ namespace Simulation
 
             if (succeeded)
                 Outcome = LaunchMissionOutcome.Succeeded;
-            else if (lowSpeed && _lowSpeedSeconds >= _rules.LowSpeedSeconds)
-                Fail("로켓 속력이 실패 기준 이하로 떨어졌습니다.");
-            else if (evaluateFailure && !holding && !_hasLiftedOff
-                && _elapsedSeconds >= Math.Max(_rules.NoLiftoffTimeout, _rules.FailureGraceSeconds))
-                Fail("제한 시간 안에 이륙하지 못했습니다.");
+            else if (evaluateFailure && hasSplashed && _splashedSeconds >= _rules.SplashdownFailureSeconds)
+                Fail("로켓이 바다에 추락했습니다.");
+            else if (settled && _groundedSeconds >= _rules.GroundedFailureSeconds
+                && (_hasLiftedOff || _elapsedSeconds >= _rules.NoLiftoffTimeout))
+                Fail(_hasLiftedOff ? "로켓이 지면에 추락해 멈췄습니다." : "제한 시간 안에 이륙하지 못했습니다.");
             return Outcome;
         }
 

@@ -40,6 +40,9 @@ namespace Simulation
         };
 
         private float _remaining;
+        private float _flameSpeed;
+        private float _flameRate;
+        private bool _flameCaptured;
         private float _temperature;
         private bool _ignited;
         private Material[] _uberMaterials;
@@ -161,6 +164,12 @@ namespace Simulation
         /// <summary>실제로 내고 있는 출력(N). 발열과 연료 소모가 모두 이 값을 따른다.</summary>
         public float Output => stats == null ? 0f : stats.MaxOutput * throttle;
 
+        /// <summary>
+        /// 이륙 램프가 걸린 출력. 램프 시계는 <see cref="Rocket"/> 에 하나뿐이라 배율을 인자로 받는다.
+        /// 힘·연소·발열·불꽃이 전부 이 값 하나를 따라야 패드 위에서 연료만 버리는 일이 없다.
+        /// </summary>
+        public float OutputAt(float thrustScale) => Output * Mathf.Clamp01(thrustScale);
+
         public float Remaining => _remaining;
         public float Temperature => _temperature;
         public bool Ignited => _ignited;
@@ -170,7 +179,7 @@ namespace Simulation
         public void Shutdown()
         {
             _ignited = false;
-            SetFlame(false);
+            SetFlame(false, 0f);
         }
 
         /// <summary>
@@ -185,7 +194,7 @@ namespace Simulation
             {
                 _remaining = 0f;
                 _ignited = false;
-                SetFlame(false);
+                SetFlame(false, 0f);
                 Log.W($"{name}: no engine stats assigned, engine stays cold", this);
                 return;
             }
@@ -194,7 +203,7 @@ namespace Simulation
             _ignited = rng.Next(1, 101) <= stats.IgnitionReliability;
             if (!_ignited)
             {
-                SetFlame(false);
+                SetFlame(false, 0f);
                 Log.D($"Ignition failed: {name} ({stats.IgnitionReliability}%)", this);
             }
         }
@@ -203,19 +212,21 @@ namespace Simulation
         /// deltaTime 만큼 연료를 태우고 온도를 갱신한다. 추력을 낼 수 있었으면 true.
         /// 소진 프레임은 남은 양보다 조금 더 태울 수 있지만 한 프레임 오차라 무시한다.
         /// </summary>
-        public bool Tick(float deltaTime)
+        public bool Tick(float deltaTime, float thrustScale = 1f)
         {
             if (stats == null) return false;
 
             bool burning = _ignited && _remaining > 0f;
+            // 한 스텝 안에서는 출력이 하나여야 한다 — 연소와 발열이 다른 값을 보면 램프가 반만 걸린다.
+            float output = OutputAt(thrustScale);
             if (burning)
-                _remaining = Mathf.Max(0f, _remaining - stats.BurnRateAt(Output) * deltaTime);
+                _remaining = Mathf.Max(0f, _remaining - stats.BurnRateAt(output) * deltaTime);
 
             // 꺼진 엔진은 발열이 0이라 냉각만 남는다 — ON/OFF 타이밍이 곧 과열 관리 수단이다.
-            float heat = burning ? stats.HeatRateAt(Output) : 0f;
+            float heat = burning ? stats.HeatRateAt(output) : 0f;
             _temperature = Mathf.Max(0f, _temperature + (heat - stats.Cooling) * deltaTime);
 
-            SetFlame(burning);
+            SetFlame(burning, thrustScale);
             return burning;
         }
 
@@ -291,12 +302,39 @@ namespace Simulation
         /// 불꽃은 추력이 실제로 나오는 동안에만 켜진다. 발사 전에는 <c>Tick</c> 이 호출되지 않고
         /// 파티클의 Play On Awake 도 꺼져 있으므로 자동으로 꺼진 상태다.
         /// </summary>
-        private void SetFlame(bool on)
+        private void SetFlame(bool on, float scale)
         {
-            if (flame == null || flame.isEmitting == on) return;
+            if (flame == null) return;
+
+            // 배기는 추력을 따라 자란다 — 이륙 램프가 화면에 보이는 유일한 신호다. 파티클 트랜스폼
+            // 스케일이 아니라 배수를 쓴다: 루트 스케일은 노즐 위치·입자 크기와 얽혀 있어 손대면
+            // 예전의 비균등 스케일 상쇄 문제가 그대로 돌아온다.
+            if (on)
+            {
+                CaptureFlameDefaults();
+                ParticleSystem.MainModule main = flame.main;
+                main.startSpeedMultiplier = _flameSpeed * scale;
+                ParticleSystem.EmissionModule emission = flame.emission;
+                emission.rateOverTimeMultiplier = _flameRate * scale;
+            }
+
+            if (flame.isEmitting == on) return;
 
             if (on) flame.Play();
             else flame.Stop(true, ParticleSystemStopBehavior.StopEmitting); // 남은 입자는 수명대로 사라진다
+        }
+
+        /// <summary>
+        /// 프리팹이 저작한 불꽃 세기. 배수를 덮어쓰기 전에 한 번만 잡는다 — 이 컴포넌트에는 Awake 가
+        /// 없고 EditMode 테스트도 Awake 를 돌리지 않으므로, 지연 캡처가 두 경로를 같이 만족시킨다.
+        /// </summary>
+        private void CaptureFlameDefaults()
+        {
+            if (_flameCaptured) return;
+
+            _flameCaptured = true;
+            _flameSpeed = flame.main.startSpeedMultiplier;
+            _flameRate = flame.emission.rateOverTimeMultiplier;
         }
     }
 }

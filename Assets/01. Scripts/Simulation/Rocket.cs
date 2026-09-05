@@ -13,20 +13,26 @@ namespace Simulation
         // EngineStatsSO 필드로 내린다 — CreateRuntimeCopy 와 리서치 브리지도 같이 넓어진다.
         [SerializeField] private float tankMassPerFuel = 0.25f; // 연료 1kg 당 탱크 무게(kg)
 
+        [Tooltip("점화부터 최대 추력까지 걸리는 시간(초). 0 이면 발사 첫 프레임에 최대 추력이다.")]
+        [SerializeField, Min(0f)] private float ignitionRampSeconds = 1.2f;
+
         [Header("Splashdown")]
         [Tooltip("수면 높이(월드 y). 씬의 Ground 와 같은 값이어야 한다.")]
-        [SerializeField] private float waterLevel = -8.9f;
+        [SerializeField] private float waterLevel = -6.71f;
         [SerializeField] private float waterDamping = 4f;
         [Tooltip("수면 아래 이만큼 내려가면 멈춘다.")]
         [SerializeField] private float sinkDepth = 30f;
 
         private readonly List<RocketPart> _engines = new();
+        private readonly HashSet<(Collider Self, Collider Surface)> _groundContacts = new();
         private readonly DeterministicRng _rng = new();
         private Rigidbody _body;
         private float _bodyMass;
         private float initialLinearDamping;
         private float initialAngularDamping;
         private int _liveEngines;
+        private float _sinceLaunch;
+        private float _maxThrust;
 
         public bool Launched { get; private set; }
         public System.Func<bool> AuthorizeLaunch { get; set; }
@@ -34,11 +40,63 @@ namespace Simulation
         public bool FlightStopped { get; private set; }
         public float TotalBurnSeconds { get; private set; }
 
+        /// <summary>
+        /// 이번 스텝에 실제로 건 추력 ÷ 전 엔진 최대 추력. 연출이 읽는 값이다(발사 카메라 흔들림).
+        /// 점화에 실패한 엔진이 있으면 1 에 닿지 않는다 — 반만 점화한 발사는 반만 흔들린다.
+        /// </summary>
+        public float ThrustFraction { get; private set; }
+
         /// <summary>과열로 발사가 끝났는지. 한 발사에 주요 사고는 하나뿐이라 이후 추력을 걸지 않는다.</summary>
         public bool Overheated { get; private set; }
 
         /// <summary>수면 아래로 내려갔는지. 추력은 여기서 끝난다.</summary>
         public bool Splashed { get; private set; }
+
+        /// <summary>
+        /// 점화 후 <paramref name="elapsedSeconds"/> 시점의 추력 배율. 램프 시계는 로켓에 하나뿐이다 —
+        /// 엔진은 전부 같은 순간에 점화하므로 부품마다 두면 시계만 엔진 수만큼 늘어난다. 그리고
+        /// <see cref="RocketPart.Output"/> 은 "프리셋 최대치 × 스로틀"로 테스트가 잠가 둔 계약이라
+        /// 거기에 램프를 섞을 수 없다.
+        /// </summary>
+        public static float RampFactor(float elapsedSeconds, float rampSeconds)
+        {
+            return rampSeconds <= 0f ? 1f : Mathf.SmoothStep(0f, 1f, elapsedSeconds / rampSeconds);
+        }
+
+        public bool IsGrounded
+        {
+            get
+            {
+                _groundContacts.RemoveWhere(pair => pair.Self == null || pair.Surface == null
+                    || !pair.Self.enabled || !pair.Surface.enabled
+                    || !pair.Self.gameObject.activeInHierarchy || !pair.Surface.gameObject.activeInHierarchy);
+                return _groundContacts.Count > 0;
+            }
+        }
+
+        private void OnCollisionEnter(Collision collision) => UpdateGroundContact(collision);
+        private void OnCollisionStay(Collision collision) => UpdateGroundContact(collision);
+
+        private void OnCollisionExit(Collision collision)
+        {
+            _groundContacts.RemoveWhere(pair => pair.Surface == collision.collider);
+        }
+
+        private void UpdateGroundContact(Collision collision)
+        {
+            _groundContacts.RemoveWhere(pair => pair.Surface == collision.collider);
+            if (collision.rigidbody == _body) return;
+            for (int i = 0; i < collision.contactCount; i++)
+            {
+                // Side impacts are not ground support. Keep each collider pair separately;
+                // sleeping rigidbodies stop sending Stay but remain supported until Exit.
+                ContactPoint contact = collision.GetContact(i);
+                if (Vector3.Dot(contact.normal, Vector3.up) < 0.5f) continue;
+                _groundContacts.Add((contact.thisCollider, contact.otherCollider));
+            }
+        }
+
+        private void OnDisable() => _groundContacts.Clear();
 
         private void Awake()
         {
@@ -67,7 +125,9 @@ namespace Simulation
             if (AuthorizeLaunch != null && !AuthorizeLaunch()) return;
 
             Launched = true;
+            _groundContacts.Clear();
             Overheated = false;
+            _sinceLaunch = 0f;
             _body.isKinematic = false;
             // 접지 속도가 90 m/s 를 넘는다. 0.02초 스텝이면 한 번에 1.8 m 이동이라
             // Discrete 판정으로는 두께 0 인 지면 평면을 그대로 통과한다.
@@ -79,12 +139,14 @@ namespace Simulation
             _rng.Reseed(launchSeed);
 
             _liveEngines = 0;
+            _maxThrust = 0f;
             float mass = _bodyMass;
             for (int i = 0; i < _engines.Count; i++)
             {
                 _engines[i].Prepare(_rng);
                 if (_engines[i].Ignited) _liveEngines++;
                 if (_engines[i].HasStats) mass += _engines[i].Stats.FuelCapacity * tankMassPerFuel;
+                _maxThrust += _engines[i].Output; // ThrustFraction 의 분모 — 점화 실패분도 들어간다.
             }
 
             // 탱크가 클수록 오래 타지만 그만큼 무겁다. 점화에 실패한 엔진의 탱크도 무게는 그대로 싣고 간다.
@@ -119,12 +181,14 @@ namespace Simulation
         public void StopFlight()
         {
             FlightStopped = true;
+            ThrustFraction = 0f;
             foreach (RocketPart engine in _engines) engine.Shutdown();
             _body.isKinematic = true;
         }
 
         public void ResetFlight(Vector3 position, Quaternion rotation)
         {
+            _groundContacts.Clear();
             foreach (RocketPart engine in _engines) engine.Shutdown();
             _body.isKinematic = false;
             _body.linearVelocity = Vector3.zero;
@@ -139,6 +203,9 @@ namespace Simulation
             _body.angularDamping = initialAngularDamping;
             Launched = FlightStopped = Overheated = Splashed = false;
             TotalBurnSeconds = 0f;
+            ThrustFraction = 0f;
+            _sinceLaunch = 0f;
+            _maxThrust = 0f;
             _liveEngines = 0;
             _engines.Clear();
         }
@@ -146,17 +213,29 @@ namespace Simulation
         private void FixedUpdate()
         {
             if (Launched && !_body.isKinematic) TickWater();
-            if (!Launched || Overheated || Splashed || FlightStopped) return;
+            if (!Launched || Overheated || Splashed || FlightStopped)
+            {
+                ThrustFraction = 0f;
+                return;
+            }
+
+            // 점화 직후에는 추력이 0 에서 올라온다. 그동안 로켓은 발사대 데크 위에 그대로 앉아 있다 —
+            // 연소와 발열도 같은 배율을 타므로(RocketPart.Tick) 패드 위에서 연료를 헛되이 버리지 않고,
+            // 잃는 것은 늦게 뜬 만큼의 중력 손실뿐이다.
+            _sinceLaunch += Time.fixedDeltaTime;
+            float ramp = RampFactor(_sinceLaunch, ignitionRampSeconds);
+            float applied = 0f;
 
             for (int i = 0; i < _engines.Count; i++)
             {
                 RocketPart engine = _engines[i];
-                bool burned = engine.Tick(Time.fixedDeltaTime);
+                bool burned = engine.Tick(Time.fixedDeltaTime, ramp);
                 if (burned) TotalBurnSeconds += Time.fixedDeltaTime;
 
                 if (engine.Overheated)
                 {
                     Overheated = true;
+                    ThrustFraction = 0f;
                     Log.D($"Overheat: {engine.name} hit {EngineStatsSO.CriticalTemperature} °C", this);
                     return;
                 }
@@ -165,7 +244,9 @@ namespace Simulation
 
                 // 무게중심이 아니라 엔진 위치에 힘을 건다. 비대칭 배치가 그대로 토크가 된다.
                 // 방향은 로켓이 아니라 엔진 자신의 up — 설계 단계에서 회전시킨 자세가 곧 추력 방향이다.
-                _body.AddForceAtPosition(engine.transform.up * engine.Output, engine.transform.position);
+                float output = engine.OutputAt(ramp);
+                _body.AddForceAtPosition(engine.transform.up * output, engine.transform.position);
+                applied += output;
 
                 if (engine.HasFuel) continue;
 
@@ -174,6 +255,8 @@ namespace Simulation
                     ? $"Fuel out: {engine.name}, {_liveEngines} engine(s) left"
                     : $"Fuel out: {engine.name}, all engines dry", this);
             }
+
+            ThrustFraction = _maxThrust > 0f ? applied / _maxThrust : 0f;
         }
     }
 }

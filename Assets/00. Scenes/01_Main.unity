@@ -4811,6 +4811,63 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1698402547561644179, guid: 3042d1aadcc5c4553bf92cf2a01b4753, type: 3}
   m_PrefabInstance: {fileID: 2105710300}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &1485355820891468016
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4127979406541696079, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8944537113281542148, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
+      propertyPath: m_Name
+      value: Newspaper Reveal
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: fe7a312723ae2c345b7d00cc9a787bdd, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -4829,3 +4886,4 @@ SceneRoots:
   - {fileID: 294306846}
   - {fileID: 92931381}
   - {fileID: 711943669}
+  - {fileID: 1485355820891468016}

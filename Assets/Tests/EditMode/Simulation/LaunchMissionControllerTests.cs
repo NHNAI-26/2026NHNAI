@@ -177,7 +177,7 @@ namespace Simulation.Tests
         }
 
         [Test]
-        public void NoLiftoff_FailsAfterTenSeconds()
+        public void NoLiftoff_WithoutGroundContactDoesNotFailAfterTenSeconds()
         {
             _rocket.Launch();
             for (int i = 0; i < Mathf.FloorToInt(9f / Time.fixedDeltaTime); i++) Invoke(_controller, "FixedUpdate");
@@ -186,8 +186,8 @@ namespace Simulation.Tests
             Assert.That(_rocket.FlightStopped, Is.False);
             Assert.That(_controller.CanSelfDestruct, Is.True);
             for (int i = 0; i < Mathf.CeilToInt(2f / Time.fixedDeltaTime); i++) Invoke(_controller, "FixedUpdate");
-            Assert.That(_results, Is.EqualTo(new[] { false }));
-            Assert.That(_rocket.FlightStopped, Is.True);
+            Assert.That(_results, Is.Empty);
+            Assert.That(_rocket.FlightStopped, Is.False);
         }
 
         [Test]

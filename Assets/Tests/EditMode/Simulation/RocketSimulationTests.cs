@@ -336,6 +336,39 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void TryReachCapsule_ReachesPastTheSilhouette_SoTheCapsAreAttachable()
+        {
+            const float HalfSegment = 1.5f;
+            const float Radius = 0.5f;
+            const float Reach = 0.75f; // 반지름의 1.5 배 — 프리팹 기본값
+
+            // 로켓 꼭대기 위 빈 곳을 가리킨 커서. 콜라이더에는 안 맞지만 부착으로 쳐야 하고,
+            // 투영은 그 점을 위쪽 캡으로 끌어온다 — 이 경로가 없으면 마개가 몇 픽셀짜리 표적이었다.
+            var above = new Ray(new Vector3(-10f, 2.4f, 0f), Vector3.right);
+            Assert.IsTrue(RocketBuilder.TryReachCapsule(above, HalfSegment, Radius, Reach, out Vector3 top),
+                "표면에서 reach 안쪽을 지나는 광선은 실루엣 밖이어도 부착이다.");
+            Assert.AreEqual(2.4f, top.y, 1e-4f, "최근접점은 광선 위에 있다.");
+            Vector3 seated = RocketBuilder.ProjectOntoCapsule(top, HalfSegment, Radius, Vector3.right);
+            Assert.Greater(seated.y, HalfSegment, "캡 위에 얹힌다.");
+            Assert.AreEqual(Radius, AxisGap(seated, HalfSegment), 1e-4f, "결과는 정확히 표면 위다.");
+
+            // 바닥 아래도 같은 규칙이다. 카메라 피치가 -20° 에 묶여 있어 이쪽은 볼 수조차 없었다.
+            var below = new Ray(new Vector3(-10f, -2.4f, 0f), Vector3.right);
+            Assert.IsTrue(RocketBuilder.TryReachCapsule(below, HalfSegment, Radius, Reach, out Vector3 bottom));
+            Assert.Less(RocketBuilder.ProjectOntoCapsule(bottom, HalfSegment, Radius, Vector3.right).y,
+                -HalfSegment, "아래쪽 캡도 잡힌다.");
+
+            // 여유 밖은 여전히 "놓으면 사라지는" 자리다 — 손을 뻗는 것이지 아무 데나 붙는 게 아니다.
+            var far = new Ray(new Vector3(-10f, 0f, 3f), Vector3.right);
+            Assert.IsFalse(RocketBuilder.TryReachCapsule(far, HalfSegment, Radius, Reach, out _),
+                "reach 밖 광선은 부착이 아니다.");
+
+            // 축과 평행한 광선은 최근접점이 발산한다. 그 각도에서는 콜라이더 레이캐스트가 캡에 맞는다.
+            Assert.IsFalse(RocketBuilder.TryReachCapsule(
+                new Ray(new Vector3(0f, 10f, 0f), Vector3.down), HalfSegment, Radius, Reach, out _));
+        }
+
+        [Test]
         public void MovedPart_SnapsThenProjects_SoItNeverLeavesTheBodySurface()
         {
             const float HalfSegment = 1.5f;
@@ -412,6 +445,76 @@ namespace Simulation.Tests
             // 화각이 넓어지면 같은 비율을 채우는 데 더 큰 점이 필요하다 — FOV 를 상수로 박으면 안 된다.
             Assert.Greater(RocketBuilder.TrailDotWorldSize(Fraction, 150f, 90f),
                 RocketBuilder.TrailDotWorldSize(Fraction, 150f, 60f));
+        }
+
+        [Test]
+        public void RampFactor_StartsAtZero_ReachesFull_AndIsOffWhenRampIsZero()
+        {
+            const float Ramp = 1.2f;
+
+            Assert.AreEqual(0f, Rocket.RampFactor(0f, Ramp), 1e-5f, "점화 순간에는 추력이 없다.");
+            Assert.AreEqual(1f, Rocket.RampFactor(Ramp, Ramp), 1e-5f);
+            Assert.AreEqual(1f, Rocket.RampFactor(Ramp * 10f, Ramp), 1e-5f, "램프가 끝나면 계속 최대다.");
+            Assert.AreEqual(0.5f, Rocket.RampFactor(Ramp * 0.5f, Ramp), 1e-5f, "SmoothStep 은 중간에서 0.5 다.");
+
+            // 단조 증가여야 한다 — 중간에 꺼지면 발사대에서 주저앉는 것처럼 보인다.
+            float previous = -1f;
+            for (int i = 0; i <= 20; i++)
+            {
+                float value = Rocket.RampFactor(Ramp * i / 20f, Ramp);
+                Assert.GreaterOrEqual(value, previous);
+                previous = value;
+            }
+
+            // 0 이면 램프 자체가 없다 — 예전 동작(첫 프레임에 최대 추력)으로 돌아가는 손잡이다.
+            Assert.AreEqual(1f, Rocket.RampFactor(0f, 0f), 1e-5f);
+        }
+
+        [Test]
+        public void Tick_ScalesFuelAndHeatByThrust_SoTheRampDoesNotWasteFuelOnThePad()
+        {
+            // 냉각 0 이면 온도가 곧 누적 발열이라 배율이 그대로 보인다.
+            RocketPart full = CreateEngine(Stats(fuel: 100f, cooling: 0f, output: BaselineOutput, ignition: 100f));
+            RocketPart half = CreateEngine(Stats(fuel: 100f, cooling: 0f, output: BaselineOutput, ignition: 100f));
+            full.Prepare(new DeterministicRng());
+            half.Prepare(new DeterministicRng());
+
+            Assert.AreEqual(BaselineOutput * 0.5f, half.OutputAt(0.5f), 1e-3f);
+            Assert.AreEqual(BaselineOutput, half.OutputAt(1f), 1e-3f, "배율 1 은 램프 없음과 같아야 한다.");
+            Assert.AreEqual(0f, half.OutputAt(-3f), 1e-3f, "배율은 0~1 로 잘린다.");
+
+            Assert.IsTrue(full.Tick(1f));
+            Assert.IsTrue(half.Tick(1f, 0.5f));
+
+            Assert.AreEqual(20f, 100f - full.Remaining, 1e-3f);
+            Assert.AreEqual(10f, 100f - half.Remaining, 1e-3f, "반만 내는 추력은 연료도 반만 태운다.");
+            Assert.AreEqual(60f, full.Temperature, 1e-3f);
+            Assert.AreEqual(30f, half.Temperature, 1e-3f, "발열도 같은 배율을 타야 램프가 열 이득이 된다.");
+        }
+
+        [Test]
+        public void LaunchShake_StaysInsideAmplitude_AndStopsWhenThereIsNoThrust()
+        {
+            Assert.AreEqual(Vector3.zero, RocketBuilder.LaunchShake(0f, 3f, 14f),
+                "추력이 0 이면(연료 소진·과열·발사 전) 흔들리지 않는다.");
+
+            const float Amplitude = 0.25f;
+            bool moved = false;
+            for (int i = 0; i < 200; i++)
+            {
+                Vector3 shake = RocketBuilder.LaunchShake(Amplitude, i * 0.02f, 14f);
+
+                Assert.LessOrEqual(Mathf.Abs(shake.x), Amplitude + 1e-5f);
+                Assert.LessOrEqual(Mathf.Abs(shake.y), Amplitude + 1e-5f);
+                Assert.AreEqual(0f, shake.z, 1e-6f, "흔들림은 뷰 로컬 X·Y 뿐이다 — 거리는 건드리지 않는다.");
+                moved |= shake.sqrMagnitude > 1e-6f;
+            }
+
+            Assert.IsTrue(moved, "진폭이 있으면 실제로 흔들려야 한다.");
+
+            // 두 축이 Perlin 의 같은 선에서 나오면 대각선으로만 움직여 진동으로 안 읽힌다.
+            Vector3 sample = RocketBuilder.LaunchShake(Amplitude, 1.7f, 14f);
+            Assert.Greater(Mathf.Abs(sample.x - sample.y), 1e-4f, "두 축은 서로 다른 값이어야 한다.");
         }
 
         [Test]
