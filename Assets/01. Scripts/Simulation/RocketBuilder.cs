@@ -161,6 +161,7 @@ namespace Simulation
 
         private RocketPart _selected;
         private EditMode _mode;
+        private int _maxAttachedEngines = int.MaxValue;
 
         private CinemachineBrain _brain;
         private float _yaw;
@@ -198,6 +199,13 @@ namespace Simulation
         public EnginePresetLibrarySO PresetLibrary => presetLibrary;
         public RocketPart Selected => _selected;
         public EditMode Mode => _mode;
+        public bool CanAttachNewEngine => CountAttachedEngines() < _maxAttachedEngines;
+
+        public void SetEngineAttachmentLimit(int maxEngines)
+        {
+            if (maxEngines < 0) throw new ArgumentOutOfRangeException(nameof(maxEngines));
+            _maxAttachedEngines = maxEngines;
+        }
 
         public void SetPresetLibrary(EnginePresetLibrarySO library)
         {
@@ -757,7 +765,7 @@ namespace Simulation
         /// </summary>
         public void BeginPresetDrag(EngineStatsSO preset, Vector2 screenPosition)
         {
-            if (rocket.Launched || _dragged != null) return;
+            if (rocket.Launched || _dragged != null || !CanAttachNewEngine) return;
 
             if (enginePrefab == null)
             {
@@ -772,6 +780,13 @@ namespace Simulation
 
             _spawnedFromPreset = true;
             StartDragging(part, screenPosition);
+        }
+
+        private int CountAttachedEngines()
+        {
+            if (rocket == null) return 0;
+            rocket.GetComponentsInChildren(_attached);
+            return _attached.Count;
         }
 
         /// <summary>이동·회전 버튼이 부르는 모드 전환. 같은 모드를 다시 누르면 해제된다.</summary>

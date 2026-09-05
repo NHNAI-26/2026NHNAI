@@ -65,23 +65,11 @@ namespace Simulation.Tests
                 Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
-        [TestCase(LaunchMissionId.ZoneHold)]
-        [TestCase(LaunchMissionId.LowPowerZoneHold)]
-        public void HoldMission_DoesNotDisqualifyAfterBurnDurationLimit(LaunchMissionId mission)
-        {
-            var evaluator = new LaunchMissionEvaluator(mission);
-            Assert.That(evaluator.Step(3f, 200f, 0f, 10f, 0f, 8.01f, inTargetBox: true),
-                Is.EqualTo(LaunchMissionOutcome.Succeeded));
-        }
-
         [Test]
-        public void LowPowerMission_BurnBudgetDoesNotResetHoldProgress()
+        public void LowPowerMission_ObjectiveExplainsSixEngineLimit()
         {
-            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.LowPowerZoneHold);
-            evaluator.Step(2f, 200f, 0f, 10f, 0f, 8f, inTargetBox: true);
-            Assert.That(evaluator.Step(1f, 200f, 0f, 10f, 0f, 8.01f, inTargetBox: true),
-                Is.EqualTo(LaunchMissionOutcome.Succeeded));
-            Assert.That(evaluator.HoldSeconds, Is.EqualTo(3f));
+            Assert.That(LaunchMissionEvaluator.GetObjectiveDescription(LaunchMissionId.LowPowerZoneHold),
+                Is.EqualTo("엔진 6개 이하로 목표 구역 안에서 속력 50 m/s 이하로 3초 연속 유지"));
         }
 
         [Test]

@@ -22,7 +22,7 @@ namespace Simulation
         public Vector3 TargetBoxSize { get; set; } = Vector3.one * 168f;
         public float RequiredHoldSeconds { get; set; } = 3f;
         public float MaxHoldSpeed { get; set; } = 50f;
-        public float MaxBurnSeconds { get; set; } = 8f;
+        public int MaxEngineCount { get; set; } = 6;
         public float FailureSpeed { get; set; } = 1f;
         public float NoLiftoffTimeout { get; set; } = 10f;
         public float LiftoffAltitude { get; set; } = 3f;
@@ -44,7 +44,8 @@ namespace Simulation
             RequirePositive(copy.TargetBoxSize.z, nameof(TargetBoxSize));
             RequireNonnegative(copy.RequiredHoldSeconds, nameof(RequiredHoldSeconds));
             RequireNonnegative(copy.MaxHoldSpeed, nameof(MaxHoldSpeed));
-            RequireNonnegative(copy.MaxBurnSeconds, nameof(MaxBurnSeconds));
+            if (copy.MaxEngineCount <= 0)
+                throw new ArgumentOutOfRangeException(nameof(MaxEngineCount), "Engine count limit must be positive.");
             RequireNonnegative(copy.FailureSpeed, nameof(FailureSpeed));
             RequireNonnegative(copy.NoLiftoffTimeout, nameof(NoLiftoffTimeout));
             RequireNonnegative(copy.LiftoffAltitude, nameof(LiftoffAltitude));
@@ -233,7 +234,7 @@ namespace Simulation
                 default:
                     string hold = $"목표 구역 안에서 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
                     return missionId == LaunchMissionId.LowPowerZoneHold
-                        ? hold + $" (엔진 연소 {r.MaxBurnSeconds:0.##}초 후 자동 차단)" : hold;
+                        ? $"엔진 {r.MaxEngineCount}개 이하로 {hold}" : hold;
             }
         }
 
