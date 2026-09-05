@@ -122,3 +122,27 @@ MonoBehaviour:
     useSpatialAudio: 0
     minDistance: 10
     maxDistance: 500
+  - id: RocketExplosion
+    clip: {fileID: 8300000, guid: cdb87f9d5bec146f8a031ec704ce93e7, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 10
+    maxDistance: 500
+  - id: engine_attach
+    clip: {fileID: 8300000, guid: dbd25a232edb347f1b572021429efd82, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 10
+    maxDistance: 500
+  - id: engine_detach
+    clip: {fileID: 8300000, guid: 79efe284314cb48c4bfc82b23ae516aa, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 10
+    maxDistance: 500
