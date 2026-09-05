@@ -3,15 +3,103 @@ using System.Collections;
 using System.Reflection;
 using Border.Research;
 using Border.UI;
+using DG.Tweening;
 using NUnit.Framework;
+using TMPro;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 namespace Simulation.Tests
 {
     public sealed class NewspaperPresentationTests
     {
+        [UnityTest]
+        public IEnumerator NewspaperRevealsContentsInOrder_WithoutChangingLayoutOrKeepingOldContent()
+        {
+            ResearchFlowSession.ResetForTests();
+            yield return null;
+            GameObject host = null;
+            try
+            {
+                var session = ResearchFlowSession.GetOrCreate();
+                session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
+                session.TryBeginPendingDesignLaunch();
+                session.SetLaunchPhoto(new Texture2D(4, 3), session.LaunchPhotoGeneration);
+                session.CompleteActiveLaunch(true, out var result);
+                host = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/ResearchResultReport.prefab"));
+                var report = host.GetComponent<ResearchResultReportController>();
+                var newspaper = host.GetComponentInChildren<NewspaperReveal>(true);
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var type = typeof(NewspaperReveal);
+                type.GetField("flyDuration", flags).SetValue(newspaper, 0.1f);
+                type.GetField("settleDuration", flags).SetValue(newspaper, 0.1f);
+                type.GetField("headlineCharacterSeconds", flags).SetValue(newspaper, 0.02f);
+                type.GetField("articleCharacterSeconds", flags).SetValue(newspaper, 0.005f);
+                type.GetField("resultLineSeconds", flags).SetValue(newspaper, 0.1f);
+                type.GetField("sectionPauseSeconds", flags).SetValue(newspaper, 0.05f);
+                int shown = 0;
+                newspaper.OnShown.AddListener(() => shown++);
+                report.Initialize(session, result, null);
+                var title = (TMP_Text)type.GetField("headlineText", flags).GetValue(newspaper);
+                var body = (TMP_Text)type.GetField("articleText", flags).GetValue(newspaper);
+                var effects = (TMP_Text)type.GetField("effectsText", flags).GetValue(newspaper);
+                var photo = (RawImage)type.GetField("photoImage", flags).GetValue(newspaper);
+                var timeline = (Sequence)type.GetField("sequence", flags).GetValue(newspaper);
+                timeline.SetUpdate(UpdateType.Manual, true);
+                float simulatedTime = 0f;
+                void AdvanceTo(float time)
+                {
+                    float delta = time - simulatedTime;
+                    DOTween.ManualUpdate(delta, delta);
+                    simulatedTime = time;
+                }
+                Assert.That(title.maxVisibleCharacters, Is.Zero);
+                Assert.That(body.maxVisibleCharacters, Is.Zero);
+                Assert.That(effects.maxVisibleCharacters, Is.Zero);
+                Assert.That(photo.gameObject.activeSelf, Is.False);
+                Assert.That(shown, Is.Zero);
+                Vector2 bodySize = body.rectTransform.rect.size;
+                float titleDuration = title.textInfo.characterCount * 0.02f;
+                AdvanceTo(0.2f + titleDuration * 0.5f);
+                Assert.That(title.maxVisibleCharacters, Is.InRange(1, title.textInfo.characterCount - 1));
+                Assert.That(body.maxVisibleCharacters, Is.Zero);
+                Assert.That(photo.gameObject.activeSelf, Is.False);
+                float bodyStart = 0.2f + titleDuration + 0.05f;
+                float bodyDuration = body.textInfo.characterCount * 0.005f;
+                AdvanceTo(bodyStart + bodyDuration * 0.5f);
+                Assert.That(photo.gameObject.activeSelf, Is.True);
+                Assert.That(body.maxVisibleCharacters, Is.InRange(1, body.textInfo.characterCount - 1));
+                Assert.That(effects.maxVisibleCharacters, Is.Zero);
+                Assert.That(body.rectTransform.rect.size, Is.EqualTo(bodySize));
+                float resultStart = bodyStart + bodyDuration + 0.05f;
+                AdvanceTo(resultStart + 0.05f);
+                int firstLine = effects.maxVisibleCharacters;
+                Assert.That(firstLine, Is.EqualTo(effects.text.IndexOf('\n') + 1));
+                AdvanceTo(resultStart + 0.15f);
+                Assert.That(effects.maxVisibleCharacters, Is.GreaterThan(firstLine));
+                timeline.Complete(true);
+                Assert.That(shown, Is.EqualTo(1));
+                Assert.That(newspaper.IsAnimating, Is.False);
+                Assert.That(effects.maxVisibleCharacters, Is.EqualTo(int.MaxValue));
+                report.Initialize(session, result, null);
+                Assert.That(title.maxVisibleCharacters, Is.Zero);
+                Assert.That(body.maxVisibleCharacters, Is.Zero);
+                Assert.That(effects.maxVisibleCharacters, Is.Zero);
+                Assert.That(photo.gameObject.activeSelf, Is.False);
+                report.Hide();
+                Assert.That(newspaper.IsAnimating, Is.False);
+                Assert.That(shown, Is.EqualTo(1));
+            }
+            finally
+            {
+                if (host != null) Object.Destroy(host);
+                ResearchFlowSession.ResetForTests();
+            }
+            yield return null;
+        }
+
         [UnityTest]
         public IEnumerator SplashdownStageCompletion_PreservesResultAndPhotoForNewspaper()
         {
@@ -84,6 +172,10 @@ namespace Simulation.Tests
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 typeof(NewspaperReveal).GetField("flyDuration", flags).SetValue(newspaper, 0.02f);
                 typeof(NewspaperReveal).GetField("settleDuration", flags).SetValue(newspaper, 0.02f);
+                typeof(NewspaperReveal).GetField("headlineCharacterSeconds", flags).SetValue(newspaper, 0f);
+                typeof(NewspaperReveal).GetField("articleCharacterSeconds", flags).SetValue(newspaper, 0f);
+                typeof(NewspaperReveal).GetField("resultLineSeconds", flags).SetValue(newspaper, 0f);
+                typeof(NewspaperReveal).GetField("sectionPauseSeconds", flags).SetValue(newspaper, 0f);
                 int closed = 0;
                 report.Initialize(session, result, () => { closed++; session.AcknowledgeLaunchResult(); });
                 newspaper.Hide();

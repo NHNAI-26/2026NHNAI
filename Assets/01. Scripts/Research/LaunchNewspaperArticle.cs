@@ -32,11 +32,11 @@ namespace Border.Research
                 : missionName;
 
             bool succeeded = result.Grade <= ResearchGrade.B;
-            string heading = CreateHeading(result, succeeded);
-            string edition = CreateEdition(result);
-            string body = CreateBody(result, resolvedMissionName, succeeded);
-            string effects = CreateEffects(result);
             LaunchResultMedium medium = ResolveMedium(result);
+            string heading = CreateHeading(result, succeeded);
+            string edition = CreateEdition(result, medium);
+            string body = CreateBody(result, resolvedMissionName, succeeded, medium);
+            string effects = CreateEffects(result);
 
             return new LaunchNewspaperArticle(heading, edition, body, effects, medium);
         }
@@ -121,7 +121,7 @@ namespace Border.Research
             }
         }
 
-        private static string CreateEdition(ResearchLaunchResultData result)
+        private static string CreateEdition(ResearchLaunchResultData result, LaunchResultMedium medium)
         {
             string date = $"{result.Year}년 {result.Quarter}분기";
             if (result.FinalMissionWon)
@@ -129,11 +129,23 @@ namespace Border.Research
                 return $"{date} 특별호";
             }
 
+            if (medium == LaunchResultMedium.Mail)
+            {
+                return $"{date} 내부 메일";
+            }
+
             string publication = result.Visibility == TestVisibility.Private ? "연구소 내부 회보" : "정규판";
             return $"{date} {publication}";
         }
 
-        private static string CreateBody(ResearchLaunchResultData result, string missionName, bool succeeded)
+        private static string CreateBody(ResearchLaunchResultData result, string missionName, bool succeeded, LaunchResultMedium medium)
+        {
+            return medium == LaunchResultMedium.Mail
+                ? CreateMailBody(result, missionName, succeeded)
+                : CreateNewspaperBody(result, missionName, succeeded);
+        }
+
+        private static string CreateNewspaperBody(ResearchLaunchResultData result, string missionName, bool succeeded)
         {
             string article = succeeded
                 ? $"{missionName} 시험이 성공했다."
@@ -144,6 +156,18 @@ namespace Border.Research
             }
 
             return article + " " + result.OutcomeEvent.Description;
+        }
+
+        private static string CreateMailBody(ResearchLaunchResultData result, string missionName, bool succeeded)
+        {
+            string outcome = succeeded
+                ? $"{missionName} 시험 결과를 확인했습니다. 판정은 성공입니다."
+                : $"{missionName} 시험 결과를 확인했습니다. {CreateFailedBodyLead(result, missionName)}";
+            string eventNote = result.OutcomeEvent == null || string.IsNullOrWhiteSpace(result.OutcomeEvent.Description)
+                ? "추가 전달 사항은 없습니다."
+                : result.OutcomeEvent.Description;
+
+            return $"책임자님,\n\n{outcome} {eventNote}\n\n정산과 후속 조치는 아래 항목으로 전달드립니다.";
         }
 
         private static string CreateFailedBodyLead(ResearchLaunchResultData result, string missionName)

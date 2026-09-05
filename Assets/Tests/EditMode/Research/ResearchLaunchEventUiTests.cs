@@ -79,7 +79,7 @@ namespace Border.Research.Tests
                     visibility: TestVisibility.FinalMission,
                     finalMissionWon: true), "저전력 구역 체류");
 
-            Assert.That(privateArticle.Edition, Is.EqualTo("2024년 2분기 연구소 내부 회보"));
+            Assert.That(privateArticle.Edition, Is.EqualTo("2024년 2분기 내부 메일"));
             Assert.That(finalArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
         }
 
@@ -128,6 +128,7 @@ namespace Border.Research.Tests
             ResearchLaunchResultData result = CreateResult(outcomeEvent);
             string missionName = ResearchFlowSession.GetOrCreate().Model
                 .GetConfiguredMissionConfig(result.MissionId).DisplayName;
+            LaunchNewspaperArticle article = LaunchNewspaperArticle.Create(result, missionName);
 
             report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
 
@@ -135,7 +136,19 @@ namespace Border.Research.Tests
             string body = FindText(report.gameObject, "Body").text;
             string effects = FindText(report.gameObject, "Effects").text;
             Assert.That(headline, Is.Not.Empty);
-            Assert.That(body, Does.Contain($"{missionName} 시험이 성공했다."));
+            if (article.Medium == LaunchResultMedium.Mail)
+            {
+                Assert.That(body, Does.Contain("책임자님,"));
+                Assert.That(body, Does.Contain($"{missionName} 시험 결과를 확인했습니다."));
+                Assert.That(body, Does.Contain("정산과 후속 조치는 아래 항목으로 전달드립니다."));
+                Assert.That(body, Does.Not.Contain($"{missionName} 시험이 성공했다."));
+            }
+            else
+            {
+                Assert.That(body, Does.Contain($"{missionName} 시험이 성공했다."));
+                Assert.That(body, Does.Not.Contain("책임자님,"));
+            }
+
             Assert.That(body, Does.Contain(outcomeEvent.Description));
             Assert.That(body, Does.Not.Contain("미션:"));
             Assert.That(body, Does.Not.Contain("판정:"));
@@ -147,6 +160,26 @@ namespace Border.Research.Tests
             Assert.That(effects, Does.Not.Contain("실패 10%"));
             Assert.That(effects, Does.Not.Contain("굴림"));
             Assert.That(effects, Does.Not.Contain("안내:"));
+        }
+
+        [Test]
+        public void LaunchNewspaperArticle_WritesMailBodyAsPersonalMessage()
+        {
+            LaunchNewspaperArticle article = LaunchNewspaperArticle.Create(
+                CreateResult(new LaunchOutcomeEventResult(
+                    LaunchOutcomeEventId.QuietBreakthrough,
+                    "닫힌 문 안의 정답",
+                    "공식 발표는 없었지만 성능표는 좋아졌습니다.",
+                    "연구비 +75"),
+                    visibility: TestVisibility.Private), "저고도 안정화");
+
+            Assert.That(article.Medium, Is.EqualTo(LaunchResultMedium.Mail));
+            Assert.That(article.Edition, Is.EqualTo("2024년 2분기 내부 메일"));
+            Assert.That(article.Body, Does.StartWith("책임자님,"));
+            Assert.That(article.Body, Does.Contain("저고도 안정화 시험 결과를 확인했습니다."));
+            Assert.That(article.Body, Does.Contain("정산과 후속 조치는 아래 항목으로 전달드립니다."));
+            Assert.That(article.Body, Does.Not.Contain("시험이 성공했다."));
+            Assert.That(article.Body, Does.Not.Contain("추가 사건은 기록되지 않았다."));
         }
 
         [Test]
@@ -182,6 +215,25 @@ namespace Border.Research.Tests
             Assert.That(LaunchNewspaperArticle.Create(result, "저고도 안정화").Medium, Is.EqualTo(LaunchResultMedium.Mail));
             Assert.That(mailSpriteField.GetValue(newspaper), Is.Null);
             Assert.That(image.sprite, Is.SameAs(newspaperSprite));
+        }
+
+        [Test]
+        public void ResultReport_AssignedMailSpriteUsesEmailAsset()
+        {
+            ResearchResultReportController report = CreateReport();
+            ResearchLaunchResultData result = CreateResult(null, visibility: TestVisibility.Private);
+
+            report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
+
+            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            Sprite emailSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/05. Arts/UI/Email/Email.png");
+            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("mailSprite", flags).GetValue(newspaper);
+            Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(newspaper);
+
+            Assert.That(emailSprite, Is.Not.Null);
+            Assert.That(mailSprite, Is.SameAs(emailSprite));
+            Assert.That(image.sprite, Is.SameAs(emailSprite));
         }
 
         [Test]
