@@ -122,6 +122,7 @@ namespace Border.Research.Editor
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
             TMP_Text detail = CreateText("Detail", content, 12, FontStyles.Normal, TextAlignmentOptions.Right, string.Empty);
             detail.gameObject.AddComponent<LayoutElement>().preferredWidth = 150f;
+            ResearchUiArtApplicator.ApplyCard(button.gameObject);
             return button.gameObject;
         }
 
@@ -190,6 +191,7 @@ namespace Border.Research.Editor
             detailColumn.offsetMax = new Vector2(-16f, -98f);
             AddVerticalLayout(detailColumn, 14f, 14f, 12f, 10f);
             CreateOperationDetails(detailColumn);
+            ResearchUiArtApplicator.ApplyOperation(root.gameObject);
             return root.gameObject;
         }
 

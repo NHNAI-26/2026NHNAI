@@ -53,6 +53,7 @@ namespace Border.Research
         private TMP_Text fundsText;
         private TMP_Text quarterlyFundingText;
         private TMP_Text selectedEngineText;
+        private Slider selectedEngineCompletion;
         private TMP_Text designEntryText;
         private TMP_Text statusText;
         private Button normalResearchButton;
@@ -240,6 +241,8 @@ namespace Border.Research
             fundsText = FindRequiredText(canvasTransform, "Funds");
             quarterlyFundingText = FindRequiredText(canvasTransform, "QuarterlyFunding");
             selectedEngineText = FindRequiredText(canvasTransform, "SelectedEngineText");
+            RectTransform completionGauge = FindChildRectTransform(canvasTransform, "SelectedEngineCompletion");
+            selectedEngineCompletion = completionGauge != null ? completionGauge.GetComponent<Slider>() : null;
             designEntryText = FindRequiredText(canvasTransform, "DesignEntryText");
             statusText = FindRequiredText(canvasTransform, "StatusText");
             normalResearchButton = FindRequiredButton(canvasTransform, "NormalResearchButton");
@@ -505,6 +508,7 @@ namespace Border.Research
 
             EnginePresetConfig selectedEngineConfig = ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset);
             EnginePresetState selectedEngine = model.GetEnginePreset(selectedEnginePreset);
+            if (selectedEngineCompletion != null) selectedEngineCompletion.SetValueWithoutNotify(selectedEngine.Completion);
             LaunchMissionConfig selectedMissionConfig = model.GetConfiguredMissionConfig(selectedMission);
             LaunchMissionState selectedMissionState = model.GetMission(selectedMission);
 
@@ -554,7 +558,10 @@ namespace Border.Research
             EngineCardView card = engineCards[(int)config.Id];
             card.Button.gameObject.SetActive(model.IsEnginePresetUnlocked(config.Id));
             bool selected = selectedEnginePreset == config.Id;
-            card.Button.GetComponent<Image>().color = selected ? new Color(0.28f, 0.35f, 0.42f, 1f) : new Color(0.19f, 0.23f, 0.28f, 1f);
+            Image background = card.Button.GetComponent<Image>();
+            background.color = background.sprite != null
+                ? selected ? Color.white : new Color(0.65f, 0.75f, 0.8f, 1f)
+                : selected ? new Color(0.28f, 0.35f, 0.42f, 1f) : new Color(0.19f, 0.23f, 0.28f, 1f);
             card.Title.text = config.DisplayName;
             card.Detail.text = $"완성도 {engine.Completion} 성능 {model.CalculateEnginePerformanceScore(config.Id)}";
         }

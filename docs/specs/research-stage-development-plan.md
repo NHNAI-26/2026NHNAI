@@ -28,6 +28,10 @@
 
 정식 UI는 동적 생성이 아니라 프리팹 기반으로 만든다. 코드 생성기는 에디터 재생성 도구로만 둔다. 설정창은 `SettingsMenu.prefab`, 일시정지창은 `PauseMenu.prefab`이며 타이틀/메인 씬에 미리 연결한다. 런타임에는 기존 오브젝트를 표시하거나 숨긴다.
 
+연구 화면과 엔진 카드에는 `fae80a1`의 `engine_ui_01.psd` 스프라이트를 사용한다. `_0`은 외곽 패널, `_1`/`_2`는 완성도 게이지의 채움/바탕, `_3`은 엔진 아이콘, `_4`는 스탯 선택 버튼, `_5`는 연구·설계 행동 버튼, `_6`은 엔진 카드와 보조 버튼에 연결한다. 원본의 슬라이스와 테두리 값을 유지하고 프리팹에 직접 저장한다. 기존 프리팹은 `Border/Research/Apply Engine UI Art` 명령으로 배치를 재생성하지 않고 아트만 다시 적용할 수 있다. UI 재생성 도구도 같은 아트 적용 경로를 사용한다.
+
+`SelectedEngineCompletion`은 조작 불가 게이지이며 선택 엔진의 기존 완성도 0~100을 표시한다. 카드 선택이나 연구 완료 시 기존 텍스트와 함께 갱신한다. 중앙 전시 영역에는 새 UI 그래픽을 추가하지 않는다.
+
 결과 보고서와 엔딩도 `ResearchResultReport.prefab`, `ResearchEnding.prefab`을 `01_Main`의 독립된 비활성 인스턴스로 배치한다. 연구 컨트롤러는 직렬화된 화면 참조를 사용하며 런타임에 UI 오브젝트를 조립하지 않는다. 프리팹 재생성은 `Border/Research/Rebuild Result and Ending Prefabs`, 씬 연결은 `Border/Research/Install Session and Result Screens` 에디터 명령으로 수행한다.
 
 `ResearchFlowSession`은 메인 씬의 독립 오브젝트로 두고 `ResearchBalanceConfig.asset`을 연결한다. 최초 세션 생성과 `ResetResearch()`에서 SO를 읽어 새 모델을 만든다. 실행 중 SO를 바꿔도 진행 중 모델에는 자동 반영하지 않는다. 타이틀의 게임 시작은 `PrepareNewGame()`으로 기존 세션만 초기화하고, 세션이 없으면 메인 씬이 생성하도록 둔다. 다시 시작은 날짜, 자금, 엔진, 미션, 발사 상태와 이전 결과를 지우고 엔진 01/연료 스탯을 선택한다.
