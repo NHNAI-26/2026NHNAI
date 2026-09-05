@@ -76,6 +76,24 @@ GDD 07 §5의 "부품 자세는 로켓 기준" 조항은 이 변경에 맞춰 �
 `Instantiate` 시점은 여전히 드래그 **시작**이다(그래야 커서 밑에서 실물을 보며 자리를 고른다).
 달라진 건 `EndDrag` 뿐이라, 프리셋 경로는 계속 기존 드래그 상태를 그대로 얹기만 한다.
 
+장착이 확정되는 `EndDrag`의 `Rocket.Attach` 직후에는 `EngineAttachmentSparks.prefab`을 한 번 재생한다.
+새 엔진과 재배치한 엔진에 모두 적용하고, 단순 선택과 로켓 밖 드롭에서는 재생하지 않는다.
+`RocketBuilder.prefab`의 `attachmentSparksPrefab`에서 공통으로 참조하므로 설계·시뮬레이션 씬에 함께 적용된다.
+발생 위치는 엔진 피봇이 아닌 본체 캡슐 표면이며, 표면 바깥 방향으로 0.06 유닛 띄워 스파크를 내보낸다.
+입자는 월드 공간에 남고, 시간 배율과 무관하게 재생된 뒤 스스로 제거된다.
+
+이펙트 에셋은 `Assets/03. Prefabs/Simulation/Attachment/`에 있다. Unity 기본 `Square.png`를 복사해
+Stretched Billboard로 늘렸으며, Length Scale 3.5와 Speed Scale 0.065를 사용한다.
+0초에 26개, 0.055초에 10개를 방출하고 입자 수명은 0.22–0.48초다.
+머티리얼은 URP Particles/Unlit의 Additive 방식이며, Emission HDR 색상을 `(12, 5.5, 1.2)`로 설정했다.
+발광 밝기는 이 머티리얼의 Emission 값으로 조정한다. Bloom은 추후 적용 예정이므로 이번 변경에서는 추가하지 않는다.
+
+장착 이펙트에는 스파크만 포함한다. 사방으로 퍼지고 아래로 떨어지는 연기는 폭발 전용
+`Explosion/SmokeBurst.prefab`으로 분리했다. 장착 프리팹의 재생 길이는 0.12초이며,
+마지막 스파크가 사라지면 스스로 제거된다. `EngineAttachmentVfxTests`는 실제 장착 후
+입자 시스템이 스파크 하나뿐인지 확인해 연기가 다시 섞이는 것을 막는다.
+검증(2026-09-06): 장착 VFX 테스트 6개 통과. 선택·무효 드롭·장착 위치·자동 제거·HDR 발광을 포함한다.
+
 이 규칙이 성립하려면 집기가 먼저 정확해야 했다. 두 가지를 고쳤다:
 
 - **부품이 본체보다 먼저 맞아야 한다**(`PickPart`). 붙어 있는 엔진은 본체 콜라이더와 맞닿아 있어,
@@ -564,8 +582,8 @@ UI 쪽은 `RocketDesignUI.BuildLaunchPip()`이다. 미션 컨트롤 모드에서
   정지 시간은 10초 대기와 동시에 누적하므로 계속 발사대에 멈춰 있으면 10초에 종료한다.
 - `LaunchMissionController`에서 정지 속력·회전 속도·지면/바다 대기 시간·이륙 제한을 조정한다.
   자동 실패를 끄면 지면/입수 타이머를 초기화한다. 대기 중 비행 정지나 결과 화면 전환은 하지 않는다.
-- 기존 성공 조건과 수동 자폭은 유지한다. 폭발 애니메이션은 아직 추가하지 않으며,
-  기존 `ExplosionRequested`와 `CompleteSelfDestruction()` 연결점은 보존한다.
+- 기존 성공 조건과 수동 자폭은 유지한다. 자폭과 과열 폭발은 `Rocket.Explode()`에서
+  `RocketExplosion.prefab`을 재생한다. `ExplosionRequested`와 `CompleteSelfDestruction()` 연결점은 보존한다.
 
 검증(2026-09-05): `dotnet build .\NHNAI2026.slnx -nologo --no-restore -v:q` 통과.
 Unity `Simulation.EditModeTests` 96개와 `Simulation.PlayModeTests` 5개 통과.
@@ -574,6 +592,70 @@ Unity `Simulation.EditModeTests` 96개와 `Simulation.PlayModeTests` 5개 통과
 실제 `SimulationTest` Game View에서도 지면 정지와 입수 후 대기 장면을 캡처해 확인했다.
 관찰 콜백 기준 실패까지 각각 약 3.01초·2.97초였으며, 캡처는 확인 후 삭제했다.
 전체 프로젝트 테스트는 실행하지 않았다.
+
+### Break Shoot 폭발 이펙트 이식
+
+원본은 `NexonGame20251/Assets/Effects/Explosion/Explosion.vfx`이며, Break Shoot의
+`GameFlow.prefab > Explosion`을 폭발 공·지뢰·스티커가 공유한다.
+`Assets/05. Arts/VFX/BreakShootExplosion/`에 실제 텍스처와 원본 크기·색상·알파 곡선을 가져왔다.
+`ExplosionProfile.json`은 원본 그래프의 SHA-256과 곡선 키·접선을 함께 보관하는 에디터 제작 데이터다.
+
+| 시스템 | 텍스처·프리팹 | 입자 수 | 수명 |
+|---|---|---|---|
+| 중심 화염 | `floor_dot.png` | 1 | 0.42초 |
+| 사각 불티 | `particle_square.png` | 50 | 0.4–0.6초 |
+| 연기 고리 | `smoke_dot.psd` | 1 | 1.2초 |
+| 밝은 섬광 | `4Star.png` | 2 | 0.35초 |
+| 검은 폭발 잔상(footprint) | `imprint.psd` | 1 | 0.4초 |
+| 추가 확산 연기 | `SmokeAtlas.png` | 18 | 0.65–0.95초 |
+| 추가 소형 고속 연기 | `SmokeAtlas.png` | 7 | 0.55–0.8초 |
+| 추가 폭발 연기 | `Smoke_Explosion.prefab` | 6개 시스템에서 0.2–0.4초 동안 방출 | 1.8–3.2초 |
+
+원본의 별도 `Ring.png` 분기는 생성기 출력이 초기화 컨텍스트에 연결되지 않아 실제 재생에 포함되지 않는다.
+원본의 활성 시스템 5개만 Particle System으로 이식한다. 위에서 내려다보는 카메라에 고정됐던 평면을
+카메라를 향하는 Billboard로 바꾸고, 원본의 깊이 분리는 파티클 표시 순서로 옮긴다.
+로켓 크기에 맞춰 크기는 원본의 1.5배로 설정하고, 불티는 3D 방사형으로 퍼지게 한다.
+원본 HDR 색상은 머티리얼 밝기와 입자 색상으로 나눠 보존한다.
+모든 시스템은 비루프·월드 공간에서 시간 배율과 무관하게 재생한다.
+
+추가 연기는 `Explosion/SmokeBurst.prefab`을 중첩해 연결한다. `Rocket.Explode()`의
+`activeExplosion.Play(true)`가 `SmokeBurst/Smoke`와 `SmokeBurst/SmokeFast`도 함께 시작한다.
+기존 `MAT_Smoke.mat`과 3칸짜리 `SmokeAtlas.png`를 공유하며, 전 방향으로 퍼진 후 아래로 떨어지면서
+커지고 옅어진다. 일반 연기는 크기 0.45–0.75, 속도 2.25–4이고, 작은 연기는 크기 0.1625–0.3,
+속도 8.75–13.75다. 발생 반경은 0.3이며 중력 계수는 각각 1.25와 2.25다.
+제작 메뉴도 이 중첩 프리팹을 다시 연결하므로 폭발 프리팹을 재생성해도 연기가 누락되지 않는다.
+
+`Assets/05. Arts/Effect/Smoke/Smoke_Explosion.prefab`도 폭발 중심에 중첩해 함께 재생한다.
+원본의 크기·속도·방출량을 유지하며, 중첩 인스턴스에서만 자동 재생을 끄고 시간 배율과 무관하게
+재생하도록 설정한다. `activeExplosion.Play(true)`가 6개 시스템을 모두 시작한다.
+`RocketExplosionBuilder`에도 같은 연결을 반영해 제작 메뉴로 재생성해도 유지한다.
+
+`Imprint`는 원본의 2.5초 수명과 느린 페이드인을 재정의한다. 시작 지연 없이 완성된 크기로 나타나고,
+알파는 0.85에서 시작해 0.4초 안에 0으로 내려간다. `RocketExplosionBuilder`에도 같은 재정의를 적용해
+제작 메뉴로 다시 생성해도 짧은 잔상 타이밍을 유지한다. 원본 JSON은 출처 기록으로 보존한다.
+
+`Assets/03. Prefabs/Simulation/Explosion/RocketExplosion.prefab`에 적용했으며,
+`SimulationTest`·`DesignStageTester`의 기존 GUID와 루트 ParticleSystem 참조를 유지했다.
+`01_Main`의 설계·발사 화면도 `SimulationTest`를 불러오므로 같은 폭발을 재생한다.
+기존 화염·불티·잔상과 확산 연기 80개는 1.2초 안에 끝난다. 추가한 `Smoke_Explosion`은
+최대 0.4초 방출 후 입자가 3.2초 더 남으므로, `Rocket`의 자동 제거 시간을 4초로 늘렸다.
+재시도 초기화는 진행 중인 폭발 이펙트를 즉시 정리한다.
+게임 실행에는 VFX Graph 컴포넌트가 필요하지 않다. 제작 메뉴는
+`Border > Simulation > Install Rocket Explosion`이며 원본 곡선과 위 잔상 타이밍을 프리팹에 반영한다.
+
+검증(2026-09-06): 잔상 알파가 0.01초에 약 0.816, 0.3초에 약 0.192이며 0.45초에는
+잔상 입자가 없고 다른 연기 입자는 남는 것을 Unity 파티클 시뮬레이션으로 확인했다.
+0.01·0.3초 렌더에서도 즉시 표시와 빠른 소멸을 확인했으며 캡처와 임시 오브젝트는 정리했다.
+`RocketExplosionVfxTests`에 즉시 표시·페이드·잔상만 조기 종료되는 조건을 추가하고,
+기존 연기 잔상 검사는 실제 연기 수명인 1.2초 안에 관찰하도록 수정했다.
+폭발 전용 연기 분리 후에는 실제 `Rocket.Explode()`의 두 연기 재생·방출과
+작은 연기의 크기·확산 거리·낙하·소멸을 회귀 테스트에서 확인한다.
+`Smoke_Explosion` 연결 검증에는 6개 시스템의 동시 재생·입자 방출과 3초 이후 연기 유지,
+4초 이후 자동 제거를 포함한다. 폭발 전체의 0.4·1.6초 렌더에서 추가 연기 재생을 확인했다.
+검증용 캡처는 삭제했다. 폭발 VFX 3개와 폭발 오디오 1개, 총 PlayMode 4개가 통과했다.
+MCP 실행 상태가 완료로 갱신되지 않아 Unity가 저장한 `TestResults.xml`에서 결과를 확인했다.
+사진 수명주기 테스트를 포함한 첫 실행은 결과를 확보하지 못해 통과 여부를 확인하지 못했다.
+Bloom 설정은 추가하지 않았다. 전체 회귀와 플레이어 빌드는 실행하지 않았다.
 
 ### 접지가 성립하려면 두 가지가 같이 필요하다
 

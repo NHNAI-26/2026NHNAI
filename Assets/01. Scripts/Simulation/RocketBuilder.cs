@@ -36,6 +36,10 @@ namespace Simulation
         [Tooltip("좌측 패널에 띄울 엔진 프리셋 목록.")]
         [SerializeField] private EnginePresetLibrarySO presetLibrary;
 
+        [Header("Attachment sparks")]
+        [Tooltip("엔진 장착이 확정될 때 접합부에서 한 번 재생할 스파크.")]
+        [SerializeField] private ParticleSystem attachmentSparksPrefab;
+
         [Header("Cinemachine")]
         [Tooltip("설계 단계 카메라. 이 트랜스폼이 궤도 회전·줌의 결과를 받는다.")]
         [SerializeField] private CinemachineCamera designCam;
@@ -915,6 +919,7 @@ namespace Simulation
             else if (_overRocket)
             {
                 rocket.Attach(part, _attachPoint);
+                PlayAttachmentSparks();
                 for (int i = 0; i < 2; i++)
                     SoundManager.Instance?.PlaySfx("engine_attach");
             }
@@ -923,6 +928,22 @@ namespace Simulation
                 Destroy(part.gameObject);
                 Select(null);
             }
+        }
+
+        private void PlayAttachmentSparks()
+        {
+            if (attachmentSparksPrefab == null) return;
+
+            Vector3 local = rocket.transform.InverseTransformPoint(_attachPoint);
+            Vector3 surface = ProjectOntoCapsule(local, _bodyHalfSegment, _bodyRadius, local);
+            var onAxis = new Vector3(0f, Mathf.Clamp(local.y, -_bodyHalfSegment, _bodyHalfSegment), 0f);
+            Vector3 outward = rocket.transform.TransformDirection(surface - onAxis).normalized;
+            Vector3 position = rocket.transform.TransformPoint(surface) + outward * 0.06f;
+            var sparks = Instantiate(attachmentSparksPrefab, position,
+                Quaternion.FromToRotation(Vector3.forward, outward));
+            // 로켓 이동과 독립적으로 남되, 설계 씬을 닫으면 함께 정리한다.
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(sparks.gameObject, gameObject.scene);
+            sparks.Play(true);
         }
 
         // ---- 선택 부품 편집 (축 구속 기즈모) --------------------------------------------------
