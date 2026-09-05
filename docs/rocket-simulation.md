@@ -1566,6 +1566,22 @@ UI 가 선명한 한 장 + 중심으로 당겨진 한 장으로 두 번 나온�
 `UberShaderSuiteTests.PostProcessing.cs` 의 `CrtFilterUsesReviewedPropertiesAndProceduralSourceContract`
 가 문자열로 잠근다 — 예전 `lerp(sourceColor, ...)` 로 되돌리면 실패한다.
 
+**블룸은 둘이다.** `_CRTPowerBloomIntensity` 는 `powerTransition` 에 곱해져 있어 **전원 붕괴 순간에만**
+터지는 섬광이고, `_CRTBloomIntensity` / `_CRTBloomThreshold` 는 화면이 켜져 있는 **내내** 도는 인광체
+번짐이다. Threshold 를 0 으로 내리면 화면 전체가 뿌옇게 발광하고, 올리면 밝은 곳만 번진다 — 한 구현이
+두 연출을 덮는다. 기본값은 강도 0 이라 켜기 전까지 룩이 바뀌지 않는다.
+
+`UberPostCRTBloom` 은 고정 2링 12탭 커널이다. 시간도 해시도 읽지 않는데, 애니메이션을 끈 상태에서 서로
+다른 `_Time` 두 값이 같은 프레임을 내야 한다는 검사가 있어서다. 배열 인덱싱과 루프 대신 탭을 펼쳐 쓴
+것은 GLES3·WebGL 배리언트까지 같은 방식으로 컴파일시키기 위해서다. 반경은 상수다 — 브라운관 번짐은
+짧은 거리라 아트가 만질 일이 적다. 필요해지면 `_CRTBloomRadius` 를 한 줄 더해 노출하면 된다.
+
+합성 지점에 제약이 둘 있고, 둘 다 테스트가 잡는다. **`saturate` 밖**이어야 한다 — 안에 넣으면 1 로 잘려
+발광이 성립하지 않는다(그래서 두 블룸 모두 밖에 있다). 그리고 **`insideMask * powerMask *
+powerVisibility` 곱 안**이어야 한다 — 밖으로 빠지면 브라운관 모서리와 전원이 꺼진 화면이 검은색에
+도달하지 못한다. `CrtFilterPreservesAlphaBlendsBoundaryAndFreezesAnimation` 이 블룸을 최대로 켠 채
+네 모서리가 여전히 검은지 확인한다.
+
 **전환 연출: 모니터를 손으로 들어 올린다.** 덮개(`DontDestroyOnLoad` 가 아니라 `SimulationStageHost` 에
 붙은 최상위 오버레이 캔버스)는 씬 교체 순간을 가린다. 진입에서 덮는 동작은 **즉시**다 —
 `ResearchOperationUIController.ShowDesignScreen` 이 이미 연구 화면을 꺼 놓고 호스트를 부르기 때문에,

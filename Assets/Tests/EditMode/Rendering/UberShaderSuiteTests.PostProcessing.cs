@@ -286,6 +286,8 @@ namespace Border.Rendering.Tests
                 "_CRTAnimationSpeed(\"Animation Speed\", Range(-5, 5)) = 1",
                 "_CRTPowerOffAmount(\"Power Off Amount\", Range(0, 1)) = 0",
                 "_CRTPowerBloomIntensity(\"Power Bloom Intensity\", Range(0, 8)) = 2",
+                "_CRTBloomIntensity(\"Screen Bloom Intensity\", Range(0, 4)) = 0",
+                "_CRTBloomThreshold(\"Screen Bloom Threshold\", Range(0, 1)) = 0.6",
             };
             foreach (string property in properties)
                 StringAssert.Contains(property, shader);
@@ -336,6 +338,11 @@ namespace Border.Rendering.Tests
                          "clamp(abs(_CRTHorizontalJitter), 0.0, 4.0) * strength",
                          "float3 warpedSource = UberPostSampleLinear(warpedUV).rgb;",
                          "float3 filtered = lerp(warpedSource, color, strength);",
+                         // Both blooms are added outside the saturate so they can exceed
+                         // 1.0, and inside the mask multiply so the tube edge and the
+                         // power-off collapse still reach black.
+                         "screenBloom = UberPostCRTBloom(warpedUV, texelSize, bloomThreshold)",
+                         "saturate(filtered + powerFlash) + powerBloom + screenBloom",
                          "return poweredColor;",
                      })
                 StringAssert.Contains(contract, crt.Value);
@@ -1259,6 +1266,35 @@ namespace Border.Rendering.Tests
                 Assert.That(Mathf.Max(center.r, center.g, center.b),
                     Is.GreaterThan(0.05f), "maximum CRT RGB " + maximum);
 
+                // The screen glow rides outside the saturate but inside the mask multiply.
+                // Moving it past the mask lights the corners; dropping it inside the saturate
+                // makes it a no-op on an already bright frame. Both show up right here.
+                ConfigurePostFilter(material, 10, 0);
+                material.SetFloat("_CRTBloomIntensity", 4f);
+                material.SetFloat("_CRTBloomThreshold", 0f);
+                Color[] glowing = RenderPostFilter(source, material, target, readback);
+                Assert.That(MaxRgbDifference(glowing, representative),
+                    Is.GreaterThan(0.001f), "screen bloom changed nothing");
+                foreach (int corner in new[]
+                         {
+                             0, width - 1, (height - 1) * width,
+                             width * height - 1,
+                         })
+                {
+                    Assert.That(Mathf.Max(glowing[corner].r, glowing[corner].g,
+                            glowing[corner].b),
+                        Is.LessThan(0.01f), "screen bloom lit CRT corner " + corner);
+                }
+                for (int pixel = 0; pixel < glowing.Length; ++pixel)
+                {
+                    Assert.That(IsFinite(glowing[pixel]), Is.True,
+                        "glowing pixel " + pixel);
+                    Assert.That(glowing[pixel].a,
+                        Is.EqualTo(baseline[pixel].a).Within(0.00001f),
+                        "glowing alpha " + pixel);
+                }
+
+                ConfigurePostFilter(material, 10, 0);
                 material.SetFloat("_CRTStrength", 0f);
                 Color[] strengthZero = RenderPostFilter(
                     source, material, target, readback);
@@ -1519,6 +1555,10 @@ namespace Border.Rendering.Tests
                     material.SetFloat("_CRTPowerOffAmount", maximum ? 1f : 0f);
                     material.SetFloat("_CRTPowerBloomIntensity",
                         minimum ? 0f : maximum ? 8f : 2f);
+                    material.SetFloat("_CRTBloomIntensity",
+                        minimum ? 0f : maximum ? 4f : 0f);
+                    material.SetFloat("_CRTBloomThreshold",
+                        minimum ? 0f : maximum ? 1f : 0.6f);
                     break;
             }
         }

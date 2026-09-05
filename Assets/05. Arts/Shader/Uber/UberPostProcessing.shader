@@ -96,6 +96,8 @@ Shader "Shader/Uber/Post Processing"
         [Sub(ScreenFilter_CRT_FILTER_ON)] _CRTAnimationSpeed("Animation Speed", Range(-5, 5)) = 1
         [Sub(ScreenFilter_CRT_FILTER_ON)] _CRTPowerOffAmount("Power Off Amount", Range(0, 1)) = 0
         [Sub(ScreenFilter_CRT_FILTER_ON)] _CRTPowerBloomIntensity("Power Bloom Intensity", Range(0, 8)) = 2
+        [Sub(ScreenFilter_CRT_FILTER_ON)] _CRTBloomIntensity("Screen Bloom Intensity", Range(0, 4)) = 0
+        [Sub(ScreenFilter_CRT_FILTER_ON)] _CRTBloomThreshold("Screen Bloom Threshold", Range(0, 1)) = 0.6
     }
 
     SubShader
