@@ -112,6 +112,14 @@ Shader "Shader/Uber/3D Object"
         [Title(StencilOutline, _)] [Sub(StencilOutline)] [HDR] _StencilOutlineColor("Outline Color", Color) = (1, 0.72, 0.08, 1)
         [Sub(StencilOutline)] _StencilOutlineWidth("Width (Pixels)", Range(0, 16)) = 2
 
+        [Main(Wobble, _WOBBLE_ON, on)] _WobbleEnabled("Wobble", Float) = 0
+        [Title(Wobble, _)] [Sub(Wobble)] _WobbleAmplitude("Amplitude", Range(0, 0.5)) = 0
+        [Sub(Wobble)] _WobbleHeight("Bottom Height", Range(0.01, 1)) = 0.35
+        [Sub(Wobble)] _WobbleHalfHeight("Mesh Half Height (Object)", Float) = 0.5
+        [Sub(Wobble)] _WobbleFrequency("Frequency", Range(0, 30)) = 6
+        [Sub(Wobble)] _WobbleWaves("Waves Along Axis", Range(0, 6)) = 1.5
+        [UberVector3(Wobble)] _WobbleAxis("Up Vector", Vector) = (0, 1, 0, 0)
+
         [HideInInspector] _SrcBlend("__src", Float) = 1
         [HideInInspector] _DstBlend("__dst", Float) = 0
         [HideInInspector] _SrcBlendAlpha("__srcA", Float) = 1
@@ -178,6 +186,7 @@ Shader "Shader/Uber/3D Object"
             #pragma shader_feature_local_fragment _ _HOLOGRAM_ON
             #pragma shader_feature_local_fragment _ _HOLOGRAM_WORLD_SPACE _HOLOGRAM_SCREEN_SPACE
             #pragma shader_feature_local _ _GLITCH_ON
+            #pragma shader_feature_local_vertex _ _WOBBLE_ON
             #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
@@ -246,6 +255,7 @@ Shader "Shader/Uber/3D Object"
             #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local_fragment _ _STENCIL_OUTLINE_ON
             #pragma shader_feature_local _ _GLITCH_ON
+            #pragma shader_feature_local_vertex _ _WOBBLE_ON
             #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
@@ -276,6 +286,7 @@ Shader "Shader/Uber/3D Object"
             #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
             #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local _ _GLITCH_ON
+            #pragma shader_feature_local_vertex _ _WOBBLE_ON
             #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
@@ -306,6 +317,7 @@ Shader "Shader/Uber/3D Object"
             #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
             #pragma multi_compile_local _ _BASE_MAP_TRIPLANAR
             #pragma shader_feature_local _ _GLITCH_ON
+            #pragma shader_feature_local_vertex _ _WOBBLE_ON
             #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE
@@ -335,6 +347,7 @@ Shader "Shader/Uber/3D Object"
             #pragma multi_compile_local_fragment _ _ALPHATEST_ON
             #pragma multi_compile_local_fragment _ _UBER_QUALITY_LOW
             #pragma shader_feature_local _ _GLITCH_ON
+            #pragma shader_feature_local_vertex _ _WOBBLE_ON
             #pragma multi_compile_local _ _GLITCH_OBJECT_SPACE _GLITCH_WORLD_SPACE
             #pragma shader_feature_local_fragment _ _DISSOLVE_ON
             #pragma shader_feature_local_fragment _ _DISSOLVE_OBJECT_SPACE

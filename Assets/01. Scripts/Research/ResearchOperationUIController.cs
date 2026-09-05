@@ -62,7 +62,11 @@ namespace Border.Research
         private TMP_Text dateText;
         private TMP_Text fundsText;
         private TMP_Text quarterlyFundingText;
+        private TMP_Text selectedEngineNameText;
+        private TMP_Text selectedEnginePerformanceText;
+        private TMP_Text selectedEngineInstallCostText;
         private TMP_Text selectedEngineText;
+        private TMP_Text selectedStatText;
         private TMP_Text statusText;
         private Slider selectedEngineCompletion;
         private Button partDevelopmentButton;
@@ -260,7 +264,11 @@ namespace Border.Research
             dateText = FindRequiredText(canvasTransform, "Date");
             fundsText = FindRequiredText(canvasTransform, "Funds");
             quarterlyFundingText = FindRequiredText(canvasTransform, "QuarterlyFunding");
+            selectedEngineNameText = FindRequiredText(canvasTransform, "SelectedEngineName");
+            selectedEnginePerformanceText = FindRequiredText(canvasTransform, "SelectedEnginePerformance");
+            selectedEngineInstallCostText = FindRequiredText(canvasTransform, "SelectedEngineInstallCost");
             selectedEngineText = FindRequiredText(canvasTransform, "SelectedEngineText");
+            selectedStatText = FindRequiredText(canvasTransform, "SelectedStatText");
             RectTransform completionGauge = FindChildRectTransform(canvasTransform, "SelectedEngineCompletion");
             selectedEngineCompletion = completionGauge != null ? completionGauge.GetComponent<Slider>() : null;
             partDevelopmentButton = FindRequiredButton(canvasTransform, "PartDevelopmentButton");
@@ -270,7 +278,6 @@ namespace Border.Research
             createEnginePresetButton = FindRequiredButton(canvasTransform, "CreateEnginePresetButton");
             enterDesignButton = FindRequiredButton(canvasTransform, "EnterDesignButton");
             waitButton = FindRequiredButton(canvasTransform, "WaitQuarterButton");
-            Button resetButton = FindRequiredButton(canvasTransform, "ResetButton");
             for (int index = 0; index < StatCount; index++)
             {
                 var statId = (EngineStatId)index;
@@ -288,7 +295,11 @@ namespace Border.Research
                 || dateText == null
                 || fundsText == null
                 || quarterlyFundingText == null
+                || selectedEngineNameText == null
+                || selectedEnginePerformanceText == null
+                || selectedEngineInstallCostText == null
                 || selectedEngineText == null
+                || selectedStatText == null
                 || partDevelopmentButton == null
                 || startDevelopmentButton == null
                 || normalResearchButton == null
@@ -296,7 +307,6 @@ namespace Border.Research
                 || createEnginePresetButton == null
                 || enterDesignButton == null
                 || waitButton == null
-                || resetButton == null
                 || Array.Exists(statButtons, button => button == null)
                 || Array.Exists(statRowLabels, label => label == null))
             {
@@ -336,11 +346,6 @@ namespace Border.Research
             createEnginePresetButton.onClick.AddListener(CreateNewEnginePreset);
             enterDesignButton.onClick.AddListener(EnterDesign);
             waitButton.onClick.AddListener(WaitQuarter);
-            resetButton.onClick.AddListener(() =>
-            {
-                ResetResearchState();
-                Refresh();
-            });
             for (int index = 0; index < StatCount; index++)
             {
                 var statId = (EngineStatId)index;
@@ -582,24 +587,28 @@ namespace Border.Research
             ShowEnginePreview();
             dateText.text = $"날짜\n{model.Year} Q{model.Quarter} · 남은 {model.RemainingTurns}분기";
             fundsText.text = $"보유 자금\n{model.Funds}";
-            quarterlyFundingText.text = $"분기 예산\n+{model.QuarterlyFunding}";
+            // 보유 자금과 같은 칩을 쓰므로 한 줄로 둔다 — 두 줄씩 네 줄이 되면 상단 바 높이를 넘는다.
+            quarterlyFundingText.text = $"분기 예산 +{model.QuarterlyFunding}";
 
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
                 RefreshEngineCard(config);
             }
 
-            EnginePresetConfig selectedEngineConfig = ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset);
             EnginePresetState selectedEngine = model.GetEnginePreset(selectedEnginePreset);
             if (selectedEngineCompletion != null) selectedEngineCompletion.SetValueWithoutNotify(selectedEngine.Completion);
             LaunchMissionConfig selectedMissionConfig = model.GetConfiguredMissionConfig(selectedMission);
             LaunchMissionState selectedMissionState = model.GetMission(selectedMission);
             int designEntryCost = model.GetDesignEntryCost(selectedMission);
 
-            selectedEngineText.text = $"{model.GetEnginePresetName(selectedEnginePreset)}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
-                + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}\n"
-                + $"기본 {model.ConfiguredEngineNormalResearchCost} / 집중 {model.ConfiguredEngineFocusedResearchCost}  설치 {model.GetEngineInstallCost(selectedEnginePreset)}\n"
-                + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
+            // 한 덩어리였던 세 줄을 노드로 나눈다 — 이름은 좌상단, 성능은 우상단으로 갈라 붙이려면
+            // 문자열 하나로는 정렬을 나눌 수 없다. 기본·집중 연구 비용은 여기서 빼고 연구 버튼 라벨에만
+            // 남긴다(같은 값을 두 군데 쓰면 한쪽이 낡는다).
+            selectedEngineNameText.text = model.GetEnginePresetName(selectedEnginePreset);
+            selectedEnginePerformanceText.text = $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}";
+            selectedEngineInstallCostText.text = $"설치 {model.GetEngineInstallCost(selectedEnginePreset)}";
+            selectedEngineText.text = $"완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}";
+            selectedStatText.text = $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
 
             for (int index = 0; index < StatCount; index++)
             {
@@ -850,6 +859,16 @@ namespace Border.Research
             selectedEnginePreset = EnginePresetId.Engine01;
             selectedStat = EngineStatId.FuelCapacity;
             selectedMission = model.GetCurrentMission();
+        }
+
+        /// <summary>
+        /// The reset used to hang off a 초기화 button in the top bar; the bar now carries only
+        /// title, date and funds, so this is the remaining entry point into the same state reset.
+        /// </summary>
+        public void ResetResearchForTests()
+        {
+            ResetResearchState();
+            Refresh();
         }
 
         public ResearchDesignScreenController GetActiveDesignControllerForTests()

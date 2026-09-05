@@ -869,6 +869,7 @@ public sealed class UberShaderGUI : LWGUI.LWGUI
         new KeywordBinding("_GlassGlowEnabled", "_GLASS_GLOW_ON", 1),
         new KeywordBinding("_HologramEnabled", "_HOLOGRAM_ON", 1),
         new KeywordBinding("_GlitchEnabled", "_GLITCH_ON", 1),
+        new KeywordBinding("_WobbleEnabled", "_WOBBLE_ON", 1),
         new KeywordBinding("_HologramSpace", "_HOLOGRAM_WORLD_SPACE", 1,
             "_HologramEnabled"),
         new KeywordBinding("_HologramSpace", "_HOLOGRAM_SCREEN_SPACE", 2,

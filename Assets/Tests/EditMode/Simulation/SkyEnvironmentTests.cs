@@ -48,13 +48,6 @@ namespace Simulation.Tests
             foreach (string property in new[]
                      { "_SkyTint", "_HorizonColor", "_Exposure", "_AtmosphereThickness", "_SpaceBlend" })
                 Assert.IsTrue(material.HasProperty(property), property);
-
-            // 별밭은 셰이더 안에서만 산다 — C# 이 구동하지 않으므로 이름이 틀려도 로그조차 없다.
-            // 머티리얼 인스펙터에서 톤을 잡는 노브라서, 사라지면 조용히 튜닝 불가가 된다.
-            foreach (string property in new[]
-                     { "_StarBrightness", "_StarDensity", "_StarCoverage", "_StarGlow",
-                       "_StarTwinkle", "_StarWashout", "_StarWarm", "_StarCool" })
-                Assert.IsTrue(material.HasProperty(property), property);
         }
 
         [Test]
@@ -133,6 +126,56 @@ namespace Simulation.Tests
 
             Assert.Less(SkyEnvironment.SphereDrop(300f, 848f),
                 SkyEnvironment.SphereDrop(600f, 848f), "멀수록 더 내려간다.");
+        }
+
+        [Test]
+        public void WrapAxis_FoldsIntoTheTileAroundTheCamera()
+        {
+            const float span = 2000f; // 프리팹 구름 박스 한 변
+
+            // 타일 안은 손대지 않는다 — 매 프레임 접는 코드라 여기서 미세하게 밀리면 구름이 떤다.
+            Assert.AreEqual(100f, SkyEnvironment.WrapAxis(100f, 0f, span), 1e-3f);
+            Assert.AreEqual(-999f, SkyEnvironment.WrapAxis(-999f, 0f, span), 1e-3f);
+
+            // 뒤로 흘린 구름은 반대편 끝으로. 카메라에서 반폭(1000) 떨어진 곳 = far clip 밖이다.
+            Assert.AreEqual(-500f, SkyEnvironment.WrapAxis(1500f, 0f, span), 1e-3f);
+            Assert.AreEqual(500f, SkyEnvironment.WrapAxis(-1500f, 0f, span), 1e-3f);
+
+            // 로켓이 한참 밀린 뒤에도 한 번에 맞아야 한다 — 반복문 없이 Round 로 접는 이유다.
+            foreach (float value in new[] { 7000f, -7000f, 123456f })
+            {
+                float folded = SkyEnvironment.WrapAxis(value, 300f, span);
+                Assert.LessOrEqual(Mathf.Abs(folded - 300f), span * 0.5f + 1e-3f,
+                    $"{value} 가 한 번에 타일 안으로 들어오지 않았다.");
+
+                // 접은 값을 다시 접어도 그대로여야 안정적이다. 아니면 매 프레임 SetParticles 가 돈다.
+                Assert.AreEqual(folded, SkyEnvironment.WrapAxis(folded, 300f, span), 1e-3f);
+            }
+
+            // 프리팹 박스가 0 이어도 구름이 카메라 위 한 점으로 뭉치면 안 된다.
+            Assert.AreEqual(1500f, SkyEnvironment.WrapAxis(1500f, 0f, 0f), 1e-3f);
+        }
+
+        [Test]
+        public void Bind_BuildsWorldSpaceDustOnItsOwnLayer_AndUnbindRemovesIt()
+        {
+            SkyEnvironment sky = Create(out _, out _, worldMetersPerUnit: 250f);
+            Camera cam = (Camera)typeof(SkyEnvironment)
+                .GetField("cam", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(sky);
+
+            Transform dust = cam.transform.Find("SpaceDust");
+            Assert.IsNotNull(dust, "먼지가 없으면 우주에서 카메라 대비 움직이는 것이 하나도 남지 않는다.");
+
+            // 레이어가 틀리면 후퇴 뷰(PiP)에 로켓을 감싼 얼룩이 조용히 생긴다 — 로그도 예외도 없다.
+            Assert.AreEqual(SkyEnvironment.DustLayer, dust.gameObject.layer);
+
+            ParticleSystem system = dust.GetComponent<ParticleSystem>();
+            // Local 이면 먼지가 카메라에 붙어 시차가 0 이 된다 — 예전 별 껍질과 똑같은 실패다.
+            Assert.AreEqual(ParticleSystemSimulationSpace.World, system.main.simulationSpace);
+            Assert.IsFalse(system.emission.enabled, "지상에서는 꺼져 있어야 한다 — 대기권은 구름이 맡는다.");
+
+            sky.Unbind(); // 런타임에서는 OnDestroy 가 부른다
+            Assert.IsNull(cam.transform.Find("SpaceDust"), "Unbind 가 먼지를 남기면 안 된다.");
         }
 
         private SkyEnvironment Create(out Transform target, out GameObject root,

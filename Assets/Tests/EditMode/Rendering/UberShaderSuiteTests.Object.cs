@@ -39,12 +39,13 @@ namespace Border.Rendering.Tests
                 "Dissolve, _DISSOLVE_ON, on",
                 "DitherFade, _DITHER_FADE_ON, on",
                 "StencilOutline, _STENCIL_OUTLINE_ON, on",
+                "Wobble, _WOBBLE_ON, on",
             };
             string[] childOwners =
             {
                 "Surface", "SurfaceInputs", "TextureBlend", "ColorAdjust", "Emission", "Rim",
                 "HeightFade", "GlassGlow", "Hologram", "Glitch", "Dissolve",
-                "DitherFade", "StencilOutline",
+                "DitherFade", "StencilOutline", "Wobble",
             };
             string[] rows = Lines(properties).Where(line =>
                 Regex.IsMatch(line, @"_[A-Za-z][A-Za-z0-9_]*\s*\(")).ToArray();

@@ -13,6 +13,13 @@ namespace Simulation
     [DisallowMultipleComponent]
     public sealed class SkyEnvironment : MonoBehaviour
     {
+        /// <summary>
+        /// 먼지 전용 레이어. 먼지는 늘 <see cref="cam"/>(큰 화면) 을 감싸므로 488 유닛 밖의 PiP 에서는
+        /// 로켓에 붙은 얼룩으로만 보인다 — <see cref="RocketBuilder"/> 가 PiP 를 만들 때 이 비트를 끈다.
+        /// 직렬화 필드가 아니라 상수인 이유는 두 컴포넌트가 같은 값을 알아야 하기 때문이다.
+        /// </summary>
+        public const int DustLayer = 9; // SpaceDust
+
         private static readonly int SkyTintId = Shader.PropertyToID("_SkyTint");
         private static readonly int AtmosphereThicknessId = Shader.PropertyToID("_AtmosphereThickness");
         private static readonly int ExposureId = Shader.PropertyToID("_Exposure");
@@ -28,6 +35,8 @@ namespace Simulation
         [Header("구성 요소")]
         [SerializeField] private Material skyboxSource;
         [SerializeField] private ParticleSystem clouds;
+        // 비면 Unity 기본 파티클 머티리얼로 그린다. 기본은 Sky/Star.mat — 궤적 점과 같은 것을 쓴다.
+        [SerializeField] private Material dustMaterial;
 
         [Header("고도 스케일")]
         // 1 유닛이 실제 몇 m 인가. 프로토타입 비행은 정점이 434 유닛뿐이라 250 으로 부풀려 108 km 로 읽는다.
@@ -57,11 +66,31 @@ namespace Simulation
         // 수면 격자 한 변의 정점 수. 굽힌 지평선 실루엣이 각져 보이면 올린다.
         [SerializeField] private int oceanResolution = 96;
 
+        [Header("우주 먼지")]
+        // 우주에서는 수면도 구름도 꺼지고 별은 스카이박스라 무한원이다 — 카메라 대비 움직이는 것이
+        // 하나도 없다. 가까이 뿌린 먼지만이 시차를 만든다. 속도를 주입하지 않는다: 먼지는 월드에
+        // 서 있고 카메라가 뚫고 지나간다. rateOverDistance 라 정점에서 카메라가 서면 방출도 멎는다.
+        [SerializeField] private float dustRadius = 60f;
+        // 0.5 = 안쪽 30 유닛을 비운다. 더 가까우면 각속도가 커져 프레임당 60 px 씩 튀고 스트로빙한다.
+        [SerializeField, Range(0f, 1f)] private float dustHollow = 0.5f;
+        [SerializeField] private float dustPerUnit = 0.9f; // 카메라가 1 유닛 움직일 때마다 방출할 수
+        [SerializeField] private float dustLifetime = 2.5f;
+        [SerializeField] private Vector2 dustSize = new(0.10f, 0.25f);
+        [SerializeField, Range(0f, 1f)] private float dustAlpha = 0.25f;
+        // 카메라 속도 → 스트릭 길이. 모션 블러가 없으므로 스트릭이 프레임당 이동 픽셀보다 길어야
+        // 끊긴 점이 아니라 흐르는 선으로 읽힌다. 55 유닛/s 에서 1.65 유닛 = 30 유닛 거리에서 51 px,
+        // 같은 거리의 프레임 점프가 31 px 다.
+        [SerializeField] private float dustStretch = 0.03f;
+
         private Material _sky;
         private Material _skyBefore;
         private bool _fogBefore;
         private FogMode _fogModeBefore;
         private ParticleSystemRenderer _cloudRenderer;
+        private ParticleSystem.Particle[] _cloudParticles;
+        private Vector3 _cloudBox; // 랩 주기. ShapeModule 박스가 단일 출처다
+        private Vector3 _cloudCenter = new(float.NaN, float.NaN, float.NaN);
+        private ParticleSystem _dust;
         private float _zeroY;
         private bool _bound;
         private MeshFilter _groundFilter;
@@ -109,8 +138,13 @@ namespace Simulation
             {
                 clouds.transform.position = new Vector3(0f, _zeroY + cloudKm * 1000f / worldMetersPerUnit, 0f);
                 _cloudRenderer = clouds.GetComponent<ParticleSystemRenderer>();
+                // 이미터 박스가 곧 랩 주기다 — 최초 버스트가 채우는 넓이와 되돌리는 간격이 같아야
+                // 이음매에서 밀도가 튀지 않는다. 넓이를 바꾸려면 프리팹의 Shape 박스 하나만 만진다.
+                _cloudBox = clouds.shape.scale;
+                _cloudParticles = new ParticleSystem.Particle[clouds.main.maxParticles];
             }
 
+            BuildDust();
             BindGroundMesh();
         }
 
@@ -125,6 +159,13 @@ namespace Simulation
             RenderSettings.skybox = _skyBefore;
             RenderSettings.fog = _fogBefore;
             RenderSettings.fogMode = _fogModeBefore;
+
+            if (_dust != null)
+            {
+                if (Application.isPlaying) Destroy(_dust.gameObject);
+                else DestroyImmediate(_dust.gameObject);
+                _dust = null;
+            }
 
             if (_groundMesh != null)
             {
@@ -171,6 +212,123 @@ namespace Simulation
             // 우주에서 내려다보면 구름 판이 허공에 떠 있는 덩어리로 보인다. 렌더러만 끈다 —
             // 오브젝트를 껐다 켜면 한 번뿐인 버스트가 다시 터진다.
             if (_cloudRenderer != null) _cloudRenderer.enabled = !inSpace;
+            if (!inSpace) WrapClouds();
+
+            // 대기권에서는 구름과 수면이 이미 속도를 말해 준다. 먼지는 그 둘이 꺼지는 우주부터다.
+            // 모듈은 구조체 사본이라 바뀔 때만 쓴다.
+            if (_dust != null && _dust.emission.enabled != inSpace)
+            {
+                ParticleSystem.EmissionModule emission = _dust.emission;
+                emission.enabled = inSpace;
+            }
+        }
+
+        /// <summary>
+        /// 뒤로 흘려보낸 구름을 반대편 끝으로 되돌려, 고정 개수로 끝없는 구름 바다를 만든다.
+        /// 버스트는 한 번뿐이고 파티클은 World 공간이라 이미터를 옮겨도 따라오지 않는다 —
+        /// 살아 있는 입자를 직접 손댄다(<see cref="RocketBuilder.UpdateTrailDotSize"/> 와 같은 패턴).
+        /// 접는 기준은 로켓이 아니라 카메라다: 보이는 범위를 정하는 것이 카메라이고, 후퇴 뷰와
+        /// PiP 의 최대 이격 500 은 타일 반폭(1000)보다 작아 어느 뷰에서도 가장자리가 안 나온다.
+        /// 되돌아간 구름은 카메라에서 반폭만큼 떨어진 곳에 나타난다 — far clip(1000) 밖이라 안 보인다.
+        /// </summary>
+        private void WrapClouds()
+        {
+            if (clouds == null || _cloudParticles == null) return;
+
+            // 구름은 속도가 0 이라 카메라가 서 있으면 칸을 넘어갈 입자도 없다. 조립 화면에서
+            // 매 프레임 파티클 배열을 통째로 복사하지 않으려고 먼저 걸러 낸다.
+            Vector3 center = cam.transform.position;
+            if (center == _cloudCenter) return;
+            _cloudCenter = center;
+
+            int count = clouds.GetParticles(_cloudParticles);
+            bool moved = false;
+
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 p = _cloudParticles[i].position;
+                // 고도는 건드리지 않는다 — 구름은 한 겹이고 수직으로 접으면 층이 겹쳐 보인다.
+                float x = WrapAxis(p.x, center.x, _cloudBox.x);
+                float z = WrapAxis(p.z, center.z, _cloudBox.z);
+                if (x.Equals(p.x) && z.Equals(p.z)) continue;
+
+                _cloudParticles[i].position = new Vector3(x, p.y, z);
+                moved = true;
+            }
+
+            if (moved) clouds.SetParticles(_cloudParticles, count);
+        }
+
+        /// <summary>
+        /// <paramref name="center"/> 를 한가운데로 하는 폭 <paramref name="span"/> 의 칸 안으로 접는다.
+        /// <c>Round</c> 라 한 프레임에 몇 칸을 건너뛰어도 한 번에 맞는다 — 반복문이 필요 없다.
+        /// 폭이 0 이면 그대로 둔다. 접었다가는 구름 전체가 카메라 위 한 점으로 뭉친다.
+        /// </summary>
+        public static float WrapAxis(float value, float center, float span) =>
+            span <= 0f ? value : value - span * Mathf.Round((value - center) / span);
+
+        /// <summary>
+        /// 카메라 둘레의 먼지. 프리팹이 아니라 코드로 조립한다 —
+        /// <see cref="RocketBuilder.EnsureTrajectoryTrail"/> 이 같은 선례이고, 이 값들은 화면에서
+        /// 튜닝할 것이 아니라 계산으로 정해진 것이라 인스펙터에 흩어 둘 이유가 없다.
+        /// </summary>
+        private void BuildDust()
+        {
+            var host = new GameObject("SpaceDust") { layer = DustLayer };
+            // 카메라의 자식이라 매 프레임 위치를 쓰는 코드가 없다. 직접 대입하면 Cinemachine 이
+            // LateUpdate 에서 카메라를 옮긴 뒤라 한 프레임 밀린다.
+            host.transform.SetParent(cam.transform, false);
+
+            _dust = host.AddComponent<ParticleSystem>();
+            _dust.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            ParticleSystem.MainModule main = _dust.main;
+            main.simulationSpace = ParticleSystemSimulationSpace.World; // 뿌린 먼지는 그 자리에 남는다
+            main.startLifetime = dustLifetime;
+            main.startSpeed = 0f; // 움직이는 것은 카메라뿐이다
+            main.startSize = new ParticleSystem.MinMaxCurve(dustSize.x, dustSize.y);
+            main.startColor = new Color(1f, 1f, 1f, dustAlpha);
+            main.gravityModifier = 0f;
+            main.playOnAwake = false;
+            main.maxParticles = 400;
+
+            ParticleSystem.EmissionModule emission = _dust.emission;
+            emission.rateOverTime = 0f;
+            emission.rateOverDistance = dustPerUnit;
+            emission.enabled = false; // 우주에서만 켠다
+
+            ParticleSystem.ShapeModule shape = _dust.shape;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = dustRadius;
+            shape.radiusThickness = dustHollow;
+
+            // 껍질 안에서 태어나므로 시야 한가운데에 톡 나타난다. 수명 양끝을 알파로 눌러 가린다.
+            ParticleSystem.ColorOverLifetimeModule fade = _dust.colorOverLifetime;
+            fade.enabled = true;
+            Gradient ramp = new();
+            ramp.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[]
+                {
+                    new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.15f),
+                    new GradientAlphaKey(1f, 0.85f), new GradientAlphaKey(0f, 1f)
+                });
+            fade.color = new ParticleSystem.MinMaxGradient(ramp);
+
+            var dustRenderer = host.GetComponent<ParticleSystemRenderer>();
+            // 입자 속도는 0 이라 늘어남은 전적으로 카메라 속도에서 온다. lengthScale 2 가 기본 길이라
+            // 카메라가 멈춘 정점에서도 사각형이 찌그러지지 않는다.
+            dustRenderer.renderMode = ParticleSystemRenderMode.Stretch;
+            dustRenderer.velocityScale = 0f;
+            dustRenderer.cameraVelocityScale = dustStretch;
+            dustRenderer.lengthScale = 2f;
+            // ponytail: 비면 Unity 기본 파티클 머티리얼로 그린다. 궤적 점처럼 Shader.Find 로 새 Material 을
+            // 만들지 않는 이유는 EditMode 테스트에서 그 인스턴스가 그대로 새기 때문이다.
+            if (dustMaterial != null) dustRenderer.sharedMaterial = dustMaterial;
+            dustRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            dustRenderer.receiveShadows = false;
+
+            _dust.Play();
         }
 
         /// <summary>

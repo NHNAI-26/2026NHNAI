@@ -25,6 +25,8 @@ namespace Simulation.Tests
             _rocket = _object.AddComponent<Rocket>();
             // EditMode does not invoke MonoBehaviour.Awake automatically.
             Invoke(_rocket, "Awake");
+            // 이 클래스는 클램프가 풀린 뒤의 판정만 본다. 홀드 자체는 RocketSimulationTests 가 덮는다.
+            SetField(_rocket, "holdSeconds", 0f);
             _controller = _object.AddComponent<LaunchMissionController>();
             _controller.Initialize(LaunchMissionId.LowAltitude, () => true, success => _results.Add(success));
             _controller.ExplosionRequested.AddListener(() => _explosions++);
@@ -137,6 +139,24 @@ namespace Simulation.Tests
             Assert.That(_results, Is.Empty);
             _controller.CompleteSelfDestruction();
             Assert.That(_results, Is.EqualTo(new[] { false }));
+        }
+
+        [Test]
+        public void MaxTelemetry_KeepsPeakAfterDescending()
+        {
+            _rocket.Launch();
+            _body.linearVelocity = Vector3.up * 10f;
+            _object.transform.position = new Vector3(30f, 50f, 40f); // 고도 50, 수평 거리 50
+            Invoke(_controller, "FixedUpdate");
+            Assert.That(_controller.MaxAltitude, Is.EqualTo(50f).Within(0.01f));
+            Assert.That(_controller.MaxDistance, Is.EqualTo(50f).Within(0.01f));
+
+            _object.transform.position = new Vector3(3f, 10f, 4f); // 고도 10, 수평 거리 5
+            Invoke(_controller, "FixedUpdate");
+
+            Assert.That(_controller.MaxAltitude, Is.EqualTo(50f).Within(0.01f));
+            Assert.That(_controller.MaxDistance, Is.EqualTo(50f).Within(0.01f));
+            Assert.That(_results, Is.Empty);
         }
 
         [Test]

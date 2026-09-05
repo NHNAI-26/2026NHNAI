@@ -80,11 +80,11 @@ namespace Border.Research.Tests
             Assert.That(old.ConfiguredEngineNormalResearchCost, Is.EqualTo(123));
             FindButton(host, "StatButton_Cooling").onClick.Invoke();
             FindButton(host, "CreateEnginePresetButton").onClick.Invoke();
-            FindButton(host, "ResetButton").onClick.Invoke();
+            operation.ResetResearchForTests();
             Assert.That(operation.Model, Is.SameAs(session.Model).And.Not.SameAs(old));
             Assert.That(operation.Model.Funds, Is.EqualTo(5432));
             Assert.That(operation.SelectedEnginePreset, Is.EqualTo(EnginePresetId.Engine01));
-            Assert.That(FindText(host, "SelectedEngineText").text, Does.Contain("선택 스탯: " + ResearchPrototypeModel.GetStatDisplayName(EngineStatId.FuelCapacity)));
+            Assert.That(FindText(host, "SelectedStatText").text, Does.Contain("선택 스탯: " + ResearchPrototypeModel.GetStatDisplayName(EngineStatId.FuelCapacity)));
             Assert.That(FindButton(host, "NormalResearchButton").GetComponentInChildren<TMP_Text>().text, Does.Contain("234"));
         }
 

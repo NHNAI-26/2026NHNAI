@@ -244,7 +244,72 @@ bestGrade
 - 기본/집중 연구 버튼은 모드 선택이며 `개발 시작`만 미니게임을 엶
 - 자금이 집중 연구비 아래로 떨어지면 연구 모드가 기본으로 되돌아감
 
-## 8. 현재 구현 메모
+## 8. 운영 화면 배치
+
+운영 화면은 **칸마다 자기 패널을 갖는다**. 한 장 위에 다 얹힌 형태는 정보가 구분되지 않는다.
+
+```
+TopInfoBar (Image 없는 가로 줄)
+├─ ProjectTitleGroup   ARTEMIS : 2026 연구실
+├─ DateChip            날짜 / 2018 Q1 · 남은 36분기
+└─ FundsChip           보유 자금 / 2200 / 분기 예산 +600
+
+DetailColumn
+├─ EngineHeaderPanel   엔진 이름(좌) · 성능(우) / 설치 가격 / 완성도 텍스트 / 완성도 슬라이더
+├─ EngineStatsPanel    스탯 네 줄(라벨 + 슬라이더)
+├─ EngineResearchPanel 선택 스탯 텍스트 / 스탯 버튼 네 개 / 기본·집중 연구
+└─ StartDevelopmentRow 개발 시작
+```
+
+결정과 근거:
+
+- **`TopInfoBar` 에는 배경을 주지 않는다.** 주면 세 조각으로 나눈 것이 다시 한 판으로 보인다.
+  이름은 바꿀 수 없다 — `ResearchOperationTransitionAnimator` 가 `"TopInfoBar"` 로 찾아 슬라이드·페이드한다.
+- **분기 예산은 자기 칩을 잃고 보유 자금 칩의 셋째 줄이 됐다.** 텍스트 노드 이름 `QuarterlyFunding` 은
+  그대로 둔다 — 컨트롤러가 필수로 찾고, 없으면 화면 초기화 자체가 실패해 아무것도 뜨지 않는다.
+- **초기화 버튼은 사라졌다.** 리셋 동작 자체는 `ResetResearchState()` 에 남아 있고, 밖에서 부를 수 있는
+  지점은 `ResetResearchForTests()` 하나다.
+- **이름·성능·설치비·완성도는 네 개의 다른 노드다.** 예전에는 `SelectedEngineText` TMP 하나에 세 줄 문자열로
+  묶여 있었고, 그러면 이름을 좌측·성능을 우측으로 갈라 붙일 수 없다. `SelectedEngineText` 는 **완성도 한 줄**만
+  맡고 이름을 유지한다 — 테스트가 이 노드로 문구를 단언한다.
+- **기본·집중 연구 비용은 상세에서 뺀다.** 같은 숫자가 `기본 연구 350 / 완성도 +10` 버튼 라벨에 이미 있다.
+
+### 노드 이름이 곧 계약이고, 프리팹은 생성물이다
+
+`ResearchOperationUIController` 는 UI 를 직렬화된 참조로 들고 있지 않고 **이름으로만** 찾는다
+(`FindRequiredText` / `FindRequiredButton`). 하나라도 못 찾으면 인스턴스를 파기하고 초기화를 포기한다.
+따라서 노드 이름 변경은 계약 변경이다.
+
+`ResearchOperationScreen.prefab` 은 손으로 고치는 에셋이 아니다. `ResearchUiPrefabBuilder` 가
+`[InitializeOnLoadMethod]` 로 도메인 리로드마다 돌면서 `DefaultPrefabsAreCurrent()` 가 `false` 면 다시 굽는다 —
+손으로 바꾼 것은 조용히 사라진다. 구조를 바꾸면 **그 함수에 새 구조를 가리키는 조건을 같이 넣어야**
+한 번 재생성된다. 아트(9-슬라이스 스프라이트와 게이지)는 `ResearchUiArtApplicator` 가 빌드 끝에 입힌다:
+게이지(`SelectedEngineCompletion`, `StatGauge_*`)는 빌더가 아니라 **적용기가 만든다**.
+
+색은 이 문서의 관심사가 아니다. 패널의 보라색은 `engine_ui_01.psd` 의 `_0` 조각 픽셀에 그려진 그라데이션이고,
+`Skin()` 이 모든 Image 를 `Color.white` 로 고정하므로 아트가 그대로 나온다 — 코드에 그 색 리터럴은 없다.
+
+### 프리팹 스테이지 미리보기
+
+`ResearchOperationScreen.prefab` 을 프리팹 에디터에서 그대로 열면 실제 화면과 다르게 보인다. `HubActionBar`,
+`EnginePresetColumn`, `DetailColumn` 이 모두 활성이라 겹치고, 모든 텍스트가 빈 문자열이라 칩·카드 폭이 실물과
+다르다 — 값은 런타임 `Refresh()` 가 채우기 때문이다.
+
+`Border/UI/Debug/Preview Research Screen` (`UiPrefabStagePreview`) 은 편집 중인 루트를 **건드리지 않고** 그
+사본을 프리뷰 씬 안에 하나 더 세워 `ResearchOperationUIController.InitializeForTests()` 로 채운다. 프리팹
+스테이지는 `prefabContentsRoot` 하나만 저장하므로 이 사본은 프리팹에 들어가지 않는다. 사본은 월드 스페이스
+캔버스로 돌려 원본 오른쪽에 놓는다. `Toggle Part Development View` 로 허브 뷰 ↔ 부품개발 뷰를 바꾸고,
+`Clear Preview` 또는 스테이지를 닫으면 정리된다.
+
+`ResearchFlowSession.GetOrCreate()` 와 `EnsureEventSystem()` 은 `FindFirstObjectByType` 을 쓰는데 이 API 는
+프리뷰 씬을 보지 못한다. 그대로 두면 열려 있는 실제 씬에 오브젝트를 만들어 씬을 더럽히므로, 세션은 프리뷰 씬에
+미리 심고 새로 생긴 EventSystem 은 프리뷰 씬으로 회수한다.
+
+로켓 설계 UI 는 전부 코드 생성이라 손으로 편집할 프리팹이 없다. 미리보기는 베이크본을 다시 굽는 것이다 —
+`Border/UI/Debug/Rebake Design Stage Tester UI` 가 `DesignStageTesterUI.prefab` 을 코드 기준으로 다시 굽고
+프리팹 스테이지로 연다.
+
+## 9. 현재 구현 메모
 
 연구 컨트롤러 아래에는 `ResearchOperationCanvas` 인스턴스 하나만 둔다. `ResearchOperationScreen`은 원본 프리팹 이름이며 별도의 화면이 아니다. 원본 이름으로 배치된 인스턴스가 있으면 초기화와 씬 설치 코드가 이를 재사용한다.
 

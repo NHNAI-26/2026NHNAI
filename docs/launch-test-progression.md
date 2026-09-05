@@ -269,6 +269,11 @@
 
 복잡한 그래프는 필요 없다. 숫자 3개와 짧은 실패 원인 하나면 충분하다.
 
+구현 상태: 셋 다 관제 화면 좌측 발사 정보 패널에 있다(최대 거리·남은 연료·결과가 더 붙는다).
+최고 고도는 `LaunchMissionController.MaxAltitude` 로 실제 누적하며, 체류는 `HoldSeconds`,
+총 점화는 `Rocket.TotalBurnSeconds` 를 읽는다. 사용 전력은 아직 없다. 자세한 것은
+`docs/rocket-simulation.md` 의 "발사 정보 패널".
+
 ## 6. 요약
 
 이 미션 구조는 장애물 회피 게임이 아니다. 로켓 테스트처럼 요구 조건을 하나씩 검증하는 구조다.

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using Border.Research;
 using NUnit.Framework;
@@ -79,6 +79,8 @@ namespace Simulation.Tests
                 var body = go.AddComponent<Rigidbody>();
                 var rocket = go.AddComponent<Rocket>();
                 Invoke(rocket, "Awake");
+                // 클램프 홀드 구간은 RocketSimulationTests 가 덮는다. 여기서는 이륙 뒤 판정만 본다.
+                SetField(rocket, "holdSeconds", 0f);
                 var controller = go.AddComponent<LaunchMissionController>();
                 controller.Initialize(LaunchMissionId.LowAltitude, () => true, results.Add);
 
@@ -99,5 +101,8 @@ namespace Simulation.Tests
 
         private static void Invoke(object target, string name) =>
             target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, null);
+
+        private static void SetField(object target, string name, object value) =>
+            target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(target, value);
     }
 }

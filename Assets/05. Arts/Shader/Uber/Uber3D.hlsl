@@ -18,6 +18,7 @@ CBUFFER_START(UnityPerMaterial)
     float4 _DissolveNoiseAmountMovement;
     float4 _GlitchBandSizeRange;
     float4 _GlitchUpVector;
+    float4 _WobbleAxis;
     half4 _BaseColor;
     half4 _BlendColor;
     half4 _EmissionColor;
@@ -61,6 +62,11 @@ CBUFFER_START(UnityPerMaterial)
     half _GlitchRGBSplit;
     half _GlitchFrequency;
     half _GlitchSpeed;
+    half _WobbleAmplitude;
+    half _WobbleHeight;
+    half _WobbleFrequency;
+    half _WobbleWaves;
+    float _WobbleHalfHeight;
     half _DissolveAmount;
     float4 _DissolveObjectUpVector;
     float4 _DissolveObjectRange;
@@ -98,6 +104,7 @@ CBUFFER_START(UnityPerMaterial)
     half _DissolveEnabled;
     half _DissolveSpace;
     half _DitherFadeEnabled;
+    half _WobbleEnabled;
     half _SrcBlend;
     half _DstBlend;
     half _SrcBlendAlpha;
@@ -370,6 +377,33 @@ inline void UberApplyGlitchVertexPosition(float3 positionOS,
         float2(1.0, _ProjectionParams.x);
     positionCS.xy += clipPixelDirection * shiftPixels *
         (2.0 / max(_ScreenParams.xy, float2(1.0, 1.0))) * positionCS.w;
+#endif
+}
+
+// Radial wobble that only bites near the bottom of the mesh, so a rocket can churn
+// on its pad without its nose moving. The mesh keeps its length: only the radius
+// swells and shrinks, and the wave travels up the axis, which reads as something
+// surging inside a tube rather than the whole body being squashed.
+// _WobbleHalfHeight carries the mesh extent along the axis in object units, so
+// _WobbleHeight stays a normalised 0..1 fraction whatever the import scale is.
+// Meshes reach Unity at wildly different local sizes.
+// Normals are left untouched: at the amplitudes this ships with the lighting error
+// is invisible, and doing it properly means a jacobian in all five passes.
+inline void UberApplyWobble(inout float3 positionOS)
+{
+#if defined(_WOBBLE_ON)
+    float3 axis = UberSafeNormalizeFinite3(_WobbleAxis.xyz, float3(0.0, 1.0, 0.0));
+    float halfHeight = max(abs(_WobbleHalfHeight), 1e-6);
+    float height = saturate((dot(positionOS, axis) + halfHeight) / (2.0 * halfHeight));
+    float weight = saturate((_WobbleHeight - height) / max(_WobbleHeight, 1e-4));
+    weight *= weight;
+    float phase = (_Time.y * _WobbleFrequency - height * _WobbleWaves) * 6.2831853;
+    // 0..1, never negative: the body swells outward and settles back. A signed wave
+    // pinches the hull inward on the other half of the cycle, which reads as damage.
+    float swell = 0.5 - 0.5 * cos(phase);
+    // Amplitude is a fraction of the local radius, so it needs no unit conversion.
+    float3 lateral = positionOS - axis * dot(positionOS, axis);
+    positionOS += lateral * (weight * _WobbleAmplitude * swell);
 #endif
 }
 
@@ -691,7 +725,9 @@ UberForwardVaryings UberForwardVertex(UberForwardAttributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
-    VertexPositionInputs positionInputs = GetVertexPositionInputs(input.positionOS.xyz);
+    float3 wobbleedOS = input.positionOS.xyz;
+    UberApplyWobble(wobbleedOS);
+    VertexPositionInputs positionInputs = GetVertexPositionInputs(wobbleedOS);
     VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS, input.tangentOS);
     half3 viewDirectionWS = GetWorldSpaceNormalizeViewDir(positionInputs.positionWS);
     output.rawUV = input.uv;
@@ -854,7 +890,9 @@ UberSilhouetteVaryings UberShadowVertex(UberDepthAttributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-    float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+    float3 wobbleedOS = input.positionOS.xyz;
+    UberApplyWobble(wobbleedOS);
+    float3 positionWS = TransformObjectToWorld(wobbleedOS);
     float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
 #if defined(_CASTING_PUNCTUAL_LIGHT_SHADOW)
     float3 lightDirectionWS = normalize(_LightPosition - positionWS);
@@ -880,7 +918,9 @@ UberSilhouetteVaryings UberDepthVertex(UberDepthAttributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-    output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+    float3 wobbleedOS = input.positionOS.xyz;
+    UberApplyWobble(wobbleedOS);
+    output.positionCS = TransformObjectToHClip(wobbleedOS);
     UberApplyGlitchVertexPosition(input.positionOS.xyz, output.positionCS);
     output.rawUV = input.uv;
     output.positionOS = input.positionOS.xyz;
@@ -957,7 +997,9 @@ UberDepthNormalsVaryings UberDepthNormalsVertex(UberDepthNormalsAttributes input
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
     VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS,
         input.tangentOS);
-    output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+    float3 wobbleedOS = input.positionOS.xyz;
+    UberApplyWobble(wobbleedOS);
+    output.positionCS = TransformObjectToHClip(wobbleedOS);
     UberApplyGlitchVertexPosition(input.positionOS.xyz, output.positionCS);
     output.rawUV = input.uv;
     output.positionOS = input.positionOS.xyz;
@@ -1047,7 +1089,9 @@ UberOutlineVaryings UberOutlineVertex(UberOutlineAttributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-    float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+    float3 wobbleedOS = input.positionOS.xyz;
+    UberApplyWobble(wobbleedOS);
+    float3 positionWS = TransformObjectToWorld(wobbleedOS);
     float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
     float3 normalVS = TransformWorldToViewDir(normalWS, true);
     float2 direction = normalVS.xy / max(length(normalVS.xy), 0.0001);
