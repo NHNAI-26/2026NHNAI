@@ -19,6 +19,7 @@ namespace Border.Research.Tests
         public void Rename_OnlyChangesName_AndBlankPreservesIt()
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             int funds = model.Funds;
             int turns = model.RemainingTurns;
             Assert.IsTrue(model.RenameEnginePreset(EnginePresetId.Engine01, "내 엔진"));
@@ -35,6 +36,7 @@ namespace Border.Research.Tests
         public void Reset_RestoresDefaultName_AndCompletedEngineCanBeRenamed()
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             model.GetEnginePreset(EnginePresetId.Engine01).Completion = 100;
             Assert.IsTrue(model.RenameEnginePreset(EnginePresetId.Engine01, "Final"));
             model.Reset();

@@ -585,6 +585,7 @@ namespace Border.Research.Tests
             bool succeeded,
             LaunchTerminationReason reason)
         {
+            UnlockPreset(model, EnginePresetId.Engine01);
             PrepareFinalMission(model);
             ResearchDesignEntryData entry = model.CreateDesignEntry(missionId, EnginePresetId.Engine01, SingleEngine(), 50, visibility, true);
             Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.Success));
@@ -600,6 +601,7 @@ namespace Border.Research.Tests
             bool succeeded,
             LaunchTerminationReason reason)
         {
+            UnlockPreset(model, EnginePresetId.Engine01);
             ResearchDesignEntryData entry = model.CreateDesignEntry(missionId, EnginePresetId.Engine01, SingleEngine(), 50, visibility, true);
             Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(model.CompleteLaunch(succeeded, reason, out ResearchLaunchResultData result), Is.EqualTo(ResearchActionResult.Success));
@@ -618,6 +620,7 @@ namespace Border.Research.Tests
             TestVisibility visibility,
             int[] installedEngineCounts = null)
         {
+            UnlockPreset(model, EnginePresetId.Engine01);
             int[] counts = installedEngineCounts ?? SingleEngine();
             ResearchDesignEntryData entry = model.CreateDesignEntry(missionId, EnginePresetId.Engine01, counts, 50, visibility);
             Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.Success));

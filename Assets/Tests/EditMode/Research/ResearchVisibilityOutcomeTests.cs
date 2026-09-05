@@ -40,6 +40,7 @@ namespace Border.Research.Tests
         public void PhysicalResult_UsesEventSettlementOnlyForRegularVisibility(TestVisibility visibility, bool success)
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             Assert.That(model.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, visibility, out var entry), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(entry.Visibility, Is.EqualTo(visibility));
             var counts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
@@ -57,6 +58,7 @@ namespace Border.Research.Tests
         public void FinalMission_ForcesFinalVisibility()
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
             Assert.That(model.TryEnterDesign(LaunchMissionId.LowPowerZoneHold, EnginePresetId.Engine01, TestVisibility.Public, out var entry), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(entry.Visibility, Is.EqualTo(TestVisibility.FinalMission));
@@ -104,6 +106,7 @@ namespace Border.Research.Tests
         public void Operation_FinalMissionStartsWithoutChoiceDialog()
         {
             var session = ResearchFlowSession.GetOrCreate();
+            session.Model.CreateNewEnginePreset(out _);
             session.Model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
             operationObject = new GameObject("Final Mission Entry Test");
             var operation = operationObject.AddComponent<ResearchOperationUIController>();
@@ -138,6 +141,7 @@ namespace Border.Research.Tests
         public void Dialog_PublicConfirmChargesOnce()
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             var dialog = CreateDialog();
             int funds = model.Funds;
             int turns = model.RemainingTurns;
@@ -161,6 +165,7 @@ namespace Border.Research.Tests
         public void Dialog_FailedEntryStaysOpenAndDoesNotCharge()
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             var dialog = CreateDialog();
             while (!model.DeadlineReached) model.WaitQuarter();
             int funds = model.Funds;
@@ -181,6 +186,7 @@ namespace Border.Research.Tests
             int calls = 0;
             ResearchLaunchOutcomeData observed = default;
             channel.OnEventRaised += outcome => { calls++; observed = outcome; };
+            session.Model.CreateNewEnginePreset(out _);
             session.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, TestVisibility.Public, out _);
             session.TryBeginPendingDesignLaunch();
             session.CompleteActiveLaunch(false, "자폭", out _);
@@ -200,12 +206,14 @@ namespace Border.Research.Tests
         public void Outcome_ResetDropsOldNotificationAndMissingListenerIsAllowed()
         {
             var session = ResearchFlowSession.GetOrCreate();
+            session.Model.CreateNewEnginePreset(out _);
             session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
             session.TryBeginPendingDesignLaunch();
             session.CompleteActiveLaunch(true, out _);
             session.ResetResearch();
             Assert.That(session.HasPendingOutcomeNotification, Is.False);
             Assert.DoesNotThrow(session.PublishPendingLaunchOutcome);
+            session.Model.CreateNewEnginePreset(out _);
             session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
             session.TryBeginPendingDesignLaunch();
             session.CompleteActiveLaunch(true, out _);

@@ -413,8 +413,17 @@ namespace Border.Research
             IsPartDevelopmentOpen = open;
             if (hubActionBar != null) hubActionBar.SetActive(!open);
             if (enginePresetColumnRoot != null) enginePresetColumnRoot.SetActive(open);
-            if (detailColumnRoot != null) detailColumnRoot.SetActive(open);
+            ApplyDetailColumnState(open);
             RefreshPendingEffects();
+        }
+
+        // 프리셋이 하나도 없으면 우측 상세 컬럼은 존재하지 않는 엔진의 이름·완성도·스탯을 그린다.
+        // 두 호출자는 서로를 부르지 않는다 — ApplyPartDevelopmentState 는 Refresh 를 부르지 않고,
+        // 프리셋 생성 후의 Refresh 는 ApplyPartDevelopmentState 를 부르지 않는다. 그래서 양쪽에서 갱신한다.
+        private void ApplyDetailColumnState(bool open)
+        {
+            if (detailColumnRoot == null) return;
+            detailColumnRoot.SetActive(open && model != null && model.ActiveEnginePresetCount > 0);
         }
 
         private void SelectResearchMode(bool focused)
@@ -668,10 +677,13 @@ namespace Border.Research
                 return;
             }
             EnsureSelectedEnginePresetUnlocked();
+            ApplyDetailColumnState(partDevelopmentOpen);
             selectedMission = model.GetCurrentMission();
             ShowResearchLab();
             PlayResearchCameraDrift();
-            ShowEnginePreview();
+            // 프리셋 0개일 때 홀로그램을 띄우면 만들지도 않은 엔진 01 이 실험실에 떠 있게 된다.
+            if (model.ActiveEnginePresetCount > 0) ShowEnginePreview();
+            else HideEnginePreview();
             dateText.text = $"{model.Year}.Q{model.Quarter} / 남은 분기 : {model.RemainingTurns}";
             // 다음 분기 예산은 자기 노드를 잃고 보유 자금 텍스트의 둘째 줄이 됐다 — 프리팹에
             // "QuarterlyFunding" 노드가 더는 없으므로 여기서 찾으면 화면 초기화가 실패한다.
@@ -721,7 +733,9 @@ namespace Border.Research
             SetSelectedTint(focusedResearchButton, focusedResearchSelected);
             createEnginePresetButtonText.text = model.ActiveEnginePresetCount >= ResearchPrototypeModel.MaxEnginePresetCount
                 ? "새로운 엔진 개발 최대 10개"
-                : $"새로운 엔진 개발 -{model.ConfiguredNewEnginePresetCost}$";
+                : model.NextEnginePresetCost == 0
+                    ? "새로운 엔진 개발 무료"
+                    : $"새로운 엔진 개발 -{model.NextEnginePresetCost}$";
             partDevelopmentButtonText.text = $"부품 개발\n<size=15>-{model.ConfiguredEngineNormalResearchCost}$~</size>";
             enterDesignButtonText.text = $"로켓 설계\n<size=15>-{designEntryCost}$</size>";
             waitButtonText.text = $"건너뛰기\n<size=15>+{model.NextWaitFunding}$ / +1분기</size>";

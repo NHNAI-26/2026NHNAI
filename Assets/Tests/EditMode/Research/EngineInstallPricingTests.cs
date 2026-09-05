@@ -31,6 +31,7 @@ namespace Border.Research.Tests
         public void MixedInstallations_ChargeEachPresetsOwnPrice()
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             model.CreateNewEnginePreset(out var second);
             var state = model.GetEnginePreset(second);
             state.FuelCapacity = state.Cooling = state.MaxOutput = state.IgnitionReliability = 100;

@@ -815,6 +815,7 @@ namespace Simulation.Tests
             var library = Track(ScriptableObject.CreateInstance<EnginePresetLibrarySO>());
             SetField(library, "slots", new List<EngineStatsSO> { base0, base1 });
 
+            Assert.AreEqual(ResearchActionResult.Success, model.CreateNewEnginePreset(out _));
             Assert.AreEqual(ResearchActionResult.Success, model.CreateNewEnginePreset(out EnginePresetId created));
             Assert.AreEqual(EnginePresetId.Engine02, created);
             int outputBefore = model.GetEnginePreset(created).MaxOutput;
@@ -895,6 +896,7 @@ namespace Simulation.Tests
         public void RuntimeBridge_ResearchReachesPartAndPhysicalEffects(EngineStatId stat)
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             // Isolate fuel/heat behavior from random ignition; the ignition case starts at 40%.
             if (stat != EngineStatId.IgnitionReliability)
                 model.GetEnginePreset(EnginePresetId.Engine01).IgnitionReliability = 100;
@@ -1019,12 +1021,20 @@ namespace Simulation.Tests
             EngineStatsSO slot1 = Stats(100f, 60f, BaselineOutput, 100f, presetIndex: 1);
             EngineStatsSO authored = Stats(100f, 60f, BaselineOutput, 100f); // PresetIndex -1
 
-            Assert.IsTrue((bool)isDeveloped.Invoke(null, new object[] { slot0, model }),
-                "새 게임은 엔진 01 이 열려 있다.");
+            Assert.IsFalse((bool)isDeveloped.Invoke(null, new object[] { slot0, model }),
+                "새 게임은 프리셋 0개로 시작한다.");
             Assert.IsFalse((bool)isDeveloped.Invoke(null, new object[] { slot1, model }),
                 "아직 개발하지 않은 슬롯은 목록에 뜨면 안 된다.");
             Assert.IsTrue((bool)isDeveloped.Invoke(null, new object[] { authored, model }),
                 "PresetIndex -1 은 저작 에셋이다 — SimulationTest 단독 재생이 간다.");
+
+            Assert.AreEqual(ResearchActionResult.Success, model.CreateNewEnginePreset(out _),
+                "첫 프리셋은 무료다.");
+
+            Assert.IsTrue((bool)isDeveloped.Invoke(null, new object[] { slot0, model }),
+                "첫 엔진을 개발하면 그 슬롯이 설계 목록에 나타난다.");
+            Assert.IsFalse((bool)isDeveloped.Invoke(null, new object[] { slot1, model }),
+                "둘째 슬롯은 아직 열리지 않았다.");
 
             Assert.AreEqual(ResearchActionResult.Success, model.CreateNewEnginePreset(out _),
                 "시작 예산 2200 은 새 프리셋 비용 150 을 감당한다.");
@@ -1066,7 +1076,7 @@ namespace Simulation.Tests
             int before = (int)checksum.Invoke(null, new object[] { model });
 
             Assert.AreEqual(ResearchActionResult.Success, model.CreateNewEnginePreset(out _),
-                "시작 예산 2200 은 새 프리셋 비용 150 을 감당한다.");
+                "첫 프리셋은 무료다.");
 
             Assert.AreNotEqual(before, (int)checksum.Invoke(null, new object[] { model }),
                 "프리셋 해금은 체크섬을 바꿔야 한다.");

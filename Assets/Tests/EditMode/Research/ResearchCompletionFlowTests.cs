@@ -57,7 +57,7 @@ namespace Border.Research.Tests
             Assert.That(session.Model.Quarter, Is.EqualTo(ResearchPrototypeModel.StartQuarter));
             Assert.That(session.Model.Funds, Is.EqualTo(ResearchPrototypeModel.InitialFunds));
             Assert.That(session.Model.TotalLaunches, Is.Zero);
-            Assert.That(session.Model.ActiveEnginePresetCount, Is.EqualTo(1));
+            Assert.That(session.Model.ActiveEnginePresetCount, Is.Zero);
             Assert.That(session.Model.GetEnginePreset(EnginePresetId.Engine01).Completion, Is.Zero);
             Assert.That(session.Model.Missions.Count(mission => mission.Unlocked), Is.EqualTo(1));
         }
@@ -94,6 +94,7 @@ namespace Border.Research.Tests
         public void LastQuarter_AllActionsEndOnConsumedDate(string action)
         {
             var model = new ResearchPrototypeModel();
+            model.CreateNewEnginePreset(out _);
             WaitUntilLastQuarter(model);
             if (action == "wait") model.WaitQuarter();
             else if (action == "research") model.ExecuteEngineResearch(EnginePresetId.Engine01, EngineStatId.Cooling, false, 100);
@@ -128,6 +129,7 @@ namespace Border.Research.Tests
             SetReference(session, "balanceConfig", testBalance);
             session.ResetResearch();
             var model = session.Model;
+            model.CreateNewEnginePreset(out _);
             int oldStat = model.GetEnginePreset(EnginePresetId.Engine01).Cooling;
             model.ExecuteEngineResearch(EnginePresetId.Engine01, EngineStatId.Cooling, false, 100);
             Assert.That(model.GetEnginePreset(EnginePresetId.Engine01).Cooling, Is.EqualTo(oldStat + 7));
@@ -186,6 +188,7 @@ namespace Border.Research.Tests
         public void Operation_LastResearchShowsMiniGameResultBeforeEnding()
         {
             CreateOperation();
+            operation.Model.CreateNewEnginePreset(out _);
             WaitUntilLastQuarter(operation.Model);
             operation.RefreshForTests();
             FindButton(host, "StartDevelopmentButton").onClick.Invoke();
@@ -202,6 +205,8 @@ namespace Border.Research.Tests
         public void Operation_FocusedModeButtonRoutesStartToFocusedResearch()
         {
             CreateOperation();
+            operation.Model.CreateNewEnginePreset(out _);
+            operation.RefreshForTests();
             FindButton(host, "FocusedResearchButton").onClick.Invoke();
             FindButton(host, "StartDevelopmentButton").onClick.Invoke();
             ResearchMiniGameController game = operation.GetActiveMiniGameControllerForTests();
@@ -232,6 +237,7 @@ namespace Border.Research.Tests
         public void Operation_FinalLaunchShowsReportBeforeEndingWithoutDuplicateRewards()
         {
             CreateOperation();
+            operation.Model.CreateNewEnginePreset(out _);
             WaitUntilLastQuarter(operation.Model);
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
             session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
@@ -301,6 +307,8 @@ namespace Border.Research.Tests
 
         private static void PrepareFinalEngine(ResearchPrototypeModel model)
         {
+            // 새 게임은 프리셋 0개로 시작한다.
+            if (!model.IsEnginePresetUnlocked(EnginePresetId.Engine01)) model.CreateNewEnginePreset(out _);
             var engine = model.GetEnginePreset(EnginePresetId.Engine01);
             engine.FuelCapacity = engine.Cooling = engine.MaxOutput = engine.IgnitionReliability = 100;
             engine.Completion = 100;

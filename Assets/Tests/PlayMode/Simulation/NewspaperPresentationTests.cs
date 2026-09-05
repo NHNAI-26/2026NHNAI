@@ -24,6 +24,8 @@ namespace Simulation.Tests
             try
             {
                 var session = ResearchFlowSession.GetOrCreate();
+                // 새 게임은 프리셋 0개로 시작한다.
+                session.Model.CreateNewEnginePreset(out _);
                 session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
                 session.TryBeginPendingDesignLaunch();
                 session.SetLaunchPhoto(new Texture2D(4, 3), session.LaunchPhotoGeneration);
@@ -111,6 +113,8 @@ namespace Simulation.Tests
             try
             {
                 var session = ResearchFlowSession.GetOrCreate();
+                // 새 게임은 프리셋 0개로 시작한다.
+                session.Model.CreateNewEnginePreset(out _);
                 session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
                 session.TryBeginPendingDesignLaunch();
                 var photo = new Texture2D(4, 3);
@@ -159,6 +163,8 @@ namespace Simulation.Tests
             try
             {
                 var session = ResearchFlowSession.GetOrCreate();
+                // 새 게임은 프리셋 0개로 시작한다.
+                session.Model.CreateNewEnginePreset(out _);
                 session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
                 session.TryBeginPendingDesignLaunch();
                 var photo = new Texture2D(4, 3);
