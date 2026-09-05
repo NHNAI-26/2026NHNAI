@@ -18,6 +18,10 @@ namespace Simulation
         [SerializeField] private ParticleSystem flame;
         [Tooltip("배기 연기. 불꽃과 같은 규칙으로 켜지고 꺼진다. 비우면 불꽃만 나온다.")]
         [SerializeField] private ParticleSystem smoke;
+        [Tooltip("엔진 가동 중 재생하는 Smoke_Single.")]
+        [SerializeField] private ParticleSystem smokeSingle;
+        [Tooltip("최초 점화 판정에 실패했을 때 한 번 재생하는 Smoke_Fail.")]
+        [SerializeField] private ParticleSystem smokeFail;
 
         // 프리셋 외형. 연구가 만든 프리셋은 스탯 구성에서 아키타입이 정해지고(EngineVisualClassifier),
         // 그 아키타입의 메시가 기본 메시(meshRoot)를 대체한다. 라이브러리가 비어 있으면 교체 자체가
@@ -127,6 +131,14 @@ namespace Simulation
             if (!TryGetComponent(out BoxCollider box) || !TryLocalBounds(meshRoot, out Bounds bounds)) return;
 
             meshRoot.localPosition -= bounds.center;
+            float previousWidth = Mathf.Min(box.size.x, box.size.z);
+            float nozzleWidth = Mathf.Min(bounds.size.x, bounds.size.z);
+            if (previousWidth > 0.0001f && nozzleWidth > 0.0001f)
+            {
+                float ratio = nozzleWidth / previousWidth;
+                ScaleSmoke(smokeSingle, ratio);
+                ScaleSmoke(smokeFail, ratio);
+            }
             box.center = Vector3.zero;
             box.size = bounds.size;
 
@@ -134,6 +146,24 @@ namespace Simulation
             var nozzle = new Vector3(0f, -bounds.extents.y, 0f);
             if (flame != null) flame.transform.localPosition = nozzle;
             if (smoke != null) smoke.transform.localPosition = nozzle;
+            if (smokeSingle != null) smokeSingle.transform.localPosition = nozzle;
+            if (smokeFail != null) smokeFail.transform.localPosition = nozzle;
+        }
+
+        private static void ScaleSmoke(ParticleSystem system, float ratio)
+        {
+            if (system == null) return;
+
+            var main = system.main;
+            main.startSizeMultiplier *= ratio;
+            main.startSpeedMultiplier *= ratio;
+            var shape = system.shape;
+            shape.radius *= ratio;
+            var noise = system.noise;
+            noise.strengthMultiplier *= ratio;
+            noise.frequency /= ratio;
+            var limit = system.limitVelocityOverLifetime;
+            limit.limitMultiplier *= ratio;
         }
 
         /// <summary>
@@ -186,6 +216,7 @@ namespace Simulation
         {
             _ignited = false;
             SetFlame(false, 0f);
+            SetEmission(smokeFail, false);
         }
 
         /// <summary>
@@ -195,6 +226,11 @@ namespace Simulation
         public void Prepare(DeterministicRng rng)
         {
             _temperature = 0f;
+            SetFlame(false, 0f);
+            if (smokeSingle != null)
+                smokeSingle.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (smokeFail != null)
+                smokeFail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
             if (stats == null)
             {
@@ -210,6 +246,7 @@ namespace Simulation
             if (!_ignited)
             {
                 SetFlame(false, 0f);
+                if (smokeFail != null) smokeFail.Play(true);
                 Log.D($"Ignition failed: {name} ({stats.IgnitionReliability}%)", this);
             }
         }
@@ -232,7 +269,7 @@ namespace Simulation
             float heat = burning ? stats.HeatRateAt(output) : 0f;
             _temperature = Mathf.Max(0f, _temperature + (heat - stats.Cooling) * deltaTime);
 
-            SetFlame(burning, thrustScale);
+            SetFlame(burning && HasFuel, thrustScale);
             return burning;
         }
 
@@ -288,6 +325,8 @@ namespace Simulation
 
         private void OnDestroy() => ReleaseMaterials();
 
+        private void OnDisable() => Shutdown();
+
         /// <summary>
         /// 인스턴스는 우리가 만들었으니 우리가 지운다. 부품 파괴와 메시 교체가 둘 다 여기를 지난다 —
         /// 교체 때 반납하지 않으면 갈아끼울 때마다 머티리얼이 샌다.
@@ -308,7 +347,7 @@ namespace Simulation
         /// 클램프 홀드 동안의 배기. 힘도 연료도 발열도 이륙부터라 여기서는 파티클만 켠다 —
         /// 홀드는 연출 구간이고, 시뮬레이션은 <see cref="Tick"/> 이 도는 순간부터다.
         /// </summary>
-        public void HoldExhaust(float scale) => SetFlame(_ignited, scale);
+        public void HoldExhaust(float scale) => SetFlame(_ignited && HasFuel, scale);
 
         /// <summary>
         /// 배기는 추력이 실제로 나오는 동안에만 켜진다. 발사 전에는 <c>Tick</c> 이 호출되지 않고
@@ -322,6 +361,7 @@ namespace Simulation
             // 연기는 세기를 덜 타게 둔다 — 홀드는 진행도 0 에서 시작하므로 불꽃과 같은 곡선을 쓰면
             // 준비 구간의 앞부분이 통째로 비어 보인다.
             SetExhaust(smoke, on, _smokeSpeed * scale, _smokeRate * Mathf.Sqrt(scale));
+            SetEmission(smokeSingle, on && scale > 0f);
         }
 
         /// <summary>
@@ -340,7 +380,12 @@ namespace Simulation
                 emission.rateOverTimeMultiplier = rate;
             }
 
-            if (system.isEmitting == on) return;
+            SetEmission(system, on);
+        }
+
+        private static void SetEmission(ParticleSystem system, bool on)
+        {
+            if (system == null || system.isEmitting == on) return;
 
             if (on) system.Play();
             else system.Stop(true, ParticleSystemStopBehavior.StopEmitting); // 남은 입자는 수명대로 사라진다
