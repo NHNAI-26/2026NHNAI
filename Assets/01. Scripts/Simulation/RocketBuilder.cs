@@ -86,8 +86,12 @@ namespace Simulation
 
         [Header("Alignment guides")]
         [Tooltip("부품을 표면에 얹을 때 안으로 파묻을 비율. 0 이면 콜라이더 상자가 표면에 정확히 닿고, "
-               + "1(기본) 이면 피봇이 표면에 놓인다 — 상자 bounds 가 노즐 벨 최대폭이라 그보다 낮추면 뜬다.")]
-        [SerializeField, Range(0f, 1f)] private float partSeatSink = 1f;
+               + "1 이면 피봇이 표면에 놓인다. 상자 bounds 가 노즐 벨 최대폭이라 0 은 부품을 띄운다 — "
+               + "0.4 가 벨 폭만큼 파묻어 옆면·마개 모두 얹힌 것처럼 보이는 값이다.")]
+        [SerializeField, Range(0f, 1f)] private float partSeatSink = 0.4f;
+        [Tooltip("본체 실루엣 밖에서도 부착으로 칠 여유. 본체 반지름의 배수다 — 이 값이 로켓 위·아래 "
+               + "빈 곳을 부착 범위로 넣어, 콜라이더에 맞아야만 붙던 시절 못 잡던 꼭대기·바닥 마개를 잡게 한다.")]
+        [SerializeField] private float attachReachRadii = 1.5f;
         [SerializeField] private float heightTolerance = 0.25f; // m
         [SerializeField] private float azimuthTolerance = 20f;  // 도
         [SerializeField] private float rotationSnapStep = 45f;      // 도
@@ -645,32 +649,32 @@ namespace Simulation
         private void Drag(Vector2 screenPosition)
         {
             Ray ray = cam.ScreenPointToRay(screenPosition);
-            _overRocket = false;
+            bool hitAny = Physics.Raycast(ray, out RaycastHit hit);
+            bool onSilhouette = hitAny && hit.collider.GetComponentInParent<Rocket>() == rocket;
 
             // 커서가 가리키는 표면이 깊이를 결정하므로 카메라를 어느 각도로 돌려도 보이는 자리에 놓인다.
+            // 실루엣을 벗어나면 광선이 본체 축에 가장 가까워지는 점을 대신 쓴다 — 콜라이더에 맞아야만
+            // 붙던 규칙은 캡슐 마개, 곧 로켓의 꼭대기와 바닥을 화면에서 몇 픽셀짜리 표적으로 만들었고
+            // 아래쪽은 카메라 피치가 -20° 에 묶여 아예 볼 수도 없었다. 로켓 위나 아래 빈 곳으로 끌면
+            // 여기서 마개 위 점이 나오고, 그 뒤 투영·스냅·부착은 옆면과 완전히 같은 경로다.
             // 자세는 건드리지 않는다 — 회전시킨 자세가 곧 추력 방향이라 임의로 세우면 힘이 바뀐다.
-            if (Physics.Raycast(ray, out RaycastHit hit))
+            Vector3 target = onSilhouette ? hit.point : Vector3.zero;
+            _overRocket = onSilhouette || TryReachBody(ray, out target);
+
+            if (_overRocket)
             {
-                if (hit.collider.GetComponentInParent<Rocket>() == rocket)
-                {
-                    _overRocket = true;
-                    // 기즈모 이동과 같은 함수를 태운다 — 여기서만 hit.point 를 그대로 쓰면 드래그로
-                    // 놓은 자리와 화살표로 옮긴 자리가 서로 다른 규칙을 따른다.
-                    _attachPoint = ProjectOntoBody(SnapToGuides(hit.point, _dragged), _dragged,
-                        _dragged.transform.position);
-                    _dragged.transform.position = _attachPoint;
-                }
-                else
-                {
-                    // 지면이든 다른 물체든 붙을 곳은 아니다 — 커서만 따라가다 놓으면 사라진다.
-                    _dragged.transform.position = hit.point;
-                    HideGuides();
-                }
+                // 기즈모 이동과 같은 함수를 태운다 — 여기서만 hit.point 를 그대로 쓰면 드래그로
+                // 놓은 자리와 화살표로 옮긴 자리가 서로 다른 규칙을 따른다.
+                _attachPoint = ProjectOntoBody(SnapToGuides(target, _dragged), _dragged,
+                    _dragged.transform.position);
+                _dragged.transform.position = _attachPoint;
             }
             else
             {
+                // 지면이든 다른 물체든 붙을 곳은 아니다 — 커서만 따라가다 놓으면 사라진다.
                 HideGuides();
-                if (_dragPlane.Raycast(ray, out float distance))
+                if (hitAny) _dragged.transform.position = hit.point;
+                else if (_dragPlane.Raycast(ray, out float distance))
                     _dragged.transform.position = ray.GetPoint(distance);
             }
 
@@ -882,6 +886,23 @@ namespace Simulation
                              * (1f - partSeatSink));
         }
 
+        /// <summary>
+        /// 실루엣을 벗어난 커서를 본체 표면으로 데려온다. 광선이 본체 캡슐 가까이 지나가면 축에 가장
+        /// 가까워지는 <b>광선 위</b>의 점을 <paramref name="worldPoint"/> 로 준다. 로켓 스케일이 균일해야
+        /// 로컬 광선이 월드 광선과 같은 직선이다(씬은 1.5 균일).
+        /// </summary>
+        private bool TryReachBody(Ray ray, out Vector3 worldPoint)
+        {
+            var local = new Ray(rocket.transform.InverseTransformPoint(ray.origin),
+                rocket.transform.InverseTransformDirection(ray.direction));
+
+            bool reached = TryReachCapsule(local, _bodyHalfSegment, _bodyRadius,
+                _bodyRadius * attachReachRadii, out Vector3 point);
+
+            worldPoint = rocket.transform.TransformPoint(point);
+            return reached;
+        }
+
         // ponytail: BoxCollider.center 0 가정 — 프리팹이 (0,0,0)이다. 오프셋 콜라이더 쓸 일 생기면 더해라.
         private static Vector3 HalfExtents(RocketPart part) =>
             part.TryGetComponent(out BoxCollider box)
@@ -902,7 +923,14 @@ namespace Simulation
                 return;
             }
 
+            // 치수는 로켓 로컬 단위여야 한다 — ProjectOntoBody 가 로켓 로컬 좌표로 투영하고 결과를
+            // TransformPoint 로 되돌리므로, 월드 치수를 그대로 넣으면 로켓 스케일(1.5)이 한 번 더 곱해져
+            // 표면이 그만큼 부풀었다. 옆면에서는 partSeatSink 로 가려졌지만 마개에서는 로켓이 끝난 자리
+            // 위로 부품이 떠 버린다.
+            Vector3 root = rocket.transform.lossyScale;
             Vector3 scale = body.transform.lossyScale;
+            scale = new Vector3(scale.x / root.x, scale.y / root.y, scale.z / root.z);
+
             _bodyRadius = body.radius * Mathf.Max(scale.x, scale.z); // 유니티의 캡슐 스케일 규칙
             _bodyHalfSegment = Mathf.Max(0f, body.height * 0.5f * scale.y - _bodyRadius);
         }
@@ -1053,6 +1081,28 @@ namespace Simulation
             }
 
             return onAxis + outward.normalized * radius;
+        }
+
+        /// <summary>
+        /// 캡슐 로컬 좌표의 광선이 표면에서 <paramref name="reach"/> 안쪽을 지나가는지. 지나가면 축에
+        /// 가장 가까워지는 <b>광선 위</b>의 점을 준다 — 캡슐과 교차할 필요가 없으므로 실루엣 바깥,
+        /// 곧 로켓 위·아래 빈 곳에서도 점이 나오고 <see cref="ProjectOntoCapsule"/> 이 그것을 마개로
+        /// 끌어온다. 광선이 축과 평행하면(정확히 위에서 내려다보기) 최근접점이 발산해 false 다.
+        /// </summary>
+        public static bool TryReachCapsule(Ray ray, float halfSegment, float radius, float reach,
+            out Vector3 point)
+        {
+            point = default;
+            if (!ClosestPointOnAxis(Vector3.zero, Vector3.up, ray, out float t)) return false;
+
+            // 축 위 최근접점을 광선에 되투영하면 두 직선의 공통 수선 발이 나온다.
+            Vector3 direction = ray.direction.normalized;
+            var onAxis = new Vector3(0f, t, 0f);
+            point = ray.origin + direction * Vector3.Dot(onAxis - ray.origin, direction);
+
+            var onSegment = new Vector3(0f, Mathf.Clamp(point.y, -halfSegment, halfSegment), 0f);
+            float limit = radius + reach;
+            return (point - onSegment).sqrMagnitude <= limit * limit;
         }
 
         // ---- 정렬 가이드 ---------------------------------------------------------------------

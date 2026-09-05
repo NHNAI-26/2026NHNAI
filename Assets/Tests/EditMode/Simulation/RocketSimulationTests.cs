@@ -336,6 +336,39 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void TryReachCapsule_ReachesPastTheSilhouette_SoTheCapsAreAttachable()
+        {
+            const float HalfSegment = 1.5f;
+            const float Radius = 0.5f;
+            const float Reach = 0.75f; // 반지름의 1.5 배 — 프리팹 기본값
+
+            // 로켓 꼭대기 위 빈 곳을 가리킨 커서. 콜라이더에는 안 맞지만 부착으로 쳐야 하고,
+            // 투영은 그 점을 위쪽 캡으로 끌어온다 — 이 경로가 없으면 마개가 몇 픽셀짜리 표적이었다.
+            var above = new Ray(new Vector3(-10f, 2.4f, 0f), Vector3.right);
+            Assert.IsTrue(RocketBuilder.TryReachCapsule(above, HalfSegment, Radius, Reach, out Vector3 top),
+                "표면에서 reach 안쪽을 지나는 광선은 실루엣 밖이어도 부착이다.");
+            Assert.AreEqual(2.4f, top.y, 1e-4f, "최근접점은 광선 위에 있다.");
+            Vector3 seated = RocketBuilder.ProjectOntoCapsule(top, HalfSegment, Radius, Vector3.right);
+            Assert.Greater(seated.y, HalfSegment, "캡 위에 얹힌다.");
+            Assert.AreEqual(Radius, AxisGap(seated, HalfSegment), 1e-4f, "결과는 정확히 표면 위다.");
+
+            // 바닥 아래도 같은 규칙이다. 카메라 피치가 -20° 에 묶여 있어 이쪽은 볼 수조차 없었다.
+            var below = new Ray(new Vector3(-10f, -2.4f, 0f), Vector3.right);
+            Assert.IsTrue(RocketBuilder.TryReachCapsule(below, HalfSegment, Radius, Reach, out Vector3 bottom));
+            Assert.Less(RocketBuilder.ProjectOntoCapsule(bottom, HalfSegment, Radius, Vector3.right).y,
+                -HalfSegment, "아래쪽 캡도 잡힌다.");
+
+            // 여유 밖은 여전히 "놓으면 사라지는" 자리다 — 손을 뻗는 것이지 아무 데나 붙는 게 아니다.
+            var far = new Ray(new Vector3(-10f, 0f, 3f), Vector3.right);
+            Assert.IsFalse(RocketBuilder.TryReachCapsule(far, HalfSegment, Radius, Reach, out _),
+                "reach 밖 광선은 부착이 아니다.");
+
+            // 축과 평행한 광선은 최근접점이 발산한다. 그 각도에서는 콜라이더 레이캐스트가 캡에 맞는다.
+            Assert.IsFalse(RocketBuilder.TryReachCapsule(
+                new Ray(new Vector3(0f, 10f, 0f), Vector3.down), HalfSegment, Radius, Reach, out _));
+        }
+
+        [Test]
         public void MovedPart_SnapsThenProjects_SoItNeverLeavesTheBodySurface()
         {
             const float HalfSegment = 1.5f;

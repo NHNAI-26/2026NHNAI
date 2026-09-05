@@ -222,7 +222,8 @@ MonoBehaviour:
   gizmoScreenSize: 0.2
   handleGrabPixels: 22
   handleHoverWidth: 2.5
-  partSeatSink: 1
+  partSeatSink: 0.4
+  attachReachRadii: 1.5
   heightTolerance: 0.25
   azimuthTolerance: 20
   rotationSnapStep: 45
