@@ -9,6 +9,7 @@ namespace Simulation
     [RequireComponent(typeof(Rocket))]
     public sealed class LaunchMissionController : MonoBehaviour
     {
+        [SerializeField] private bool enableAutomaticFailure = false;
         [SerializeField, Min(0f)] private float failureSpeed = 1f;
         [SerializeField, Min(0.1f)] private float noLiftoffTimeout = 3f;
         [SerializeField] private UnityEvent explosionRequested = new();
@@ -47,7 +48,7 @@ namespace Simulation
             Vector3 offset = transform.position - origin;
             float distance = new Vector2(offset.x, offset.z).magnitude;
             var outcome = evaluator.Step(Time.fixedDeltaTime, Altitude, distance, Speed,
-                Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds);
+                Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds, enableAutomaticFailure);
             Status = $"고도 {Altitude:0.0}m / 속력 {Speed:0.0}m/s\n거리 {distance:0.0}m / 체류 {evaluator.HoldSeconds:0.0}s / 총 연소 {rocket.TotalBurnSeconds:0.0}s";
             if (outcome != LaunchMissionOutcome.Running) Finish(outcome == LaunchMissionOutcome.Succeeded);
         }

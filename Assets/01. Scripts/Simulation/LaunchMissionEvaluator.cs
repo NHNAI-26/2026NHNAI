@@ -74,7 +74,7 @@ namespace Simulation
         }
 
         public LaunchMissionOutcome Step(float deltaTime, float altitude, float horizontalDistance,
-            float speed, float attitudeError, float totalBurnSeconds)
+            float speed, float attitudeError, float totalBurnSeconds, bool evaluateFailure = true)
         {
             if (Outcome != LaunchMissionOutcome.Running)
                 return Outcome;
@@ -118,9 +118,9 @@ namespace Simulation
 
             if (succeeded)
                 Outcome = LaunchMissionOutcome.Succeeded;
-            else if (!holding && _hasExceededFailureSpeed && speed <= _rules.FailureSpeed)
+            else if (evaluateFailure && !holding && _hasExceededFailureSpeed && speed <= _rules.FailureSpeed)
                 Fail("로켓 속력이 실패 기준 이하로 떨어졌습니다.");
-            else if (!holding && !_hasExceededFailureSpeed && _elapsedSeconds >= _rules.NoLiftoffTimeout)
+            else if (evaluateFailure && !holding && !_hasExceededFailureSpeed && _elapsedSeconds >= _rules.NoLiftoffTimeout)
                 Fail("제한 시간 안에 이륙하지 못했습니다.");
             return Outcome;
         }

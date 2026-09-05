@@ -156,7 +156,7 @@ namespace Simulation.Tests
         }
 
         [Test]
-        public void LowSpeedAfterMovement_CompletesWithFailureOnce()
+        public void LowSpeedAfterMovement_KeepsFlyingAndCanStillSucceed()
         {
             _rocket.Launch();
             _body.linearVelocity = Vector3.up * 2f;
@@ -167,9 +167,24 @@ namespace Simulation.Tests
             Invoke(_controller, "FixedUpdate");
             Invoke(_controller, "FixedUpdate");
 
-            Assert.That(_results, Is.EqualTo(new[] { false }));
-            Assert.That(_rocket.FlightStopped, Is.True);
+            Assert.That(_results, Is.Empty);
+            Assert.That(_rocket.FlightStopped, Is.False);
             Assert.That(_explosions, Is.Zero);
+
+            _object.transform.position = Vector3.up * 100f;
+            Invoke(_controller, "FixedUpdate");
+            Assert.That(_results, Is.EqualTo(new[] { true }));
+        }
+
+        [Test]
+        public void NoLiftoff_KeepsFlightActiveAfterTimeout()
+        {
+            _rocket.Launch();
+            for (int i = 0; i < 1000; i++) Invoke(_controller, "FixedUpdate");
+
+            Assert.That(_results, Is.Empty);
+            Assert.That(_rocket.FlightStopped, Is.False);
+            Assert.That(_controller.CanSelfDestruct, Is.True);
         }
 
         [Test]
