@@ -88,6 +88,7 @@ namespace Border.Research
     public sealed class EnginePresetState
     {
         public EnginePresetId PresetId;
+        public string CustomName;
         public int Completion;
         public int FuelCapacity;
         public int Cooling;
@@ -616,7 +617,9 @@ namespace Border.Research
             int immediateFunding,
             int quarterlyFundingDelta,
             bool finalMissionWon,
-            bool deadlineMissed)
+            bool deadlineMissed,
+            LaunchOutcomeEventResult outcomeEvent = null,
+            LaunchTerminationReason terminationReason = LaunchTerminationReason.Unknown)
         {
             MissionId = missionId;
             SelectedEnginePresetId = selectedEnginePresetId;
@@ -637,6 +640,8 @@ namespace Border.Research
             QuarterlyFundingDelta = quarterlyFundingDelta;
             FinalMissionWon = finalMissionWon;
             DeadlineMissed = deadlineMissed;
+            OutcomeEvent = outcomeEvent;
+            TerminationReason = terminationReason;
         }
 
         public LaunchMissionId MissionId { get; }
@@ -659,9 +664,11 @@ namespace Border.Research
         public int QuarterlyFundingDelta { get; }
         public bool FinalMissionWon { get; }
         public bool DeadlineMissed { get; }
+        public LaunchOutcomeEventResult OutcomeEvent { get; }
+        public LaunchTerminationReason TerminationReason { get; }
     }
 
-    public sealed class ResearchPrototypeModel
+    public sealed partial class ResearchPrototypeModel
     {
         public const int StartYear = 2018;
         public const int StartQuarter = 1;
@@ -704,9 +711,10 @@ namespace Border.Research
         private ResearchDesignEntryData activeLaunch;
         public bool HasActiveLaunch { get; private set; }
 
-        public ResearchPrototypeModel(int seed = 20260904, ResearchBalanceConfig balanceConfig = null)
+        public ResearchPrototypeModel(int seed = 20260904, ResearchBalanceConfig balanceConfig = null, Func<int, int> eventRandom = null)
         {
             Seed = seed;
+            eventRandomOverride = eventRandom;
             this.balanceConfig = balanceConfig ?? ResearchBalanceConfig.CreateDefault();
             missionConfigs = this.balanceConfig.MissionConfigs;
             Missions = new LaunchMissionState[missionConfigs.Length];
@@ -742,6 +750,7 @@ namespace Border.Research
 
         public void Reset()
         {
+            ResetLaunchEvents();
             Year = StartYear;
             Quarter = StartQuarter;
             RemainingTurns = MaxTurns;
@@ -897,6 +906,7 @@ namespace Border.Research
             int index = ActiveEnginePresetCount;
             EnginePresets[index].Unlocked = true;
             ActiveEnginePresetCount++;
+            pendingPublicPressure = false;
             presetId = EnginePresets[index].PresetId;
             LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName} 개발 슬롯이 열렸습니다. 비용 {balanceConfig.NewEnginePresetCost}, 시간 소모 없음.";
             return ResearchActionResult.Success;
@@ -967,7 +977,11 @@ namespace Border.Research
             TotalSpentFunds += cost;
             preset.SetStat(statId, oldStat + statGain);
             preset.Completion = Math.Min(MaxEngineCompletion, preset.Completion + balanceConfig.ResearchCompletionGain);
-            AdvanceQuarter();
+            pendingPublicPressure = false;
+            if (!focused && pendingFreeResearchEngine == presetId)
+                pendingFreeResearchEngine = null;
+            else
+                AdvanceQuarter();
 
             LastMessage = $"{config.DisplayName} {GetStatDisplayName(statId)} {(focused ? "집중" : "일반")} 연구 완료. "
                 + $"점수 {ClampInt(score, 0, 100)}, 스탯 {oldStat}->{preset.GetStat(statId)}, 완성도 {oldCompletion}->{preset.Completion}.";
@@ -978,6 +992,9 @@ namespace Border.Research
         {
             if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
             if (HasGameEnded || DeadlineReached) return EndedActionResult;
+            if (pendingPublicPressure)
+                QuarterlyFunding = ClampInt(QuarterlyFunding - 50, balanceConfig.MinQuarterlyFunding, balanceConfig.MaxQuarterlyFunding);
+            pendingPublicPressure = false;
             AdvanceQuarter();
             LastMessage = "한 분기 대기. 정기 예산을 받았습니다.";
             return DeadlineReached ? ResearchActionResult.DeadlineReached : ResearchActionResult.Success;
@@ -1023,16 +1040,18 @@ namespace Border.Research
                 return ResearchActionResult.MissionLocked;
             }
 
-            if (Funds < config.LaunchCost)
+            int entryCost = GetDesignEntryCost(missionId);
+            if (Funds < entryCost)
             {
-                LastMessage = $"예산 부족. 필요 {config.LaunchCost}, 보유 {Funds}.";
+                LastMessage = $"예산 부족. 필요 {entryCost}, 보유 {Funds}.";
                 return ResearchActionResult.NotEnoughFunds;
             }
 
-            Funds -= config.LaunchCost;
-            TotalSpentFunds += config.LaunchCost;
-            data = CreateDesignEntry(missionId, presetId, CreateDefaultInstalledEngineCounts(missionId, presetId), 50, visibility, true);
-            LastMessage = $"{config.DisplayName} 설계 진입. 예산 {config.LaunchCost} 지불.";
+            Funds -= entryCost;
+            TotalSpentFunds += entryCost;
+            ConsumeEntryEffects();
+            data = CreateDesignEntry(missionId, presetId, CreateDefaultInstalledEngineCounts(missionId, presetId), 50, visibility, true, entryCost);
+            LastMessage = $"{config.DisplayName} 설계 진입. 예산 {entryCost} 지불.";
             return ResearchActionResult.Success;
         }
 
@@ -1042,7 +1061,8 @@ namespace Border.Research
             int[] installedEngineCounts,
             int designFit,
             TestVisibility visibility,
-            bool launchCostPaid = false)
+            bool launchCostPaid = false,
+            int? paidEntryCost = null)
         {
             LaunchMissionConfig missionConfig = GetConfiguredMissionConfig(missionId);
             EnginePresetState selectedEngine = GetEnginePreset(presetId);
@@ -1052,7 +1072,7 @@ namespace Border.Research
             int[] counts = CopyAndNormalizeEngineCounts(installedEngineCounts);
             ClearLockedEngineCounts(counts);
 
-            int reservedInstallCost = CalculateReservedInstallCost(counts);
+            int reservedInstallCost = GetDiscountedInstallCost(missionId, counts);
             int installedScore = CalculateInstalledEngineScore(counts);
 
             return new ResearchDesignEntryData(
@@ -1067,7 +1087,7 @@ namespace Border.Research
                 installedScore,
                 counts,
                 reservedInstallCost,
-                missionConfig.LaunchCost,
+                launchCostPaid ? paidEntryCost ?? missionConfig.LaunchCost : GetDesignEntryCost(missionId),
                 clampedFit,
                 normalizedVisibility,
                 GetPreviousCertificationBonus(missionId, presetId),
@@ -1100,8 +1120,8 @@ namespace Border.Research
                 return ResearchActionResult.MissionLocked;
             }
 
-            int entryCost = designEntry.LaunchCostPaid ? 0 : designEntry.LaunchCost;
-            int remainingCost = entryCost + designEntry.ReservedInstallCost;
+            int entryCost = designEntry.LaunchCostPaid ? designEntry.LaunchCost : GetDesignEntryCost(designEntry.MissionId);
+            int remainingCost = GetLaunchPaymentCost(designEntry);
             if (Funds < remainingCost)
             {
                 LastMessage = $"예산 부족. 필요 {remainingCost}, 보유 {Funds}.";
@@ -1112,7 +1132,12 @@ namespace Border.Research
             TotalSpentFunds += remainingCost;
             TotalLaunches++;
             mission.AttemptCount++;
-            activeLaunch = designEntry;
+            activeLaunch = CreateDesignEntry(designEntry.MissionId, designEntry.SelectedEnginePresetId,
+                designEntry.InstalledEngineCounts, designEntry.DesignFit, designEntry.Visibility, true, entryCost);
+            if (!designEntry.LaunchCostPaid) ConsumeEntryEffects();
+            if (pendingDiscountMission == designEntry.MissionId) pendingDiscountMission = null;
+            activePublicRewardPenalty = pendingPublicRewardPenalty && designEntry.Visibility == TestVisibility.Public;
+            pendingPublicRewardPenalty = false;
             HasActiveLaunch = true;
             return ResearchActionResult.Success;
         }
@@ -1129,11 +1154,17 @@ namespace Border.Research
 
         public ResearchActionResult CompleteLaunch(bool succeeded, out ResearchLaunchResultData result)
         {
-            return FinishLaunch(succeeded ? ResearchGrade.B : ResearchGrade.F,
-                succeeded ? 100 : 0, 0, 0, out result);
+            return CompleteLaunch(succeeded, succeeded ? LaunchTerminationReason.Succeeded : LaunchTerminationReason.Unknown, out result);
         }
 
-        private ResearchActionResult FinishLaunch(ResearchGrade grade, int successChance, int partialChance, int roll, out ResearchLaunchResultData result)
+        public ResearchActionResult CompleteLaunch(bool succeeded, LaunchTerminationReason terminationReason, out ResearchLaunchResultData result)
+        {
+            return FinishLaunch(succeeded ? ResearchGrade.B : ResearchGrade.F,
+                succeeded ? 100 : 0, 0, 0, out result, terminationReason);
+        }
+
+        private ResearchActionResult FinishLaunch(ResearchGrade grade, int successChance, int partialChance, int roll, out ResearchLaunchResultData result,
+            LaunchTerminationReason terminationReason = LaunchTerminationReason.Unknown)
         {
             result = default;
             if (!HasActiveLaunch) return ResearchActionResult.NoPendingDesignEntry;
@@ -1148,7 +1179,11 @@ namespace Border.Research
             ApplyBestGrade(mission, grade);
 
             Funds += immediateFunding;
+            int previousQuarterlyFunding = QuarterlyFunding;
             QuarterlyFunding = ClampInt(QuarterlyFunding + quarterlyFundingDelta, balanceConfig.MinQuarterlyFunding, balanceConfig.MaxQuarterlyFunding);
+            quarterlyFundingDelta = QuarterlyFunding - previousQuarterlyFunding;
+            LaunchOutcomeEventResult outcomeEvent = ApplyLaunchEvent(designEntry, grade <= ResearchGrade.B, terminationReason);
+            activePublicRewardPenalty = false;
             HighestQuarterlyFunding = Math.Max(HighestQuarterlyFunding, QuarterlyFunding);
             AdvanceQuarter();
             CheckUnlocks();
@@ -1175,7 +1210,9 @@ namespace Border.Research
                 immediateFunding,
                 quarterlyFundingDelta,
                 finalMissionWon,
-                deadlineMissed);
+                deadlineMissed,
+                outcomeEvent,
+                terminationReason);
 
             LastMessage = $"{config.DisplayName} 결과 {grade}. 총 비용 {designEntry.LaunchCost + designEntry.ReservedInstallCost}, 지원금 +{immediateFunding}, 분기 예산 {quarterlyFundingDelta:+#;-#;0}.";
             if (finalMissionWon)
@@ -1510,13 +1547,13 @@ namespace Border.Research
         {
             int[] counts = CopyAndNormalizeEngineCounts(installedEngineCounts);
             ClearLockedEngineCounts(counts);
-            int totalCount = 0;
+            int totalCost = 0;
             for (int i = 0; i < counts.Length; i++)
             {
-                totalCount += counts[i];
+                totalCost += counts[i] * GetEngineInstallCost((EnginePresetId)i);
             }
 
-            return totalCount * balanceConfig.EngineInstallCost;
+            return totalCost;
         }
 
         private int[] CreateDefaultInstalledEngineCounts(LaunchMissionId missionId, EnginePresetId presetId)
@@ -1584,7 +1621,8 @@ namespace Border.Research
                 return;
             }
 
-            double multiplier = balanceConfig.GetRewardMultiplier(visibility);
+            double multiplier = Math.Max(0, balanceConfig.GetRewardMultiplier(visibility)
+                - (activePublicRewardPenalty && visibility == TestVisibility.Public ? 0.25 : 0));
             immediateFunding = (int)Math.Round(reward.ImmediateFunding * multiplier, MidpointRounding.AwayFromZero);
             quarterlyFundingDelta = (int)Math.Round(reward.QuarterlyFundingDelta * multiplier, MidpointRounding.AwayFromZero);
         }

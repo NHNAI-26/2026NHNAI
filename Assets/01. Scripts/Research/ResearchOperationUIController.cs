@@ -63,6 +63,7 @@ namespace Border.Research
         private TMP_Text fundsText;
         private TMP_Text quarterlyFundingText;
         private TMP_Text selectedEngineText;
+        private TMP_Text statusText;
         private Slider selectedEngineCompletion;
         private Button partDevelopmentButton;
         private TMP_Text partDevelopmentButtonText;
@@ -312,6 +313,16 @@ namespace Border.Research
             createEnginePresetButtonText = createEnginePresetButton.GetComponentInChildren<TMP_Text>(true);
             enterDesignButtonText = enterDesignButton.GetComponentInChildren<TMP_Text>(true);
             waitButtonText = waitButton.GetComponentInChildren<TMP_Text>(true);
+            ConfigureDynamicMultilineText(selectedEngineText);
+            var effectsObject = new GameObject("StatusText", typeof(RectTransform), typeof(TextMeshProUGUI));
+            effectsObject.transform.SetParent(canvasTransform, false);
+            statusText = effectsObject.GetComponent<TMP_Text>();
+            statusText.font = selectedEngineText.font;
+            statusText.fontSize = 14f;
+            statusText.color = selectedEngineText.color;
+            statusText.raycastTarget = false;
+            statusText.alignment = TextAlignmentOptions.BottomLeft;
+            ConfigureDynamicMultilineText(statusText);
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
                 engineCards[(int)config.Id] = CreateEngineCard(engineColumn, config);
@@ -347,6 +358,7 @@ namespace Border.Research
             if (hubActionBar != null) hubActionBar.SetActive(!open);
             if (enginePresetColumnRoot != null) enginePresetColumnRoot.SetActive(open);
             if (detailColumnRoot != null) detailColumnRoot.SetActive(open);
+            RefreshPendingEffects();
             if (open) PlayResearchEntryAnimation();
         }
 
@@ -404,6 +416,7 @@ namespace Border.Research
 
         private EngineCardView BindEngineCardButton(Button button, TMP_Text title, TMP_Text detail, EnginePresetId presetId)
         {
+            button.GetComponent<EnginePresetNameEditor>()?.Bind(model, presetId, Refresh, () => !isTransitioningToDesign);
             button.onClick.AddListener(() =>
             {
                 if (isTransitioningToDesign)
@@ -580,10 +593,11 @@ namespace Border.Research
             if (selectedEngineCompletion != null) selectedEngineCompletion.SetValueWithoutNotify(selectedEngine.Completion);
             LaunchMissionConfig selectedMissionConfig = model.GetConfiguredMissionConfig(selectedMission);
             LaunchMissionState selectedMissionState = model.GetMission(selectedMission);
+            int designEntryCost = model.GetDesignEntryCost(selectedMission);
 
-            selectedEngineText.text = $"{selectedEngineConfig.DisplayName}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
+            selectedEngineText.text = $"{model.GetEnginePresetName(selectedEnginePreset)}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
                 + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}\n"
-                + $"기본 {model.ConfiguredEngineNormalResearchCost} / 집중 {model.ConfiguredEngineFocusedResearchCost}  설치 {model.ConfiguredEngineInstallCost}\n"
+                + $"기본 {model.ConfiguredEngineNormalResearchCost} / 집중 {model.ConfiguredEngineFocusedResearchCost}  설치 {model.GetEngineInstallCost(selectedEnginePreset)}\n"
                 + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
 
             for (int index = 0; index < StatCount; index++)
@@ -601,7 +615,7 @@ namespace Border.Research
                 focusedResearchSelected = false;
             }
 
-            normalResearchButtonText.text = $"기본 연구\n{model.ConfiguredEngineNormalResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
+            normalResearchButtonText.text = $"기본 연구\n{model.ConfiguredEngineNormalResearchCost} / 시간 {(model.HasFreeNormalResearch(selectedEnginePreset) ? 0 : 1)}분기 / 완성도 +{model.ConfiguredResearchCompletionGain}";
             focusedResearchButtonText.text = $"집중 연구\n{model.ConfiguredEngineFocusedResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
             SetSelectedTint(normalResearchButton, !focusedResearchSelected);
             SetSelectedTint(focusedResearchButton, focusedResearchSelected);
@@ -609,8 +623,10 @@ namespace Border.Research
                 ? "새로운 엔진 개발\n최대 10개"
                 : $"새로운 엔진 개발\n{model.ConfiguredNewEnginePresetCost} / 시간 0분기";
             partDevelopmentButtonText.text = $"부품 개발\n{model.ConfiguredEngineNormalResearchCost}~";
-            enterDesignButtonText.text = $"로켓 설계\n{selectedMissionConfig.LaunchCost}";
-            waitButtonText.text = $"건너뛰기\n+{model.QuarterlyFunding}";
+            enterDesignButtonText.text = $"로켓 설계\n{designEntryCost}";
+            waitButtonText.text = $"건너뛰기\n+{model.NextWaitFunding}";
+
+            RefreshPendingEffects();
 
             partDevelopmentButton.interactable = !model.DeadlineReached && model.Funds >= model.ConfiguredEngineNormalResearchCost;
             startDevelopmentButton.interactable = CanResearch(selectedEngine, focusedResearchSelected
@@ -633,6 +649,24 @@ namespace Border.Research
             if (image != null) image.color = selected ? Color.white : new Color(0.6f, 0.66f, 0.72f, 1f);
         }
 
+        private string FormatResearchStatusText(ResearchPrototypeModel source)
+        {
+            return string.IsNullOrEmpty(source.PendingLaunchEffectsText)
+                ? string.Empty : $"남은 이벤트 효과:\n{source.PendingLaunchEffectsText}";
+        }
+
+        private void RefreshPendingEffects()
+        {
+            if (statusText == null || model == null) return;
+            statusText.text = FormatResearchStatusText(model);
+            statusText.gameObject.SetActive(!string.IsNullOrEmpty(statusText.text));
+            RectTransform effectsRect = statusText.rectTransform;
+            effectsRect.anchorMin = effectsRect.anchorMax = new Vector2(0.5f, 0f);
+            effectsRect.pivot = new Vector2(0.5f, 0f);
+            effectsRect.anchoredPosition = partDevelopmentOpen ? new Vector2(-50f, 20f) : new Vector2(0f, 136f);
+            effectsRect.sizeDelta = new Vector2(partDevelopmentOpen ? 480f : 720f, 100f);
+        }
+
         private void RefreshEngineCard(EnginePresetConfig config)
         {
             EnginePresetState engine = model.GetEnginePreset(config.Id);
@@ -643,7 +677,7 @@ namespace Border.Research
             background.color = background.sprite != null
                 ? selected ? Color.white : new Color(0.65f, 0.75f, 0.8f, 1f)
                 : selected ? new Color(0.28f, 0.35f, 0.42f, 1f) : new Color(0.19f, 0.23f, 0.28f, 1f);
-            card.Title.text = config.DisplayName;
+            card.Title.text = model.GetEnginePresetName(config.Id);
             card.Detail.text = $"완성도 {engine.Completion} 성능 {model.CalculateEnginePerformanceScore(config.Id)}";
         }
 
@@ -660,7 +694,7 @@ namespace Border.Research
             return !model.DeadlineReached
                 && engine.Unlocked
                 && mission.Unlocked
-                && model.Funds >= config.LaunchCost;
+                && model.Funds >= model.GetDesignEntryCost(config.Id);
         }
 
         private void EnsureSelectedEnginePresetUnlocked()
@@ -1339,6 +1373,20 @@ namespace Border.Research
 
             title = FindChildText(button.transform, "Title");
             detail = FindChildText(button.transform, "Detail");
+        }
+
+        private static void ConfigureDynamicMultilineText(TMP_Text text)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.textWrappingMode = TextWrappingModes.Normal;
+            text.overflowMode = TextOverflowModes.Truncate;
+            text.enableAutoSizing = true;
+            text.fontSizeMin = text.fontSizeMin > 0f ? Math.Min(text.fontSizeMin, 12f) : 12f;
+            text.fontSizeMax = text.fontSize;
         }
 
         private static TMP_Text FindChildText(Transform root, string name)

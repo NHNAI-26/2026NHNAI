@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace Border.UI
 {
     /// <summary>
-    /// ARTEMIS: 2026 공용 마우스 커서. 런타임에 작은 RGBA 텍스처를 그려 프로젝트 전역에 적용한다.
+    /// ARTEMIS: 2026 공용 PNG 마우스 커서와 런타임 툴바 아이콘.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class ArtemisCursor : MonoBehaviour
@@ -34,10 +36,7 @@ namespace Border.UI
         private static readonly Color32 Ink = new(2, 7, 11, 255);
         private static readonly Color32 Metal = new(238, 243, 243, 255);
         private static readonly Color32 MetalLight = new(255, 255, 255, 255);
-        private static readonly Color32 MetalDark = new(70, 83, 88, 255);
         private static readonly Color32 Cyan = new(27, 232, 238, 255);
-        private static readonly Color32 Orange = new(255, 138, 22, 255);
-        private static readonly Color32 Red = new(255, 39, 62, 255);
 
         private static ArtemisCursor instance;
         private static int requestFrame = -1;
@@ -47,6 +46,9 @@ namespace Border.UI
         private static readonly Dictionary<Icon, Sprite> icons = new();
 
         private readonly Dictionary<Visual, CursorSprite> sprites = new();
+        private readonly List<RaycastResult> pointerHits = new();
+        private PointerEventData pointerData;
+        private EventSystem pointerEventSystem;
         private Visual currentVisual = (Visual)(-1);
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -87,7 +89,7 @@ namespace Border.UI
         }
 
         /// <summary>
-        /// 버튼에 붙일 수 있는 아이콘 스프라이트. 커서와 같은 방식으로 런타임에 그리므로 에셋도
+        /// 버튼에 붙일 수 있는 아이콘 스프라이트. 아이콘만 런타임에 그리므로 별도 에셋도
         /// 인스펙터 참조도 필요 없다 — 코드로 스폰되는 UI(<c>RocketDesignUI</c>)가 이 경로를 쓴다.
         /// </summary>
         public static Sprite IconSprite(Icon icon)
@@ -124,7 +126,7 @@ namespace Border.UI
         {
             Visual visual = requestFrame == Time.frameCount
                 ? requestedVisual
-                : IsPointerOverUi()
+                : Mouse.current != null && IsPointerOverInteractiveTarget(Mouse.current.position.ReadValue())
                     ? Visual.Hover
                     : Visual.Default;
 
@@ -142,82 +144,81 @@ namespace Border.UI
 
         private void BuildSprites()
         {
-            sprites[Visual.Default] = new CursorSprite(DrawArrow(), new Vector2(8f, 5f));
-            sprites[Visual.Hover] = new CursorSprite(DrawHover(), new Vector2(8f, 5f));
-            sprites[Visual.Drag] = new CursorSprite(DrawGrabber(), new Vector2(31f, 38f));
-            sprites[Visual.AttachValid] = new CursorSprite(DrawAttach(false), new Vector2(18f, 18f));
-            sprites[Visual.AttachInvalid] = new CursorSprite(DrawAttach(true), new Vector2(18f, 18f));
-            sprites[Visual.Rotate] = new CursorSprite(DrawRotate(), new Vector2(32f, 32f));
+            LoadCursor(Visual.Default, "artemis_cursor_default", new Vector2(8f, 5f));
+            LoadCursor(Visual.Hover, "artemis_cursor_hover", new Vector2(8f, 5f));
+            LoadCursor(Visual.Drag, "artemis_cursor_drag", new Vector2(31f, 38f));
+            LoadCursor(Visual.AttachValid, "artemis_cursor_attach_valid", new Vector2(18f, 18f));
+            LoadCursor(Visual.AttachInvalid, "artemis_cursor_attach_invalid", new Vector2(18f, 18f));
+            LoadCursor(Visual.Rotate, "artemis_cursor_rotate", new Vector2(32f, 32f));
+        }
+
+        private void LoadCursor(Visual visual, string resourceName, Vector2 hotspot)
+        {
+            Texture2D texture = Resources.Load<Texture2D>($"Cursors/{resourceName}");
+            if (texture != null)
+                sprites[visual] = new CursorSprite(texture, hotspot);
+            else
+                Debug.LogWarning($"Missing cursor PNG: Resources/Cursors/{resourceName}", this);
         }
 
         private void Apply(Visual visual)
         {
             if (currentVisual == visual) return;
-            if (!sprites.TryGetValue(visual, out CursorSprite sprite)) return;
+            if (!sprites.TryGetValue(visual, out CursorSprite sprite))
+                sprites.TryGetValue(Visual.Default, out sprite);
 
             Cursor.SetCursor(sprite.Texture, sprite.Hotspot, CursorMode.Auto);
             currentVisual = visual;
         }
 
-        private static bool IsPointerOverUi() =>
-            EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
-
-        private static Texture2D DrawArrow()
+        private bool IsPointerOverInteractiveTarget(Vector2 position)
         {
-            Texture2D texture = CreateTexture();
-            DrawArrow(texture, 0f, 0f, 1f);
-            return Finalize(texture);
-        }
+            EventSystem eventSystem = EventSystem.current;
+            if (eventSystem == null) return false;
 
-        private static Texture2D DrawHover()
-        {
-            Texture2D texture = CreateTexture();
-            DrawBracket(texture, 5, 5, 54, 54, Cyan);
-            DrawArrow(texture, 4f, 3f, 0.88f);
-            return Finalize(texture);
-        }
-
-        private static Texture2D DrawGrabber()
-        {
-            Texture2D texture = CreateTexture();
-            DrawLine(texture, 31, 9, 31, 22, Ink, 10);
-            DrawLine(texture, 31, 9, 31, 22, MetalDark, 6);
-            FillCircle(texture, 31, 27, 12, Ink);
-            FillCircle(texture, 31, 27, 7, MetalDark);
-            FillCircle(texture, 31, 27, 3, Cyan);
-            DrawLine(texture, 21, 35, 10, 52, Ink, 10);
-            DrawLine(texture, 41, 35, 52, 52, Ink, 10);
-            DrawLine(texture, 21, 35, 10, 52, Metal, 6);
-            DrawLine(texture, 41, 35, 52, 52, Metal, 6);
-            DrawLine(texture, 13, 49, 22, 57, Orange, 4);
-            DrawLine(texture, 49, 49, 40, 57, Orange, 4);
-            return Finalize(texture);
-        }
-
-        private static Texture2D DrawAttach(bool invalid)
-        {
-            Texture2D texture = CreateTexture();
-            DrawSnapRing(texture, 18, 18, invalid ? Red : Cyan);
-            DrawArrow(texture, 13f, 16f, 0.73f);
-            if (invalid)
+            if (pointerEventSystem != eventSystem)
             {
-                DrawLine(texture, 3, 4, 35, 36, Ink, 8);
-                DrawLine(texture, 3, 4, 35, 36, Red, 5);
+                pointerEventSystem = eventSystem;
+                pointerData = new PointerEventData(eventSystem);
             }
 
-            return Finalize(texture);
+            pointerData.Reset();
+            pointerData.position = position;
+            pointerHits.Clear();
+            eventSystem.RaycastAll(pointerData, pointerHits);
+
+            // Only the first hit receives input; a decorative overlay can block a button below it.
+            if (pointerHits.Count == 0) return false;
+            GameObject target = pointerHits[0].gameObject;
+            Selectable selectable = target.GetComponentInParent<Selectable>();
+            if (selectable != null && (!selectable.IsActive() || !selectable.IsInteractable())) return false;
+            GameObject press = ExecuteEvents.GetEventHandler<IPointerDownHandler>(target);
+            if (press == null) press = ExecuteEvents.GetEventHandler<IPointerClickHandler>(target);
+            if (press != null) return IsInteractiveHandler(press);
+
+            GameObject drag = ExecuteEvents.GetEventHandler<IDragHandler>(target);
+            return drag != null && drag.GetComponent<ScrollRect>() == null && IsInteractiveHandler(drag);
         }
 
-        private static Texture2D DrawRotate()
+        private static bool IsInteractiveHandler(GameObject target)
         {
-            Texture2D texture = CreateTexture();
-            DrawCircle(texture, 32, 32, 24, Ink, 7);
-            DrawArc(texture, 32, 32, 24, 205f, 335f, Orange, 5);
-            DrawArc(texture, 32, 32, 24, 30f, 175f, Cyan, 5);
-            FillPolygon(texture, new[] { new Vector2(53, 18), new Vector2(62, 31), new Vector2(47, 30) }, Ink);
-            FillPolygon(texture, new[] { new Vector2(53, 18), new Vector2(60, 29), new Vector2(48, 28) }, Cyan);
-            DrawArrow(texture, 17f, 20f, 0.58f);
-            return Finalize(texture);
+            Selectable selectable = target.GetComponent<Selectable>();
+            if (selectable != null) return selectable.IsActive() && selectable.IsInteractable();
+
+            // EventTrigger implements every pointer interface, even when it has no click action.
+            EventTrigger trigger = target.GetComponent<EventTrigger>();
+            if (trigger != null)
+            {
+                foreach (EventTrigger.Entry entry in trigger.triggers)
+                    if (entry.eventID == EventTriggerType.PointerClick ||
+                        entry.eventID == EventTriggerType.PointerDown ||
+                        entry.eventID == EventTriggerType.BeginDrag ||
+                        entry.eventID == EventTriggerType.Drag)
+                        return true;
+                return false;
+            }
+
+            return true;
         }
 
         // 아이콘은 커서와 달리 안에 마우스 화살표를 넣지 않는다 — 34px 버튼에서는 잡음이 된다.
@@ -260,70 +261,6 @@ namespace Border.UI
             FillPolygon(texture, new[] { new Vector2(52, 10), new Vector2(64, 27), new Vector2(42, 29) }, Ink);
             FillPolygon(texture, new[] { new Vector2(52, 15), new Vector2(60, 26), new Vector2(45, 27) }, Cyan);
             return Finalize(texture);
-        }
-
-        private static void DrawArrow(Texture2D texture, float offsetX, float offsetY, float scale)
-        {
-            Vector2[] outer =
-            {
-                Point(8, 5), Point(55, 50), Point(34, 53), Point(25, 63), Point(16, 59), Point(23, 46), Point(5, 59),
-            };
-            Vector2[] inner =
-            {
-                Point(8, 5), Point(55, 50), Point(34, 53), Point(25, 63), Point(16, 59), Point(23, 46), Point(5, 59),
-            };
-            Vector2[] shine =
-            {
-                Point(15, 14), Point(44, 45), Point(31, 46), Point(20, 55), Point(24, 42), Point(12, 51),
-            };
-            Vector2[] accent = { Point(35, 44), Point(49, 47), Point(43, 38) };
-
-            FillPolygon(texture, outer, Ink);
-            FillPolygon(texture, inner, Metal);
-            FillPolygon(texture, shine, MetalLight);
-            DrawLine(texture, Point(18, 17), Point(29, 47), Cyan, Mathf.Max(2, Mathf.RoundToInt(4 * scale)));
-            FillPolygon(texture, accent, Orange);
-            DrawLine(texture, Point(17, 15), Point(50, 48), MetalLight, 1);
-
-            Vector2 Point(float x, float y) => new(offsetX + x * scale, offsetY + y * scale);
-        }
-
-        private static void DrawBracket(Texture2D texture, int left, int top, int right, int bottom, Color32 color)
-        {
-            const int length = 15;
-            const int width = 4;
-            DrawLine(texture, left, top, left + length, top, Ink, width + 4);
-            DrawLine(texture, left, top, left, top + length, Ink, width + 4);
-            DrawLine(texture, right, top, right - length, top, Ink, width + 4);
-            DrawLine(texture, right, top, right, top + length, Ink, width + 4);
-            DrawLine(texture, left, bottom, left + length, bottom, Ink, width + 4);
-            DrawLine(texture, left, bottom, left, bottom - length, Ink, width + 4);
-            DrawLine(texture, right, bottom, right - length, bottom, Ink, width + 4);
-            DrawLine(texture, right, bottom, right, bottom - length, Ink, width + 4);
-
-            DrawLine(texture, left, top, left + length, top, color, width);
-            DrawLine(texture, left, top, left, top + length, color, width);
-            DrawLine(texture, right, top, right - length, top, color, width);
-            DrawLine(texture, right, top, right, top + length, color, width);
-            DrawLine(texture, left, bottom, left + length, bottom, color, width);
-            DrawLine(texture, left, bottom, left, bottom - length, color, width);
-            DrawLine(texture, right, bottom, right - length, bottom, color, width);
-            DrawLine(texture, right, bottom, right, bottom - length, color, width);
-        }
-
-        private static void DrawSnapRing(Texture2D texture, int x, int y, Color32 color)
-        {
-            DrawCircle(texture, x, y, 15, Ink, 7);
-            DrawCircle(texture, x, y, 15, color, 4);
-            DrawCircle(texture, x, y, 5, color, 3);
-            DrawLine(texture, x, y - 26, x, y - 13, Ink, 7);
-            DrawLine(texture, x, y + 13, x, y + 26, Ink, 7);
-            DrawLine(texture, x - 26, y, x - 13, y, Ink, 7);
-            DrawLine(texture, x + 13, y, x + 26, y, Ink, 7);
-            DrawLine(texture, x, y - 26, x, y - 13, color, 4);
-            DrawLine(texture, x, y + 13, x, y + 26, color, 4);
-            DrawLine(texture, x - 26, y, x - 13, y, color, 4);
-            DrawLine(texture, x + 13, y, x + 26, y, color, 4);
         }
 
         private static Texture2D CreateTexture()
@@ -413,10 +350,6 @@ namespace Border.UI
                     Mathf.RoundToInt(cy + Mathf.Sin(rad) * radius), width, color);
             }
         }
-
-        private static void DrawLine(Texture2D texture, Vector2 a, Vector2 b, Color32 color, int width) =>
-            DrawLine(texture, Mathf.RoundToInt(a.x), Mathf.RoundToInt(a.y), Mathf.RoundToInt(b.x),
-                Mathf.RoundToInt(b.y), color, width);
 
         private static void DrawLine(Texture2D texture, int x0, int y0, int x1, int y1, Color32 color, int width)
         {

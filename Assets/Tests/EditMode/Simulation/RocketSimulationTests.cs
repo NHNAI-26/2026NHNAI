@@ -610,7 +610,8 @@ namespace Simulation.Tests
             EnginePresetState researched = model.GetEnginePreset(EnginePresetId.Engine02);
             float expectedOutput = base1.MaxOutput * researched.MaxOutput / ResearchPrototypeModel.InitialEngineStat;
             Assert.AreEqual(expectedOutput, runtimeLibrary.Slots[1].MaxOutput, 0.001f);
-            Assert.AreEqual(ResearchPrototypeModel.EngineInstallCost, runtimeLibrary.Slots[1].Price);
+            Assert.AreEqual(model.GetEngineInstallCost(EnginePresetId.Engine02), runtimeLibrary.Slots[1].Price);
+            Assert.Greater(runtimeLibrary.Slots[1].Price, ResearchPrototypeModel.EngineInstallCost);
             Assert.AreEqual(1400f, base1.MaxOutput, 0.001f, "원본 SO 값은 연구 반영으로 바뀌면 안 된다.");
         }
 
