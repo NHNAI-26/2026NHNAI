@@ -61,5 +61,31 @@ namespace Border.Research.Tests
                 ResearchFlowSession.ResetForTests();
             }
         }
+
+        [Test]
+        public void TransitionAnimator_DisableDuringExit_CompletesPendingCallback()
+        {
+            var prefab = Resources.Load<GameObject>("ResearchUI/ResearchOperationScreen");
+            var instance = Object.Instantiate(prefab);
+            try
+            {
+                var animator = instance.GetComponent<ResearchOperationTransitionAnimator>();
+                bool completed = false;
+
+                animator.Bind((RectTransform)instance.transform);
+                animator.GetType().GetMethod("PlayExit")?.Invoke(animator, new object[]
+                {
+                    ResearchOperationTransitionAnimator.PanelGroup.Columns,
+                    (System.Action)(() => completed = true)
+                });
+                instance.SetActive(false);
+
+                Assert.That(completed, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(instance);
+            }
+        }
     }
 }

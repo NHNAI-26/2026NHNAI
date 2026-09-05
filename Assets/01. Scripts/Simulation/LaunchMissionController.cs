@@ -23,8 +23,7 @@ namespace Simulation
         private Vector3 origin;
         private LaunchMissionEvaluator evaluator;
         private LaunchTargetZoneGuide targetGuide;
-        private Vector3 targetZoneCenter;
-        private float targetZoneRadius;
+        private Bounds targetZoneBounds;
         private Action<bool> completed;
         private bool returning;
         private float explosionTime;
@@ -60,9 +59,8 @@ namespace Simulation
         public UnityEvent ExplosionRequested => explosionRequested;
         public bool UsesTargetBox => evaluator != null && evaluator.UsesTargetBox;
         public bool IsInTargetBox => inTargetZone;
-        public Bounds TargetBoxBounds => new(targetZoneCenter, Vector3.one * (targetZoneRadius * 2f));
-        public Vector3 TargetZoneCenter => targetZoneCenter;
-        public float TargetZoneRadius => targetZoneRadius;
+        public Bounds TargetBoxBounds => targetZoneBounds;
+        public Vector3 TargetZoneCenter => targetZoneBounds.center;
 
         public void Initialize(LaunchMissionId mission, Func<bool> authorize, Action<bool> onCompleted)
         {
@@ -86,10 +84,10 @@ namespace Simulation
 
             if (evaluator.UsesTargetBox)
             {
-                targetZoneCenter = origin + evaluator.TargetZoneCenterOffset;
-                targetZoneRadius = evaluator.TargetZoneRadius;
+                Bounds localTargetBounds = evaluator.TargetBoxBounds;
+                targetZoneBounds = new Bounds(origin + localTargetBounds.center, localTargetBounds.size);
                 targetGuide = gameObject.AddComponent<LaunchTargetZoneGuide>();
-                targetGuide.Initialize(transform, targetZoneCenter, targetZoneRadius);
+                targetGuide.Initialize(transform, targetZoneBounds);
                 FindFirstObjectByType<RocketBuilder>()?.PreviewDesignTarget(TargetBoxBounds);
             }
         }
@@ -219,14 +217,8 @@ namespace Simulation
             }
 
             inTargetZone = CalculateRocketBounds(out Bounds rocketBounds)
-                && TouchesSphere(rocketBounds, targetZoneCenter, targetZoneRadius);
+                && targetZoneBounds.Intersects(rocketBounds);
             if (targetGuide != null) targetGuide.Tick(inTargetZone);
-        }
-
-        private static bool TouchesSphere(Bounds bounds, Vector3 center, float radius)
-        {
-            Vector3 closest = bounds.ClosestPoint(center);
-            return (closest - center).sqrMagnitude <= radius * radius;
         }
     }
 }

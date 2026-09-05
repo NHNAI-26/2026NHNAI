@@ -246,6 +246,34 @@ namespace Border.Research.Tests
             Assert.That(result.OutcomeEvent.EffectsText, Does.Contain("분기 연구비 -100"));
         }
 
+        [TestCase(LaunchTerminationReason.NoLiftoff)]
+        [TestCase(LaunchTerminationReason.GroundCrash)]
+        [TestCase(LaunchTerminationReason.SelfDestruct)]
+        public void PrivateFailureLottery_GivesWhistleblowerTenPercentOfTickets(LaunchTerminationReason reason)
+        {
+            var counts = new Dictionary<LaunchOutcomeEventId, int>();
+            for (int lotteryIndex = 0; lotteryIndex < 20; lotteryIndex++)
+            {
+                var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: Sequence(lotteryIndex));
+                ResearchLaunchResultData result = Launch(model, TestVisibility.Private, false, reason);
+                counts[result.OutcomeEvent.Id] = counts.TryGetValue(result.OutcomeEvent.Id, out int count) ? count + 1 : 1;
+            }
+
+            Assert.That(counts[LaunchOutcomeEventId.Whistleblower], Is.EqualTo(2));
+            IReadOnlyList<LaunchOutcomeEventId> candidates = ResearchPrototypeModel.GetEligibleLaunchEvents(
+                LaunchMissionId.LowAltitude,
+                false,
+                TestVisibility.Private,
+                2024,
+                reason);
+            int expectedCommonTickets = 18 / (candidates.Count - 1);
+            foreach (LaunchOutcomeEventId candidate in candidates)
+            {
+                if (candidate != LaunchOutcomeEventId.Whistleblower)
+                    Assert.That(counts[candidate], Is.EqualTo(expectedCommonTickets));
+            }
+        }
+
         [Test]
         public void PadDamage_AppliesFundsFloorCompletionFloorAndRandomInstalledTarget()
         {
