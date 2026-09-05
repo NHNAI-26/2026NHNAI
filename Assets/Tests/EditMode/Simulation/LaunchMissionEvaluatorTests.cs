@@ -31,6 +31,13 @@ namespace Simulation.Tests
             Assert.That(evaluator.Step(0.1f, 200f, 100f, 10f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
         }
 
+        [Test]
+        public void TargetZone_ObjectiveHidesInternalBoxDimensions()
+        {
+            Assert.That(LaunchMissionEvaluator.GetObjectiveDescription(LaunchMissionId.TargetZone),
+                Is.EqualTo("표시된 목표 구역에 진입"));
+        }
+
         [TestCase(LaunchMissionId.ZoneHold)]
         [TestCase(LaunchMissionId.LowPowerZoneHold)]
         public void HoldMission_RequiresThreeContinuousSeconds(LaunchMissionId mission)
@@ -58,22 +65,23 @@ namespace Simulation.Tests
                 Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
-        [TestCase(LaunchMissionId.ZoneHold, LaunchMissionOutcome.Succeeded)]
-        [TestCase(LaunchMissionId.LowPowerZoneHold, LaunchMissionOutcome.Running)]
-        public void OnlyLowPowerMission_EnforcesAggregateBurnBudget(LaunchMissionId mission, LaunchMissionOutcome expected)
+        [TestCase(LaunchMissionId.ZoneHold)]
+        [TestCase(LaunchMissionId.LowPowerZoneHold)]
+        public void HoldMission_DoesNotDisqualifyAfterAggregateBurnBudget(LaunchMissionId mission)
         {
             var evaluator = new LaunchMissionEvaluator(mission);
-            Assert.That(evaluator.Step(3f, 200f, 0f, 10f, 0f, 8.01f, inTargetBox: true), Is.EqualTo(expected));
+            Assert.That(evaluator.Step(3f, 200f, 0f, 10f, 0f, 8.01f, inTargetBox: true),
+                Is.EqualTo(LaunchMissionOutcome.Succeeded));
         }
 
         [Test]
-        public void LowPowerMission_BurnBudgetExceededDuringHoldResetsProgress()
+        public void LowPowerMission_BurnBudgetDoesNotResetHoldProgress()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.LowPowerZoneHold);
             evaluator.Step(2f, 200f, 0f, 10f, 0f, 8f, inTargetBox: true);
             Assert.That(evaluator.Step(1f, 200f, 0f, 10f, 0f, 8.01f, inTargetBox: true),
-                Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.HoldSeconds, Is.Zero);
+                Is.EqualTo(LaunchMissionOutcome.Succeeded));
+            Assert.That(evaluator.HoldSeconds, Is.EqualTo(3f));
         }
 
         [Test]

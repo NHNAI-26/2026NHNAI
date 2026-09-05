@@ -148,8 +148,7 @@ namespace Simulation
                 && horizontalDistance <= _rules.TargetHorizontalMax;
             bool holdMission = _missionId == LaunchMissionId.ZoneHold
                 || _missionId == LaunchMissionId.LowPowerZoneHold;
-            bool holding = holdMission && inZone && speed <= _rules.MaxHoldSpeed
-                && (_missionId != LaunchMissionId.LowPowerZoneHold || totalBurnSeconds <= _rules.MaxBurnSeconds);
+            bool holding = holdMission && inZone && speed <= _rules.MaxHoldSpeed;
             HoldSeconds = holding ? HoldSeconds + deltaTime : 0f;
             bool settled = evaluateFailure && !holding && !hasSplashed && isGrounded
                 && speed <= _rules.FailureSpeed && angularSpeed <= _rules.MaxSettledAngularSpeed;
@@ -230,11 +229,11 @@ namespace Simulation
                 case LaunchMissionId.HighAltitude:
                     return $"고도 {r.HighAltitude:0.##} m 도달";
                 case LaunchMissionId.TargetZone:
-                    return $"목표 구역 진입 ({r.TargetBoxSize.x:0.##} × {r.TargetBoxSize.y:0.##} × {r.TargetBoxSize.z:0.##} m)";
+                    return "표시된 목표 구역에 진입";
                 default:
                     string hold = $"목표 구역 안에서 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
                     return missionId == LaunchMissionId.LowPowerZoneHold
-                        ? hold + $" (전체 엔진 누적 연소 시간 {r.MaxBurnSeconds:0.##}초 이하)" : hold;
+                        ? hold + $" (전체 엔진 누적 연소 {r.MaxBurnSeconds:0.##}초에 자동 차단)" : hold;
             }
         }
 

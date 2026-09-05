@@ -78,6 +78,9 @@ namespace Simulation
                 SplashdownFailureSeconds = splashdownFailureSeconds,
                 NoLiftoffTimeout = noLiftoffTimeout
             };
+            rocket.SetAggregateBurnLimit(mission == LaunchMissionId.LowPowerZoneHold
+                ? rules.MaxBurnSeconds
+                : float.PositiveInfinity);
             evaluator = new LaunchMissionEvaluator(mission, rules);
             Objective = LaunchMissionEvaluator.GetObjectiveDescription(mission, rules);
             completed = onCompleted;
@@ -113,7 +116,8 @@ namespace Simulation
             var outcome = evaluator.Step(Time.fixedDeltaTime, Altitude, distance, Speed,
                 Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds, enableAutomaticFailure,
                 rocket.IsGrounded, rocket.Splashed, body.angularVelocity.magnitude * Mathf.Rad2Deg, inTargetZone);
-            Status = $"고도 {Altitude:0.0}m / 속력 {Speed:0.0}m/s\n거리 {distance:0.0}m / 체류 {evaluator.HoldSeconds:0.0}s / 총 연소 {rocket.TotalBurnSeconds:0.0}s";
+            string cutoff = rocket.EnginesCutOffByBurnLimit ? " / 엔진 자동 차단" : string.Empty;
+            Status = $"고도 {Altitude:0.0}m / 속력 {Speed:0.0}m/s\n거리 {distance:0.0}m / 체류 {evaluator.HoldSeconds:0.0}s / 총 연소 {rocket.TotalBurnSeconds:0.0}s{cutoff}";
             if (outcome != LaunchMissionOutcome.Running) Finish(outcome == LaunchMissionOutcome.Succeeded);
         }
 

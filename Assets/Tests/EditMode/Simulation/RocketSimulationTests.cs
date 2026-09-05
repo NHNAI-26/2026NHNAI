@@ -160,6 +160,35 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void AggregateBurnLimit_CutsOffAllEnginesButKeepsRocketFlying()
+        {
+            var rocketGo = Track(new GameObject("burn limited rocket"));
+            var rocket = rocketGo.AddComponent<Rocket>();
+            var body = rocketGo.GetComponent<Rigidbody>();
+            Invoke(rocket, "Awake");
+            SetField(rocket, "holdSeconds", 0f);
+            SetField(rocket, "ignitionRampSeconds", 0f);
+            SetField(rocket, "assistedLiftHeight", 0f);
+
+            RocketPart first = CreateEngine(Stats(100f, 1000f, BaselineOutput, 100f));
+            RocketPart second = CreateEngine(Stats(100f, 1000f, BaselineOutput, 100f));
+            rocket.Attach(first, Vector3.left);
+            rocket.Attach(second, Vector3.right);
+            rocket.SetAggregateBurnLimit(0.05f);
+            rocket.Launch();
+
+            Invoke(rocket, "FixedUpdate");
+            Invoke(rocket, "FixedUpdate");
+
+            Assert.That(rocket.TotalBurnSeconds, Is.EqualTo(0.05f).Within(1e-5f));
+            Assert.That(rocket.EnginesCutOffByBurnLimit, Is.True);
+            Assert.That(first.Ignited, Is.False);
+            Assert.That(second.Ignited, Is.False);
+            Assert.That(rocket.FlightStopped, Is.False, "자동 차단 뒤에도 관성 비행과 미션 판정은 계속돼야 한다.");
+            Assert.That(body.isKinematic, Is.False);
+        }
+
+        [Test]
         public void Hold_KeepsRocketClamped_AndRestartsRampOnLiftoff()
         {
             var rocketGo = Track(new GameObject("hold rocket"));
