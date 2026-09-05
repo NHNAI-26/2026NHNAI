@@ -38,6 +38,11 @@ MonoBehaviour:
     volume: 1
     pitch: 1
     loop: 1
+  - id: failBGM
+    clip: {fileID: 8300000, guid: 9ffcc55dd94164d5cb6d1837a256fb7b, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
   sfxEntries:
   - id: EngineStop
     clip: {fileID: 8300000, guid: 53b79cfbcfacc4abdbce7f205151f18d, type: 3}
@@ -177,6 +182,14 @@ MonoBehaviour:
     maxDistance: 50
   - id: parachute
     clip: {fileID: 8300000, guid: 1ba8c8822c6a0471780ce7efdecb7c41, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: stamp
+    clip: {fileID: 8300000, guid: 8a6a5e4e7302e47caaf676470c67b43c, type: 3}
     volume: 1
     pitch: 1
     loop: 0

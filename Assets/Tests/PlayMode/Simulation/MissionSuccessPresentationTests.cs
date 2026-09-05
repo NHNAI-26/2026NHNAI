@@ -210,6 +210,33 @@ namespace Simulation.Tests
             Assert.That(bgm.CurrentSource, Is.SameAs(music));
         }
 
+        [TestCase(false, "failBGM")]
+        [TestCase(true, "Launch")]
+        public void ResultHold_StartsFailureMusicBeforeWaiting_OnlyForFailure(bool succeeded, string expectedMusic)
+        {
+            var manager = CreateSoundManager(out BgmPlayer bgm);
+            Assert.That(manager.PlayBgm("Launch", 0f), Is.True);
+            var host = scenery.AddComponent<SimulationStageHost>();
+            var routine = (IEnumerator)typeof(SimulationStageHost)
+                .GetMethod("HoldThenUnload", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(host, new object[] { succeeded });
+            try
+            {
+                Assert.That(routine.MoveNext(), Is.True);
+                Assert.That(routine.Current, Is.TypeOf<WaitForSecondsRealtime>());
+                Assert.That(bgm.CurrentId, Is.EqualTo(expectedMusic));
+                if (!succeeded)
+                {
+                    Assert.That(bgm.CurrentSource.clip.name, Is.EqualTo("failBGM"));
+                    Assert.That(bgm.CurrentSource.loop, Is.True);
+                }
+            }
+            finally
+            {
+                (routine as System.IDisposable)?.Dispose();
+            }
+        }
+
         private SoundManager CreateSoundManager(out BgmPlayer bgm)
         {
             Assert.That(SoundManager.Instance, Is.Null);
