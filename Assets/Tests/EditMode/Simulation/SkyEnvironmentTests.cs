@@ -69,6 +69,48 @@ namespace Simulation.Tests
             Assert.AreEqual(_fogBefore, RenderSettings.fog, "안개 설정도 원래대로 돌아와야 한다.");
         }
 
+        [Test]
+        public void CurvatureRadius_PutsHorizonAtRequestedDistance()
+        {
+            const float horizon = 450f;
+
+            // 역산의 정의 그대로: 그 반지름 위에서 지평선 거리만큼 떨어진 점의 낙차가 곧 눈높이다.
+            // 그보다 먼 수면은 눈높이 아래로 내려가 화면에서 사라진다.
+            foreach (float height in new[] { 10f, 100f, 289f })
+            {
+                float radius = SkyEnvironment.CurvatureRadius(horizon, height);
+                Assert.AreEqual(height, SkyEnvironment.SphereDrop(horizon, radius), height * 1e-3f,
+                    $"높이 {height} 에서 지평선이 {horizon} 에 서지 않는다.");
+            }
+
+            Assert.Greater(SkyEnvironment.CurvatureRadius(horizon, 10f),
+                SkyEnvironment.CurvatureRadius(horizon, 289f),
+                "올라갈수록 반지름이 줄어야 곡률이 보인다.");
+
+            Assert.IsTrue(float.IsInfinity(SkyEnvironment.CurvatureRadius(horizon, 0f)),
+                "수면 높이에서는 굽히지 않는다 — 무한대 = 평면.");
+            Assert.IsTrue(float.IsInfinity(SkyEnvironment.CurvatureRadius(horizon, -5f)),
+                "수면 아래로 내려가도 뒤집힌 곡률이 나오면 안 된다.");
+        }
+
+        [Test]
+        public void SphereDrop_IsZeroAtCenter_AndStopsAtEquator()
+        {
+            Assert.AreEqual(0f, SkyEnvironment.SphereDrop(0f, 1000f), 1e-4f,
+                "꼭대기는 평면 높이 그대로다 — 발사대가 물에 잠기면 안 된다.");
+            Assert.AreEqual(0f, SkyEnvironment.SphereDrop(500f, float.PositiveInfinity), 1e-4f,
+                "무한 반지름은 평면이다.");
+
+            // 수면 반폭 1050 은 고고도 반지름을 넘어선다. 근사였다면 여기서 발산한다.
+            Assert.AreEqual(848f, SkyEnvironment.SphereDrop(1050f, 848f), 1e-3f,
+                "반지름을 넘어선 정점은 적도에서 멈춰야 한다.");
+            Assert.AreEqual(848f, SkyEnvironment.SphereDrop(5000f, 848f), 1e-3f,
+                "훨씬 밖에서도 적도 아래로는 내려가지 않는다.");
+
+            Assert.Less(SkyEnvironment.SphereDrop(300f, 848f),
+                SkyEnvironment.SphereDrop(600f, 848f), "멀수록 더 내려간다.");
+        }
+
         private SkyEnvironment Create(out Transform target, out GameObject root,
             float worldMetersPerUnit, Material skybox = null)
         {

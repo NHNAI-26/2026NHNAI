@@ -537,6 +537,73 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void PresetPanel_ListsOnlyDevelopedPresets()
+        {
+            // 설계 패널은 연구가 열지 않은 슬롯을 내지 않는다(GDD 07 §4). 라이브러리는 계속 10칸이라
+            // 여기가 유일한 거름망이다 — 빠지면 아직 없는 엔진을 끌어다 붙일 수 있게 된다.
+            MethodInfo isDeveloped = typeof(RocketDesignUI).GetMethod(
+                "IsDeveloped", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(isDeveloped, "RocketDesignUI.IsDeveloped 를 찾지 못했다.");
+
+            var model = new ResearchPrototypeModel();
+            EngineStatsSO slot0 = Stats(100f, 60f, BaselineOutput, 100f, presetIndex: 0);
+            EngineStatsSO slot1 = Stats(100f, 60f, BaselineOutput, 100f, presetIndex: 1);
+            EngineStatsSO authored = Stats(100f, 60f, BaselineOutput, 100f); // PresetIndex -1
+
+            Assert.IsTrue((bool)isDeveloped.Invoke(null, new object[] { slot0, model }),
+                "새 게임은 엔진 01 이 열려 있다.");
+            Assert.IsFalse((bool)isDeveloped.Invoke(null, new object[] { slot1, model }),
+                "아직 개발하지 않은 슬롯은 목록에 뜨면 안 된다.");
+            Assert.IsTrue((bool)isDeveloped.Invoke(null, new object[] { authored, model }),
+                "PresetIndex -1 은 저작 에셋이다 — SimulationTest 단독 재생이 간다.");
+
+            Assert.AreEqual(ResearchActionResult.Success, model.CreateNewEnginePreset(out _),
+                "시작 예산 2200 은 새 프리셋 비용 150 을 감당한다.");
+
+            Assert.IsTrue((bool)isDeveloped.Invoke(null, new object[] { slot1, model }),
+                "새 엔진을 개발하면 그 슬롯이 설계 목록에 나타난다.");
+        }
+
+        [Test]
+        public void PresetPanel_LabelsUseResearchDisplayNames()
+        {
+            // 연구 화면 카드는 `엔진 01`, 설계 패널은 `Baseline_Runtime` — 같은 엔진이 두 이름이면
+            // 연동됐다는 신호 자체가 사라진다.
+            MethodInfo displayName = typeof(RocketDesignUI).GetMethod(
+                "DisplayName", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(displayName, "RocketDesignUI.DisplayName 을 찾지 못했다.");
+
+            EngineStatsSO researched = Stats(100f, 60f, BaselineOutput, 100f, presetIndex: 0);
+            researched.name = "EngineStats_Baseline_Runtime";
+            EngineStatsSO authored = Stats(100f, 60f, BaselineOutput, 100f);
+            authored.name = "EngineStats_Baseline";
+
+            Assert.AreEqual(
+                ResearchPrototypeModel.GetEnginePresetConfig(EnginePresetId.Engine01).DisplayName,
+                (string)displayName.Invoke(null, new object[] { researched }));
+            Assert.AreEqual("Baseline", (string)displayName.Invoke(null, new object[] { authored }),
+                "저작 에셋은 접두사만 떼어낸다.");
+        }
+
+        [Test]
+        public void RuntimeBridge_Checksum_ChangesWhenAPresetIsUnlocked()
+        {
+            // 체크섬이 잠금을 안 보면 새 엔진을 개발해도 런타임 라이브러리가 다시 안 만들어진다.
+            MethodInfo checksum = typeof(ResearchEnginePresetRuntimeBridge).GetMethod(
+                "CalculateResearchChecksum", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(checksum, "CalculateResearchChecksum 을 찾지 못했다.");
+
+            var model = new ResearchPrototypeModel();
+            int before = (int)checksum.Invoke(null, new object[] { model });
+
+            Assert.AreEqual(ResearchActionResult.Success, model.CreateNewEnginePreset(out _),
+                "시작 예산 2200 은 새 프리셋 비용 150 을 감당한다.");
+
+            Assert.AreNotEqual(before, (int)checksum.Invoke(null, new object[] { model }),
+                "프리셋 해금은 체크섬을 바꿔야 한다.");
+        }
+
+        [Test]
         public void PresetEntry_ImplementsIDragHandler_SoBeginDragActuallyFires()
         {
             // 입력 모듈은 pointerDrag 를 IDragHandler 로만 찾는다. IBeginDragHandler 만 달면 컴파일도
@@ -547,9 +614,10 @@ namespace Simulation.Tests
                 "PresetEntry 가 IDragHandler 를 구현하지 않으면 프리셋 드래그가 시작되지 않는다.");
         }
 
-        private EngineStatsSO Stats(float fuel, float cooling, float output, float ignition)
+        private EngineStatsSO Stats(float fuel, float cooling, float output, float ignition, int presetIndex = -1)
         {
             var stats = Track(ScriptableObject.CreateInstance<EngineStatsSO>());
+            SetField(stats, "presetIndex", presetIndex);
             SetField(stats, "fuelCapacity", fuel);
             SetField(stats, "cooling", cooling);
             SetField(stats, "maxOutput", output);

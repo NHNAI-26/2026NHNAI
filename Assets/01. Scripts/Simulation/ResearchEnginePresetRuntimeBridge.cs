@@ -160,6 +160,7 @@ namespace Simulation
                 {
                     EnginePresetState preset = model.EnginePresets[i];
                     hash = hash * 31 + (int)preset.PresetId;
+                    hash = hash * 31 + (preset.Unlocked ? 1 : 0);
                     hash = hash * 31 + preset.Completion;
                     hash = hash * 31 + preset.FuelCapacity;
                     hash = hash * 31 + preset.Cooling;

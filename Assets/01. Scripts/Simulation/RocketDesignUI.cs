@@ -25,6 +25,9 @@ namespace Simulation
         // 로 스폰돼 인스펙터에서 값을 넣을 사람이 없으므로 SerializeField 가 아니라 const 다.
         private const float ToolsGap = 90f;
 
+        // 상단바 오른쪽 끝 복귀 버튼의 가로 폭(캔버스 단위). 정보 텍스트의 오른쪽 여백도 이 값에서 나온다.
+        private const float ExitButtonWidth = 96f;
+
         private static readonly Color PanelColor = new(0.15f, 0.18f, 0.22f, 0.96f);
         private static readonly Color EntryColor = new(0.22f, 0.26f, 0.31f, 1f);
         private static readonly Color EntryHoverColor = new(0.30f, 0.38f, 0.46f, 1f);
@@ -200,7 +203,13 @@ namespace Simulation
             topBarText = CreateText("Info", topBar, 18, FontStyles.Bold, string.Empty);
             topBarText.alignment = TextAlignmentOptions.Left;
             topBarText.raycastTarget = false;
-            Fill((RectTransform)topBarText.transform, 12f);
+            var infoRect = (RectTransform)topBarText.transform;
+            infoRect.anchorMin = Vector2.zero;
+            infoRect.anchorMax = Vector2.one;
+            infoRect.offsetMin = new Vector2(12f, 12f);
+            infoRect.offsetMax = new Vector2(-ExitButtonWidth - 24f, -12f); // 복귀 버튼 자리를 비운다
+
+            BuildExitButton(topBar);
 
             // 카메라 뷰포트의 유일한 원천. 정규화 상수를 따로 두면 CanvasScaler 가 늘어나는 비율에서
             // 좌측 패널과 어긋난다 — 매 프레임 이 사각형을 읽어 카메라에 먹인다.
@@ -209,6 +218,29 @@ namespace Simulation
             viewport.anchorMax = Vector2.one;
             viewport.offsetMin = new Vector2(232f, 16f);
             viewport.offsetMax = new Vector2(-16f, -88f);
+        }
+
+        /// <summary>
+        /// 설계 화면에서 연구 화면으로 나가는 유일한 문. 미션 컨트롤 모드에서만 만든다 —
+        /// `SimulationTest` 를 단독 재생할 때는 돌아갈 연구 화면 자체가 없다.
+        /// </summary>
+        private static void BuildExitButton(RectTransform topBar)
+        {
+            RectTransform rect = CreatePanel("ExitButton", topBar, EntryColor);
+            rect.anchorMin = new Vector2(1f, 0.5f);
+            rect.anchorMax = new Vector2(1f, 0.5f);
+            rect.pivot = new Vector2(1f, 0.5f);
+            rect.anchoredPosition = new Vector2(-12f, 0f);
+            rect.sizeDelta = new Vector2(ExitButtonWidth, 32f);
+
+            var button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = rect.GetComponent<Image>();
+            button.onClick.AddListener(SimulationStageHost.CloseDesignStage);
+
+            TMP_Text label = CreateText("Label", rect, 15, FontStyles.Bold, "연구 화면");
+            label.alignment = TextAlignmentOptions.Center;
+            label.raycastTarget = false;
+            Fill((RectTransform)label.transform, 4f);
         }
 
         private void BuildPresetPanel(RectTransform canvasTransform)
@@ -239,17 +271,18 @@ namespace Simulation
                 ? builder.PresetLibrary.Slots
                 : null;
 
-            if (presets == null || presets.Count == 0)
-            {
-                CreateText("Empty", presetPanel, 13, FontStyles.Normal,
-                    "프리셋이 없다.\nRocketBuilder 의 Preset Library 에\nEnginePresetLibrarySO 를 연결하라.");
-                return;
-            }
+            // 연구가 아직 열지 않은 슬롯은 목록에서 아예 뺀다 — GDD 07 §4 와 엔진 프리셋 스펙이
+            // "개발된 슬롯만 보여준다"로 확정했다. 라이브러리 자체는 계속 10칸이다 — 슬롯 인덱스가
+            // EnginePresetId 로의 유일한 매핑이라(ResearchEnginePresetRuntimeBridge) 거기서 빼면 안 된다.
+            ResearchPrototypeModel model = ResearchFlowSession.GetOrCreate().Model;
+            int shown = 0;
 
-            for (int i = 0; i < presets.Count; i++)
+            for (int i = 0; presets != null && i < presets.Count; i++)
             {
                 EngineStatsSO preset = presets[i];
-                if (preset == null) continue;
+                if (preset == null || !IsDeveloped(preset, model)) continue;
+
+                shown++;
 
                 RectTransform row = CreatePanel($"Preset_{i}", presetPanel, EntryColor);
                 row.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
@@ -262,6 +295,12 @@ namespace Simulation
                 PresetEntry entry = row.gameObject.AddComponent<PresetEntry>();
                 entry.Bind(this, preset, row.GetComponent<Image>());
             }
+
+            if (shown == 0)
+            {
+                CreateText("Empty", presetPanel, 13, FontStyles.Normal,
+                    "프리셋이 없다.\nRocketBuilder 의 Preset Library 에\nEnginePresetLibrarySO 를 연결하라.");
+            }
         }
 
         private void BuildStatBox(RectTransform canvasTransform)
@@ -270,7 +309,7 @@ namespace Simulation
             statBox.anchorMin = Vector2.zero;
             statBox.anchorMax = Vector2.zero;
             statBox.pivot = new Vector2(0f, 0.5f);
-            statBox.sizeDelta = new Vector2(230f, 130f);
+            statBox.sizeDelta = new Vector2(230f, 152f); // 물리 6줄 + 연구 진행 1줄
             statBox.GetComponent<Image>().raycastTarget = false;
 
             statText = CreateText("StatText", statBox, 13, FontStyles.Normal, string.Empty);
@@ -423,12 +462,40 @@ namespace Simulation
             BuildPresetPanel((RectTransform)canvas.transform);
         }
 
-        /// <summary>에셋 이름에서 `EngineStats_` 접두사를 떼어 목록 폭에 들어가게 한다.</summary>
+        /// <summary>
+        /// 연구가 만든 프리셋은 연구 화면 카드와 같은 이름(`엔진 01`~)을 쓴다 — 두 화면이
+        /// 다른 이름을 부르면 연동됐다는 신호 자체가 사라진다. 저작 에셋은 `EngineStats_`
+        /// 접두사만 떼어 목록 폭에 들어가게 한다.
+        /// </summary>
         private static string DisplayName(EngineStatsSO preset)
         {
+            if (TryGetPresetId(preset, out EnginePresetId presetId))
+            {
+                return ResearchPrototypeModel.GetEnginePresetConfig(presetId).DisplayName;
+            }
+
             const string Prefix = "EngineStats_";
             string name = preset.name;
             return name.StartsWith(Prefix) ? name[Prefix.Length..] : name;
+        }
+
+        /// <summary>
+        /// 연구가 만든 런타임 사본만 연구 상태를 가진다 — <see cref="EngineStatsSO.CreateRuntimeCopy"/>
+        /// 가 슬롯 인덱스를 채운다. 저작 에셋은 그 값이 `-1` 이라 여기서 걸러진다:
+        /// `SimulationTest` 를 단독 재생할 때 연구 세션과 무관하게 프리셋 10개가 그대로 뜨는 이유다.
+        /// </summary>
+        private static bool TryGetPresetId(EngineStatsSO preset, out EnginePresetId presetId)
+        {
+            int index = preset.PresetIndex;
+            presetId = (EnginePresetId)index;
+            return index >= 0 && index < ResearchPrototypeModel.MaxEnginePresetCount;
+        }
+
+        /// <summary>연구가 아직 열지 않은 슬롯은 목록에 내지 않는다(GDD 07 §4).</summary>
+        private static bool IsDeveloped(EngineStatsSO preset, ResearchPrototypeModel model)
+        {
+            return !TryGetPresetId(preset, out EnginePresetId presetId)
+                   || model.IsEnginePresetUnlocked(presetId);
         }
 
         internal void ShowStats(EngineStatsSO preset, RectTransform anchor)
@@ -442,6 +509,14 @@ namespace Simulation
                 $"냉각 {preset.Cooling:0} °C/s\n" +
                 $"최대 출력 {preset.MaxOutput:0} N\n" +
                 $"점화 신뢰도 {preset.IgnitionReliability:0} %";
+
+            // 물리값만 보면 이 숫자가 연구로 올라간 값인지 저작 기본값인지 구분이 안 된다.
+            if (TryGetPresetId(preset, out EnginePresetId presetId))
+            {
+                EnginePresetState state = ResearchFlowSession.GetOrCreate().Model.GetEnginePreset(presetId);
+                statText.text += $"\n완성도 {state.Completion} / 최고 등급 "
+                                 + (state.HasBestGrade ? state.BestGrade.ToString() : "-");
+            }
 
             Vector3[] corners = new Vector3[4];
             anchor.GetWorldCorners(corners);
