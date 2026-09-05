@@ -11,13 +11,15 @@ namespace Border.Research
 
         private static ResearchFlowSession instance;
 
+        [SerializeField] private ResearchBalanceConfigSO balanceConfig;
+
         private ResearchPrototypeModel model;
         private ResearchDesignEntryData pendingDesignEntry;
         private ResearchLaunchResultData lastLaunchResult;
         private bool hasPendingDesignEntry;
         private bool hasLastLaunchResult;
 
-        public ResearchPrototypeModel Model => model ??= new ResearchPrototypeModel();
+        public ResearchPrototypeModel Model => model ??= CreateModel();
         public bool HasPendingDesignEntry => hasPendingDesignEntry;
         public bool HasLastLaunchResult => hasLastLaunchResult;
 
@@ -64,14 +66,14 @@ namespace Border.Research
             }
         }
 
-        public ResearchActionResult TryEnterDesign(LaunchStageId stageId, out ResearchDesignEntryData data)
+        public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, out ResearchDesignEntryData data)
         {
-            return TryEnterDesign(stageId, EnginePresetId.Engine01, out data);
+            return TryEnterDesign(missionId, EnginePresetId.Engine01, out data);
         }
 
-        public ResearchActionResult TryEnterDesign(LaunchStageId stageId, EnginePresetId presetId, out ResearchDesignEntryData data)
+        public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, out ResearchDesignEntryData data)
         {
-            ResearchActionResult result = Model.TryEnterDesign(stageId, presetId, out data);
+            ResearchActionResult result = Model.TryEnterDesign(missionId, presetId, out data);
             if (result == ResearchActionResult.Success)
             {
                 StoreDesignEntry(data);
@@ -147,7 +149,7 @@ namespace Border.Research
             }
 
             instance = this;
-            model ??= new ResearchPrototypeModel();
+            model ??= CreateModel();
 
             if (Application.isPlaying)
             {
@@ -165,6 +167,11 @@ namespace Border.Research
             {
                 DestroyImmediate(target);
             }
+        }
+
+        private ResearchPrototypeModel CreateModel()
+        {
+            return new ResearchPrototypeModel(balanceConfig: balanceConfig != null ? balanceConfig.ToRuntimeConfig() : null);
         }
     }
 }

@@ -25,7 +25,7 @@ namespace Border.Research.Tests
         {
             var model = new ResearchPrototypeModel();
 
-            Assert.That(ResearchPrototypeModel.GetEnginePresetConfigs(), Has.Count.EqualTo(ResearchPrototypeModel.MaxEnginePresetCount));
+            Assert.That(ResearchPrototypeModel.GetEnginePresetConfigs().Count, Is.EqualTo(ResearchPrototypeModel.MaxEnginePresetCount));
             Assert.That(model.EnginePresets, Has.Length.EqualTo(ResearchPrototypeModel.MaxEnginePresetCount));
             Assert.That(model.ActiveEnginePresetCount, Is.EqualTo(1));
 
@@ -49,7 +49,23 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void CreateNewEnginePreset_UnlocksNextSlotWithoutCostOrTimeUntilCostIsDesigned()
+        public void Reset_CreatesSixMissionSlotsWithOnlyStaticFireUnlocked()
+        {
+            var model = new ResearchPrototypeModel();
+
+            Assert.That(ResearchPrototypeModel.GetMissionConfigs().Count, Is.EqualTo(6));
+            Assert.That(model.Missions, Has.Length.EqualTo(6));
+            Assert.That(model.GetMission(LaunchMissionId.StaticFire).Unlocked, Is.True);
+            Assert.That(model.GetMission(LaunchMissionId.LowAltitude).Unlocked, Is.False);
+            Assert.That(model.GetMission(LaunchMissionId.HighAltitude).Unlocked, Is.False);
+            Assert.That(model.GetMission(LaunchMissionId.TargetZone).Unlocked, Is.False);
+            Assert.That(model.GetMission(LaunchMissionId.ZoneHold).Unlocked, Is.False);
+            Assert.That(model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked, Is.False);
+            Assert.That(ResearchPrototypeModel.GetNextMission(LaunchMissionId.ZoneHold), Is.EqualTo(LaunchMissionId.LowPowerZoneHold));
+        }
+
+        [Test]
+        public void CreateNewEnginePreset_UnlocksNextSlotFor150WithoutTime()
         {
             var model = new ResearchPrototypeModel();
             int funds = model.Funds;
@@ -61,8 +77,38 @@ namespace Border.Research.Tests
             Assert.That(presetId, Is.EqualTo(EnginePresetId.Engine02));
             Assert.That(model.ActiveEnginePresetCount, Is.EqualTo(2));
             Assert.That(model.IsEnginePresetUnlocked(EnginePresetId.Engine02), Is.True);
-            Assert.That(model.Funds, Is.EqualTo(funds));
+            Assert.That(model.Funds, Is.EqualTo(funds - ResearchPrototypeModel.NewEnginePresetCost));
             Assert.That(model.RemainingTurns, Is.EqualTo(remainingTurns));
+        }
+
+        [Test]
+        public void BalanceConfig_OverridesResearchGainVisibilityAndLaunchReward()
+        {
+            var config = new ResearchBalanceConfig(
+                ResearchPrototypeModel.InitialFunds,
+                ResearchPrototypeModel.InitialQuarterlyFunding,
+                ResearchPrototypeModel.MinQuarterlyFunding,
+                ResearchPrototypeModel.MaxQuarterlyFunding,
+                ResearchPrototypeModel.ResearchCompletionGain,
+                ResearchPrototypeModel.EngineNormalResearchCost,
+                ResearchPrototypeModel.EngineFocusedResearchCost,
+                ResearchPrototypeModel.NewEnginePresetCost,
+                ResearchPrototypeModel.EngineInstallCost,
+                ResearchPrototypeModel.CreateDefaultMissionConfigs(),
+                new[] { new ResearchScoreRewardBand(0, 7) },
+                new[] { new ResearchScoreRewardBand(0, 17) },
+                new[] { new ResearchGradeReward(ResearchGrade.B, 123, 45) },
+                publicSuccessModifier: -22,
+                privateSuccessModifier: 11);
+            var model = new ResearchPrototypeModel(balanceConfig: config);
+            int publicChance = model.CalculateSuccessChance(model.CreateDesignEntry(LaunchMissionId.StaticFire, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 50, TestVisibility.Public));
+            int privateChance = model.CalculateSuccessChance(model.CreateDesignEntry(LaunchMissionId.StaticFire, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 50, TestVisibility.Private));
+
+            Assert.That(model.CalculateResearchStatGain(false, 100), Is.EqualTo(7));
+            Assert.That(model.CalculateResearchStatGain(true, 100), Is.EqualTo(17));
+            Assert.That(privateChance - publicChance, Is.EqualTo(33));
+            Assert.That(config.GetLaunchReward(ResearchGrade.B).ImmediateFunding, Is.EqualTo(123));
+            Assert.That(config.GetLaunchReward(ResearchGrade.B).QuarterlyFundingDelta, Is.EqualTo(45));
         }
 
         [Test]
@@ -92,6 +138,7 @@ namespace Border.Research.Tests
             EnginePresetState untouched = model.GetEnginePreset(EnginePresetId.Engine05);
             int untouchedCompletion = untouched.Completion;
             int untouchedStat = untouched.Cooling;
+            int fundsBeforeResearch = model.Funds;
 
             ResearchActionResult result = model.ExecuteEngineResearch(EnginePresetId.Engine04, EngineStatId.Cooling, false, 65);
 
@@ -100,7 +147,7 @@ namespace Border.Research.Tests
             Assert.That(selected.Cooling, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat + 13));
             Assert.That(untouched.Completion, Is.EqualTo(untouchedCompletion));
             Assert.That(untouched.Cooling, Is.EqualTo(untouchedStat));
-            Assert.That(model.Funds, Is.EqualTo(ResearchPrototypeModel.InitialFunds - ResearchPrototypeModel.EngineNormalResearchCost + ResearchPrototypeModel.InitialQuarterlyFunding));
+            Assert.That(model.Funds, Is.EqualTo(fundsBeforeResearch - ResearchPrototypeModel.EngineNormalResearchCost + ResearchPrototypeModel.InitialQuarterlyFunding));
             Assert.That(model.Quarter, Is.EqualTo(2));
             Assert.That(model.RemainingTurns, Is.EqualTo(ResearchPrototypeModel.MaxTurns - 1));
         }
@@ -163,7 +210,7 @@ namespace Border.Research.Tests
             var model = new ResearchPrototypeModel();
             int funds = model.Funds;
 
-            ResearchActionResult result = model.TryEnterDesign(LaunchStageId.Engine, EnginePresetId.Engine01, out ResearchDesignEntryData data);
+            ResearchActionResult result = model.TryEnterDesign(LaunchMissionId.StaticFire, EnginePresetId.Engine01, out ResearchDesignEntryData data);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
             Assert.That(data.SelectedEngineCompletion, Is.EqualTo(0));
@@ -185,7 +232,7 @@ namespace Border.Research.Tests
             int attemptCount = engine.AttemptCount;
             int completion = engine.Completion;
 
-            ResearchActionResult result = model.TryEnterDesign(LaunchStageId.Engine, EnginePresetId.Engine03, out ResearchDesignEntryData data);
+            ResearchActionResult result = model.TryEnterDesign(LaunchMissionId.StaticFire, EnginePresetId.Engine03, out ResearchDesignEntryData data);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
             Assert.That(model.Funds, Is.EqualTo(funds - data.LaunchCost));
@@ -194,7 +241,7 @@ namespace Border.Research.Tests
             Assert.That(model.RemainingTurns, Is.EqualTo(remainingTurns));
             Assert.That(engine.AttemptCount, Is.EqualTo(attemptCount));
             Assert.That(engine.Completion, Is.EqualTo(completion));
-            Assert.That(data.StageId, Is.EqualTo(LaunchStageId.Engine));
+            Assert.That(data.MissionId, Is.EqualTo(LaunchMissionId.StaticFire));
             Assert.That(data.SelectedEnginePresetId, Is.EqualTo(EnginePresetId.Engine03));
             Assert.That(data.LaunchCost, Is.EqualTo(600));
             Assert.That(data.ReservedInstallCost, Is.EqualTo(0));
@@ -203,22 +250,22 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void TryEnterDesign_WhenLaunchTargetLocked_ReturnsLaunchTargetLocked()
+        public void TryEnterDesign_WhenMissionLocked_ReturnsMissionLocked()
         {
             var model = new ResearchPrototypeModel();
 
-            ResearchActionResult result = model.TryEnterDesign(LaunchStageId.Rocket, EnginePresetId.Engine01, out _);
+            ResearchActionResult result = model.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, out _);
 
-            Assert.That(result, Is.EqualTo(ResearchActionResult.LaunchTargetLocked));
+            Assert.That(result, Is.EqualTo(ResearchActionResult.MissionLocked));
         }
 
         [Test]
         public void TryEnterDesign_WhenLaunchCostMissing_ReturnsNotEnoughFunds()
         {
             var model = new ResearchPrototypeModel();
-            SetFunds(model, ResearchPrototypeModel.GetStageConfig(LaunchStageId.Engine).LaunchCost - 1);
+            SetFunds(model, ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.StaticFire).LaunchCost - 1);
 
-            ResearchActionResult result = model.TryEnterDesign(LaunchStageId.Engine, EnginePresetId.Engine01, out _);
+            ResearchActionResult result = model.TryEnterDesign(LaunchMissionId.StaticFire, EnginePresetId.Engine01, out _);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.NotEnoughFunds));
         }
@@ -227,8 +274,8 @@ namespace Border.Research.Tests
         public void Visibility_ChangesSuccessChanceByTwentyPoints()
         {
             var model = new ResearchPrototypeModel();
-            ResearchDesignEntryData publicEntry = model.CreateDesignEntry(LaunchStageId.Engine, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 50, TestVisibility.Public);
-            ResearchDesignEntryData privateEntry = model.CreateDesignEntry(LaunchStageId.Engine, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 50, TestVisibility.Private);
+            ResearchDesignEntryData publicEntry = model.CreateDesignEntry(LaunchMissionId.StaticFire, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 50, TestVisibility.Public);
+            ResearchDesignEntryData privateEntry = model.CreateDesignEntry(LaunchMissionId.StaticFire, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 50, TestVisibility.Private);
 
             Assert.That(model.CalculateSuccessChance(privateEntry) - model.CalculateSuccessChance(publicEntry), Is.EqualTo(20));
         }
@@ -239,8 +286,8 @@ namespace Border.Research.Tests
             var model = new ResearchPrototypeModel();
             int[] installed = new int[ResearchPrototypeModel.MaxEnginePresetCount];
             installed[(int)EnginePresetId.Engine01] = 2;
-            model.GetStage(LaunchStageId.Rocket).Unlocked = true;
-            ResearchDesignEntryData entry = model.CreateDesignEntry(LaunchStageId.Rocket, EnginePresetId.Engine01, installed, 70, TestVisibility.Private, true);
+            model.GetMission(LaunchMissionId.LowAltitude).Unlocked = true;
+            ResearchDesignEntryData entry = model.CreateDesignEntry(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, installed, 70, TestVisibility.Private, true);
             int funds = model.Funds;
             int quarterlyFunding = model.QuarterlyFunding;
             int remainingTurns = model.RemainingTurns;
@@ -252,16 +299,16 @@ namespace Border.Research.Tests
                 ResearchPrototypeModel.MinQuarterlyFunding,
                 ResearchPrototypeModel.MaxQuarterlyFunding);
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(launchResult.TotalCost, Is.EqualTo(ResearchPrototypeModel.GetStageConfig(LaunchStageId.Rocket).LaunchCost + ResearchPrototypeModel.EngineInstallCost * 2));
+            Assert.That(launchResult.TotalCost, Is.EqualTo(ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.LowAltitude).LaunchCost + ResearchPrototypeModel.EngineInstallCost * 2));
             Assert.That(launchResult.SuccessChance + launchResult.PartialChance + launchResult.FailureChance, Is.EqualTo(100));
             Assert.That(model.Funds, Is.EqualTo(funds - launchResult.ReservedInstallCost + launchResult.ImmediateFunding + expectedQuarterlyFunding));
             Assert.That(model.QuarterlyFunding, Is.EqualTo(expectedQuarterlyFunding));
             Assert.That(model.RemainingTurns, Is.EqualTo(remainingTurns - 1));
-            Assert.That(model.GetStage(LaunchStageId.Rocket).AttemptCount, Is.EqualTo(1));
+            Assert.That(model.GetMission(LaunchMissionId.LowAltitude).AttemptCount, Is.EqualTo(1));
         }
 
         [Test]
-        public void EngineTest_CGradeOrBetter_UnlocksRocket()
+        public void StaticFire_CGradeOrBetter_UnlocksLowAltitude()
         {
             var model = new ResearchPrototypeModel(1);
             EnginePresetState engine = model.GetEnginePreset(EnginePresetId.Engine01);
@@ -270,13 +317,60 @@ namespace Border.Research.Tests
             engine.Cooling = 100;
             engine.MaxOutput = 100;
             engine.IgnitionReliability = 100;
-            ResearchDesignEntryData entry = model.CreateDesignEntry(LaunchStageId.Engine, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 100, TestVisibility.Private);
+            ResearchDesignEntryData entry = model.CreateDesignEntry(LaunchMissionId.StaticFire, EnginePresetId.Engine01, new int[ResearchPrototypeModel.MaxEnginePresetCount], 100, TestVisibility.Private);
 
             model.CommitLaunch(entry, out ResearchLaunchResultData result);
 
             Assume.That(result.Grade, Is.LessThanOrEqualTo(ResearchGrade.C));
-            Assert.That(model.GetStage(LaunchStageId.Rocket).Unlocked, Is.True);
+            Assert.That(model.GetMission(LaunchMissionId.LowAltitude).Unlocked, Is.True);
             Assert.That(engine.HasBestGrade, Is.True);
+        }
+
+        [Test]
+        public void StaticFireDesignEntry_UsesSelectedEngineAndClearsInstallCost()
+        {
+            var model = new ResearchPrototypeModel();
+            int[] installed = new int[ResearchPrototypeModel.MaxEnginePresetCount];
+            installed[(int)EnginePresetId.Engine01] = 4;
+
+            ResearchDesignEntryData entry = model.CreateDesignEntry(LaunchMissionId.StaticFire, EnginePresetId.Engine01, installed, 60, TestVisibility.Private);
+
+            Assert.That(entry.ReservedInstallCost, Is.EqualTo(0));
+            Assert.That(entry.InstalledEngineScore, Is.EqualTo(entry.SelectedEngineScore));
+            Assert.That(entry.InstalledEngineCounts[(int)EnginePresetId.Engine01], Is.EqualTo(0));
+        }
+
+        [Test]
+        public void LowPowerZoneHold_BGradeOrBetterWinsGame()
+        {
+            for (int seed = 1; seed <= 200; seed++)
+            {
+                var model = new ResearchPrototypeModel(seed);
+                EnginePresetState engine = model.GetEnginePreset(EnginePresetId.Engine01);
+                engine.Completion = ResearchPrototypeModel.MaxEngineCompletion;
+                engine.FuelCapacity = 100;
+                engine.Cooling = 100;
+                engine.MaxOutput = 100;
+                engine.IgnitionReliability = 100;
+                model.GetMission(LaunchMissionId.LowPowerZoneHold).Unlocked = true;
+                int[] installed = new int[ResearchPrototypeModel.MaxEnginePresetCount];
+                installed[(int)EnginePresetId.Engine01] = 1;
+                ResearchDesignEntryData entry = model.CreateDesignEntry(LaunchMissionId.LowPowerZoneHold, EnginePresetId.Engine01, installed, 100, TestVisibility.FinalMission);
+
+                model.CommitLaunch(entry, out ResearchLaunchResultData result);
+
+                if (result.Grade > ResearchGrade.B)
+                {
+                    continue;
+                }
+
+                Assert.That(result.FinalMissionWon, Is.True);
+                Assert.That(model.HasGameEnded, Is.True);
+                Assert.That(model.GameWon, Is.True);
+                return;
+            }
+
+            Assert.Fail("No deterministic seed produced a B-or-better final mission result.");
         }
 
         [Test]
@@ -306,6 +400,14 @@ namespace Border.Research.Tests
 
             Assert.That(good, Is.GreaterThan(poor));
             Assert.That(good, Is.GreaterThanOrEqualTo(80));
+        }
+
+        [Test]
+        public void MiniGameScoring_Cooling_SlowCorrectInputCannotReceiveTopReward()
+        {
+            Assert.That(ResearchMiniGameController.CalculateCoolingScore(4, 0, 0.35f), Is.EqualTo(100));
+            Assert.That(ResearchMiniGameController.CalculateCoolingScore(4, 0, 0.9f), Is.EqualTo(60));
+            Assert.That(ResearchMiniGameController.CalculateCoolingScore(0, 0, 0f), Is.Zero);
         }
 
         [Test]
@@ -484,7 +586,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void MiniGameController_OutputStageShowsJudgementBeforeNextStep()
+        public void MiniGameController_OutputShowsJudgementBeforeNextStep()
         {
             var host = new GameObject("Mini Game Test Host");
             bool completed = false;
@@ -541,14 +643,14 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void MiniGameStateText_DoesNotAppendRemovedExampleLine()
+        public void MiniGameStateText_AppendsExampleLineWhenRequested()
         {
             string firstFrame = ResearchMiniGameController.FormatStateText("밸브 1/4", true);
             string nextFrame = ResearchMiniGameController.FormatStateText("밸브 1/4", true);
 
             Assert.That(firstFrame, Is.EqualTo(nextFrame));
-            Assert.That(firstFrame, Is.EqualTo("밸브 1/4"));
-            Assert.That(firstFrame, Does.Not.Contain("예시"));
+            Assert.That(firstFrame, Does.Contain("밸브 1/4"));
+            Assert.That(firstFrame, Does.Contain("예시"));
         }
 
         [Test]
@@ -567,8 +669,8 @@ namespace Border.Research.Tests
 
                 Assert.That(fuel.GetTimerTextForTests(), Is.Empty);
                 Assert.That(cooling.GetTimerTextForTests(), Is.EqualTo("남은 시간 9초"));
-                Assert.That(cooling.GetStateTextForTests(), Is.EqualTo("밸브 1/4"));
-                Assert.That(cooling.GetStateTextForTests(), Does.Not.Contain("예시"));
+                Assert.That(cooling.GetStateTextForTests(), Does.Contain("밸브 1/4"));
+                Assert.That(cooling.GetStateTextForTests(), Does.Contain("예시"));
             }
             finally
             {
@@ -583,8 +685,8 @@ namespace Border.Research.Tests
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
             UnlockPreset(session.Model, EnginePresetId.Engine02);
 
-            ResearchActionResult result = session.TryEnterDesign(LaunchStageId.Engine, EnginePresetId.Engine02, out ResearchDesignEntryData data);
-            ResearchDesignEntryData updated = session.Model.CreateDesignEntry(data.StageId, data.SelectedEnginePresetId, data.InstalledEngineCounts, 80, TestVisibility.Public, data.LaunchCostPaid);
+            ResearchActionResult result = session.TryEnterDesign(LaunchMissionId.StaticFire, EnginePresetId.Engine02, out ResearchDesignEntryData data);
+            ResearchDesignEntryData updated = session.Model.CreateDesignEntry(data.MissionId, data.SelectedEnginePresetId, data.InstalledEngineCounts, 80, TestVisibility.Public, data.LaunchCostPaid);
             session.UpdatePendingDesignEntry(updated);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
@@ -599,7 +701,7 @@ namespace Border.Research.Tests
         public void FlowSession_CommitPendingDesignLaunch_ClearsPendingAndStoresLaunchResult()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            session.TryEnterDesign(LaunchStageId.Engine, EnginePresetId.Engine01, out _);
+            session.TryEnterDesign(LaunchMissionId.StaticFire, EnginePresetId.Engine01, out _);
 
             ResearchActionResult result = session.CommitPendingDesignLaunch(out ResearchLaunchResultData launchResult);
 
@@ -610,7 +712,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void OperationUI_InitialRender_ShowsOnlyFirstEngineAndHidesLaunchTargets()
+        public void OperationUI_InitialRender_ShowsFirstEngineWithoutExtraMissionDetails()
         {
             var host = new GameObject("Research UI Test Host");
 
@@ -623,8 +725,8 @@ namespace Border.Research.Tests
                 Assert.That(FindButton(host.transform, "EngineCard_Engine01").gameObject.activeSelf, Is.True);
                 Assert.That(FindButton(host.transform, "EngineCard_Engine10").gameObject.activeSelf, Is.False);
                 Assert.That(FindButton(host.transform, "CreateEnginePresetButton").interactable, Is.True);
-                Transform launchTargetColumn = FindTransform(host.transform, "LaunchTargetColumn");
-                Assert.That(launchTargetColumn == null || launchTargetColumn.gameObject.activeInHierarchy, Is.False);
+                foreach (string name in new[] { "SelectedMissionText", "SelectedRequirementText", "RiskText", "StatInsightText" })
+                    Assert.That(FindTransform(host.transform, name), Is.Null, name);
             }
             finally
             {
@@ -659,7 +761,7 @@ namespace Border.Research.Tests
         {
             var host = new GameObject("Research UI Test Host");
             Button engineTemplate = CreateCardTemplate("Engine Card Template", false);
-            Button launchTemplate = CreateCardTemplate("Launch Target Card Template", true);
+            Button launchTemplate = CreateCardTemplate("Mission Card Template", true);
 
             try
             {
@@ -668,7 +770,7 @@ namespace Border.Research.Tests
                 controller.InitializeForTests();
 
                 Assert.That(FindTransform(FindButton(host.transform, "EngineCard_Engine01").transform, "PrefabMarker"), Is.Not.Null);
-                Assert.That(FindTransform(host.transform, "LaunchTargetCard_Engine"), Is.Null);
+                Assert.That(FindTransform(host.transform, "MissionCard_StaticFire"), Is.Null);
             }
             finally
             {
@@ -704,8 +806,7 @@ namespace Border.Research.Tests
                 Assert.That(GetText(FindText(host.transform, "SelectedEngineText")), Does.Not.Contain("Lv."));
                 Assert.That(GetText(FindText(host.transform, "SelectedEngineText")), Does.Not.Contain("시험 최고"));
                 Assert.That(GetText(FindText(FindButton(host.transform, "EngineCard_Engine01").transform, "Detail")), Does.Not.Contain("최고"));
-                Transform requirementText = FindTransform(host.transform, "SelectedRequirementText");
-                Assert.That(requirementText == null || !requirementText.gameObject.activeInHierarchy, Is.True);
+                Assert.That(FindTransform(host.transform, "SelectedRequirementText"), Is.Null);
             }
             finally
             {
@@ -740,7 +841,8 @@ namespace Border.Research.Tests
                 controller.CompleteDesignTransitionForTests();
 
                 Assert.That(controller.IsTransitioningToDesignForTests(), Is.False);
-                Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.ResearchScreenName));
+                Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.DesignScreenName));
+                Assert.That(controller.GetActiveDesignControllerForTests(), Is.Not.Null);
             }
             finally
             {
@@ -771,6 +873,8 @@ namespace Border.Research.Tests
                 controller.CompleteDesignTransitionForTests();
 
                 Assert.That(controller.IsTransitioningToDesignForTests(), Is.False);
+                Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.DesignScreenName));
+                Assert.That(controller.GetActiveDesignControllerForTests(), Is.Not.Null);
             }
             finally
             {
@@ -801,7 +905,7 @@ namespace Border.Research.Tests
         public void DesignScreenController_ReturnToResearch_ClearsOnlyPendingData()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            session.TryEnterDesign(LaunchStageId.Engine, EnginePresetId.Engine01, out _);
+            session.TryEnterDesign(LaunchMissionId.StaticFire, EnginePresetId.Engine01, out _);
             int funds = session.Model.Funds;
             int remainingTurns = session.Model.RemainingTurns;
             bool returned = false;
@@ -830,7 +934,7 @@ namespace Border.Research.Tests
         public void DesignScreenController_LaunchCommitsResultAndRequestsResearchReturn()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            session.TryEnterDesign(LaunchStageId.Engine, EnginePresetId.Engine01, out _);
+            session.TryEnterDesign(LaunchMissionId.StaticFire, EnginePresetId.Engine01, out _);
             int remainingTurns = session.Model.RemainingTurns;
             bool returned = false;
             var host = new GameObject("Design UI Test Host");
@@ -851,6 +955,52 @@ namespace Border.Research.Tests
                 Assert.That(session.LastLaunchResult.Roll, Is.EqualTo(launchResult.Roll));
                 Assert.That(session.Model.RemainingTurns, Is.EqualTo(remainingTurns - 1));
                 Assert.That(session.Model.GetEnginePreset(EnginePresetId.Engine01).AttemptCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void ResultReportController_CloseButtonInvokesCallback()
+        {
+            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
+            session.TryEnterDesign(LaunchMissionId.StaticFire, EnginePresetId.Engine01, out _);
+            session.CommitPendingDesignLaunch(out ResearchLaunchResultData launchResult);
+            var host = new GameObject("Result Report Test Host");
+            bool closed = false;
+
+            try
+            {
+                ResearchResultReportController controller = host.AddComponent<ResearchResultReportController>();
+                controller.Initialize(session, launchResult, () => closed = true);
+
+                FindButton(host.transform, "CloseButton").onClick.Invoke();
+
+                Assert.That(closed, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void EndingController_RestartButtonInvokesCallback()
+        {
+            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
+            var host = new GameObject("Ending Test Host");
+            bool restarted = false;
+
+            try
+            {
+                ResearchEndingController controller = host.AddComponent<ResearchEndingController>();
+                controller.Initialize(session, () => restarted = true);
+
+                FindButton(host.transform, "RestartButton").onClick.Invoke();
+
+                Assert.That(restarted, Is.True);
             }
             finally
             {

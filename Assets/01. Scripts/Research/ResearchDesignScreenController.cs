@@ -16,6 +16,7 @@ namespace Border.Research
 
         private ResearchFlowSession session;
         private Action returnToResearchCallback;
+        private Action<ResearchLaunchResultData> launchCommittedCallback;
         private bool initialized;
         private EnginePresetId selectedEnginePreset;
         private int[] installedEngineCounts;
@@ -36,7 +37,7 @@ namespace Border.Research
 
         public void InitializeForTests()
         {
-            Initialize(ResearchFlowSession.GetOrCreate(), null);
+            Initialize(ResearchFlowSession.GetOrCreate(), null, null);
         }
 
         public void ConfigurePresetButtonPrefabForTests(Button enginePresetButtonTemplate)
@@ -51,6 +52,11 @@ namespace Border.Research
 
         public void Initialize(ResearchFlowSession activeSession, Action onReturnToResearch)
         {
+            Initialize(activeSession, onReturnToResearch, null);
+        }
+
+        public void Initialize(ResearchFlowSession activeSession, Action onReturnToResearch, Action<ResearchLaunchResultData> onLaunchCommitted)
+        {
             if (initialized)
             {
                 return;
@@ -58,6 +64,7 @@ namespace Border.Research
 
             session = activeSession ?? ResearchFlowSession.GetOrCreate();
             returnToResearchCallback = onReturnToResearch;
+            launchCommittedCallback = onLaunchCommitted;
             if (!BuildInterface())
             {
                 return;
@@ -230,18 +237,18 @@ namespace Border.Research
                 return;
             }
 
-            LaunchStageId stageId = session.PendingDesignEntry.StageId;
+            LaunchMissionId MissionId = session.PendingDesignEntry.MissionId;
             bool launchCostPaid = session.PendingDesignEntry.LaunchCostPaid;
             ClearLockedEngineCounts(installedEngineCounts);
-            ResearchDesignEntryData data = session.Model.CreateDesignEntry(stageId, selectedEnginePreset, installedEngineCounts, designFit, visibility, launchCostPaid);
+            ResearchDesignEntryData data = session.Model.CreateDesignEntry(MissionId, selectedEnginePreset, installedEngineCounts, designFit, visibility, launchCostPaid);
             session.UpdatePendingDesignEntry(data);
         }
 
         private void ChangeInstalledEngineCount(int delta)
         {
-            if (session.HasPendingDesignEntry && session.PendingDesignEntry.StageId == LaunchStageId.Engine)
+            if (session.HasPendingDesignEntry && session.PendingDesignEntry.MissionId == LaunchMissionId.StaticFire)
             {
-                statusText.text = "초기 목표는 정적 검증입니다. 설치 엔진을 쓰지 않습니다.";
+                statusText.text = "정적 연소 시험은 선택 엔진만 검증합니다. 설치 엔진을 쓰지 않습니다.";
                 return;
             }
 
@@ -266,7 +273,7 @@ namespace Border.Research
 
         private void SetVisibility(TestVisibility nextVisibility)
         {
-            if (session.HasPendingDesignEntry && session.PendingDesignEntry.StageId == LaunchStageId.Moon)
+            if (session.HasPendingDesignEntry && session.PendingDesignEntry.MissionId == LaunchMissionId.LowPowerZoneHold)
             {
                 visibility = TestVisibility.FinalMission;
             }
@@ -288,7 +295,7 @@ namespace Border.Research
 
             ResearchDesignEntryData data = session.PendingDesignEntry;
             ResearchPrototypeModel model = session.Model;
-            LaunchStageConfig stageConfig = ResearchPrototypeModel.GetStageConfig(data.StageId);
+            LaunchMissionConfig missionConfig = model.GetConfiguredMissionConfig(data.MissionId);
             EnginePresetConfig engineConfig = ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId);
             int successChance = model.CalculateSuccessChance(data);
             int partialChance = Math.Min(15, 95 - successChance);
@@ -296,10 +303,10 @@ namespace Border.Research
             int remainingCost = data.ReservedInstallCost + (data.LaunchCostPaid ? 0 : data.LaunchCost);
             RefreshPresetButtons(model);
 
-            headerText.text = $"{stageConfig.DisplayName} 설계";
+            headerText.text = $"{missionConfig.DisplayName} 설계";
             designDataText.text = $"날짜: {data.Year} Q{data.Quarter} / 맵 시드: {data.MapSeed} / 목표: {data.TargetPathId}\n"
                 + $"선택 프리셋: {engineConfig.DisplayName} / 완성도 {data.SelectedEngineCompletion} / 성능 {data.SelectedEngineScore}\n"
-                + $"설계 적합도: {data.DesignFit} ({ResearchPrototypeModel.CalculateDesignFitModifier(data.DesignFit):+#;-#;0}%p) / {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)} ({ResearchPrototypeModel.GetVisibilitySuccessModifier(data.Visibility):+#;-#;0}%p)\n"
+                + $"설계 적합도: {data.DesignFit} ({ResearchPrototypeModel.CalculateDesignFitModifier(data.DesignFit):+#;-#;0}%p) / {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)} ({model.GetConfiguredVisibilitySuccessModifier(data.Visibility):+#;-#;0}%p)\n"
                 + $"성공 {successChance}% / 부분 {partialChance}% / 실패 {failureChance}%";
             installedEngineText.text = $"설치 엔진: {FormatInstalledEngines(data)}\n"
                 + $"설치 엔진 점수 {data.InstalledEngineScore} / {(data.LaunchCostPaid ? "지불한" : "필요")} 예산 {data.LaunchCost} / 남은 설치비 {data.ReservedInstallCost}";
@@ -309,7 +316,7 @@ namespace Border.Research
             launchButtonText.text = $"발사\n남은 비용 {remainingCost} / 1분기";
             launchButton.interactable = model.Funds >= remainingCost && !model.DeadlineReached;
 
-            bool finalMission = data.StageId == LaunchStageId.Moon;
+            bool finalMission = data.MissionId == LaunchMissionId.LowPowerZoneHold;
             publicButton.interactable = !finalMission;
             privateButton.interactable = !finalMission;
         }
@@ -348,7 +355,14 @@ namespace Border.Research
             {
                 RequestedResearchReturn = true;
                 statusText.text = FormatLaunchResult(result);
-                returnToResearchCallback?.Invoke();
+                if (launchCommittedCallback != null)
+                {
+                    launchCommittedCallback.Invoke(result);
+                }
+                else
+                {
+                    returnToResearchCallback?.Invoke();
+                }
                 return actionResult;
             }
 
@@ -358,7 +372,7 @@ namespace Border.Research
 
         private static string FormatInstalledEngines(ResearchDesignEntryData data)
         {
-            if (data.StageId == LaunchStageId.Engine)
+            if (data.MissionId == LaunchMissionId.StaticFire)
             {
                 return "정적 시험대";
             }
@@ -381,12 +395,12 @@ namespace Border.Research
 
         private static string FormatLaunchResult(ResearchLaunchResultData result)
         {
-            string ending = result.MoonMissionWon
-                ? "달 착륙 성공"
+            string ending = result.FinalMissionWon
+                ? "최종 미션 성공"
                 : result.DeadlineMissed
                     ? "마감 실패"
                     : "연구 화면 복귀";
-            return $"{result.StageId} 발사 결과 {result.Grade}. 성공 {result.SuccessChance}%, 부분 {result.PartialChance}%, 실패 {result.FailureChance}%, 굴림 {result.Roll}. {ending}.";
+            return $"{result.MissionId} 발사 결과 {result.Grade}. 성공 {result.SuccessChance}%, 부분 {result.PartialChance}%, 실패 {result.FailureChance}%, 굴림 {result.Roll}. {ending}.";
         }
 
         private static string GetLaunchFailureText(ResearchActionResult actionResult)
@@ -400,7 +414,7 @@ namespace Border.Research
                 case ResearchActionResult.DeadlineReached:
                     return "마감에 도달해 발사할 수 없습니다.";
                 case ResearchActionResult.RequirementNotMet:
-                    return "초기 목표 조건이 부족합니다.";
+                    return "미션 조건이 부족합니다.";
                 default:
                     return "현재 상태에서는 발사할 수 없습니다.";
             }

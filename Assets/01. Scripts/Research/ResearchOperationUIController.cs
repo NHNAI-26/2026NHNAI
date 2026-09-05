@@ -32,7 +32,7 @@ namespace Border.Research
         private ResearchPrototypeModel model;
         private EnginePresetId selectedEnginePreset = EnginePresetId.Engine01;
         private EngineStatId selectedStat = EngineStatId.FuelCapacity;
-        private LaunchStageId selectedStage = LaunchStageId.Engine;
+        private LaunchMissionId selectedMission = LaunchMissionId.StaticFire;
         private bool initialized;
         private RectTransform canvasTransform;
         private ResearchOperationTransitionAnimator operationTransitionAnimator;
@@ -49,8 +49,6 @@ namespace Border.Research
         private TMP_Text fundsText;
         private TMP_Text quarterlyFundingText;
         private TMP_Text selectedEngineText;
-        private TMP_Text selectedStageText;
-        private TMP_Text selectedRequirementText;
         private TMP_Text designEntryText;
         private TMP_Text statusText;
         private Button normalResearchButton;
@@ -65,7 +63,7 @@ namespace Border.Research
         private TMP_Text waitButtonText;
 
         public ResearchPrototypeModel Model => model;
-        public LaunchStageId SelectedStage => selectedStage;
+        public LaunchMissionId SelectedMission => selectedMission;
         public EnginePresetId SelectedEnginePreset => selectedEnginePreset;
         public string RequestedScreenName { get; private set; } = ResearchFlowSession.ResearchScreenName;
 
@@ -227,19 +225,11 @@ namespace Border.Research
 
             RectTransform engineColumn = FindChildRectTransform(canvasTransform, "EnginePresetCards")
                 ?? FindChildRectTransform(canvasTransform, "EnginePresetColumn");
-            RectTransform launchTargetColumn = FindChildRectTransform(canvasTransform, "LaunchTargetColumn");
-            if (launchTargetColumn != null)
-            {
-                launchTargetColumn.gameObject.SetActive(false);
-            }
-
             dateText = FindRequiredText(canvasTransform, "Date");
             remainingTurnsText = FindRequiredText(canvasTransform, "RemainingTurns");
             fundsText = FindRequiredText(canvasTransform, "Funds");
             quarterlyFundingText = FindRequiredText(canvasTransform, "QuarterlyFunding");
             selectedEngineText = FindRequiredText(canvasTransform, "SelectedEngineText");
-            selectedStageText = FindRequiredText(canvasTransform, "SelectedStageText");
-            selectedRequirementText = FindRequiredText(canvasTransform, "SelectedRequirementText");
             designEntryText = FindRequiredText(canvasTransform, "DesignEntryText");
             statusText = FindRequiredText(canvasTransform, "StatusText");
             normalResearchButton = FindRequiredButton(canvasTransform, "NormalResearchButton");
@@ -282,16 +272,6 @@ namespace Border.Research
             createEnginePresetButtonText = createEnginePresetButton.GetComponentInChildren<TMP_Text>(true);
             enterDesignButtonText = enterDesignButton.GetComponentInChildren<TMP_Text>(true);
             waitButtonText = waitButton.GetComponentInChildren<TMP_Text>(true);
-            if (selectedStageText != null)
-            {
-                selectedStageText.gameObject.SetActive(false);
-            }
-
-            if (selectedRequirementText != null)
-            {
-                selectedRequirementText.gameObject.SetActive(false);
-            }
-
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
                 engineCards[(int)config.Id] = CreateEngineCard(engineColumn, config);
@@ -306,7 +286,7 @@ namespace Border.Research
             {
                 session.ResetResearch();
                 selectedEnginePreset = EnginePresetId.Engine01;
-                selectedStage = model.GetCurrentLaunchTarget();
+                selectedMission = model.GetCurrentMission();
                 Refresh();
             });
             fuelCapacityButton.onClick.AddListener(() => SelectStat(EngineStatId.FuelCapacity));
@@ -429,8 +409,8 @@ namespace Border.Research
                 return;
             }
 
-            selectedStage = model.GetCurrentLaunchTarget();
-            if (session.TryEnterDesign(selectedStage, selectedEnginePreset, out _) == ResearchActionResult.Success)
+            selectedMission = model.GetCurrentMission();
+            if (session.TryEnterDesign(selectedMission, selectedEnginePreset, out _) == ResearchActionResult.Success)
             {
                 BeginDesignTransition();
                 return;
@@ -454,7 +434,7 @@ namespace Border.Research
         private void Refresh()
         {
             EnsureSelectedEnginePresetUnlocked();
-            selectedStage = model.GetCurrentLaunchTarget();
+            selectedMission = model.GetCurrentMission();
             ShowResearchLab();
             PlayResearchCameraDrift();
             ShowEnginePreview();
@@ -470,26 +450,25 @@ namespace Border.Research
 
             EnginePresetConfig selectedEngineConfig = ResearchPrototypeModel.GetEnginePresetConfig(selectedEnginePreset);
             EnginePresetState selectedEngine = model.GetEnginePreset(selectedEnginePreset);
-            LaunchStageConfig selectedStageConfig = ResearchPrototypeModel.GetStageConfig(selectedStage);
-            LaunchStageState selectedStageState = model.GetStage(selectedStage);
+            LaunchMissionConfig selectedMissionConfig = model.GetConfiguredMissionConfig(selectedMission);
+            LaunchMissionState selectedMissionState = model.GetMission(selectedMission);
 
             selectedEngineText.text = $"{selectedEngineConfig.DisplayName}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
                 + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {selectedEngineConfig.InstallCost}\n"
                 + $"연료량 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 최대 출력 {selectedEngine.MaxOutput} / 점화 신뢰도 {selectedEngine.IgnitionReliability}\n"
                 + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
-
-            normalResearchButtonText.text = $"일반 연구\n{selectedEngineConfig.NormalResearchCost} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
-            focusedResearchButtonText.text = $"집중 연구\n{selectedEngineConfig.FocusedResearchCost} / 완성도 +{ResearchPrototypeModel.ResearchCompletionGain}";
+            normalResearchButtonText.text = $"일반 연구\n{model.ConfiguredEngineNormalResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
+            focusedResearchButtonText.text = $"집중 연구\n{model.ConfiguredEngineFocusedResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
             createEnginePresetButtonText.text = model.ActiveEnginePresetCount >= ResearchPrototypeModel.MaxEnginePresetCount
                 ? "새로운 엔진 개발\n최대 10개"
-                : $"새로운 엔진 개발\n현재 {model.ActiveEnginePresetCount}/{ResearchPrototypeModel.MaxEnginePresetCount}";
-            enterDesignButtonText.text = $"설계 진입\n예산 {selectedStageConfig.LaunchCost}";
+                : $"새로운 엔진 개발\n{model.ConfiguredNewEnginePresetCost} / 시간 0분기";
+            enterDesignButtonText.text = $"설계 진입\n예산 {selectedMissionConfig.LaunchCost}";
             waitButtonText.text = $"1분기 대기   예산 0 / 분기 예산 +{model.QuarterlyFunding}";
 
-            normalResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.NormalResearchCost);
-            focusedResearchButton.interactable = CanResearch(selectedEngine, selectedEngineConfig.FocusedResearchCost);
+            normalResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineNormalResearchCost);
+            focusedResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineFocusedResearchCost);
             createEnginePresetButton.interactable = !model.DeadlineReached && model.ActiveEnginePresetCount < ResearchPrototypeModel.MaxEnginePresetCount;
-            enterDesignButton.interactable = CanEnterDesign(selectedStageState, selectedStageConfig, selectedEngine);
+            enterDesignButton.interactable = CanEnterDesign(selectedMissionState, selectedMissionConfig, selectedEngine);
             waitButton.interactable = !model.DeadlineReached;
             if (isTransitioningToDesign)
             {
@@ -533,11 +512,11 @@ namespace Border.Research
                 && model.Funds >= cost;
         }
 
-        private bool CanEnterDesign(LaunchStageState stage, LaunchStageConfig config, EnginePresetState engine)
+        private bool CanEnterDesign(LaunchMissionState mission, LaunchMissionConfig config, EnginePresetState engine)
         {
             return !model.DeadlineReached
                 && engine.Unlocked
-                && stage.Unlocked
+                && mission.Unlocked
                 && model.Funds >= config.LaunchCost;
         }
 
@@ -553,13 +532,13 @@ namespace Border.Research
 
         private string FormatDesignEntry(ResearchDesignEntryData data)
         {
-            return $"{data.StageId} / {ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId).DisplayName} / {data.Year} Q{data.Quarter}\n"
+            return $"{data.MissionId} / {ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId).DisplayName} / {data.Year} Q{data.Quarter}\n"
                 + $"지불한 예산 {data.LaunchCost}, 예약 설치비 {data.ReservedInstallCost}, 설계 적합도 {data.DesignFit}, {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)}";
         }
 
         private static string FormatLaunchResult(ResearchLaunchResultData result)
         {
-            return $"{result.StageId} 결과 {result.Grade} / 성공 {result.SuccessChance}% / 굴림 {result.Roll}\n"
+            return $"{result.MissionId} 결과 {result.Grade} / 성공 {result.SuccessChance}% / 굴림 {result.Roll}\n"
                 + $"총 비용 {result.TotalCost}, 지원금 +{result.ImmediateFunding}, 분기 예산 {result.QuarterlyFundingDelta:+#;-#;0}";
         }
 
@@ -586,18 +565,10 @@ namespace Border.Research
                 return;
             }
 
-            RequestedScreenName = ResearchFlowSession.ResearchScreenName;
-            isTransitioningToDesign = false;
-            if (canvasTransform != null)
-            {
-                canvasTransform.gameObject.SetActive(true);
-            }
-
-            ShowResearchLab();
-            PlayResearchCameraDrift();
-            Refresh();
-            statusText.text = "설계 단계 진입 실패. 시뮬레이션 설계 호스트를 찾을 수 없습니다.";
-            PlayResearchEntryAnimation();
+            var host = new GameObject("Research Design Screen Controller");
+            host.transform.SetParent(transform, false);
+            activeDesignController = host.AddComponent<ResearchDesignScreenController>();
+            activeDesignController.Initialize(session, ReturnFromDesignScreen, ShowResultReport);
         }
 
         private void ReturnFromDesignScreen()
@@ -623,6 +594,53 @@ namespace Border.Research
             }
         }
 
+        private void ShowResultReport(ResearchLaunchResultData result)
+        {
+            if (activeDesignController != null)
+            {
+                DestroyUnityObject(activeDesignController.gameObject);
+                activeDesignController = null;
+            }
+
+            var host = new GameObject("Research Result Report Controller");
+            host.transform.SetParent(transform, false);
+            ResearchResultReportController report = host.AddComponent<ResearchResultReportController>();
+            report.Initialize(session, result, () =>
+            {
+                DestroyUnityObject(host);
+                if (model.HasGameEnded)
+                {
+                    ShowEndingScreen();
+                    return;
+                }
+
+                ReturnFromDesignScreen();
+            });
+        }
+
+        private void ShowEndingScreen()
+        {
+            RequestedScreenName = "Ending";
+            if (canvasTransform != null)
+            {
+                canvasTransform.gameObject.SetActive(false);
+            }
+
+            HideEnginePreview();
+            HideResearchLab();
+            var host = new GameObject("Research Ending Controller");
+            host.transform.SetParent(transform, false);
+            ResearchEndingController ending = host.AddComponent<ResearchEndingController>();
+            ending.Initialize(session, () =>
+            {
+                DestroyUnityObject(host);
+                session.ResetResearch();
+                selectedEnginePreset = EnginePresetId.Engine01;
+                selectedMission = model.GetCurrentMission();
+                ReturnFromDesignScreen();
+            });
+        }
+
         public ResearchDesignScreenController GetActiveDesignControllerForTests()
         {
             return activeDesignController;
@@ -644,10 +662,10 @@ namespace Border.Research
             Initialize();
             session.ResetResearch();
             selectedEnginePreset = EnginePresetId.Engine01;
-            selectedStage = model.GetCurrentLaunchTarget();
-            model.PrepareDebugDesignEntryState(selectedStage, selectedEnginePreset);
+            selectedMission = model.GetCurrentMission();
+            model.PrepareDebugDesignEntryState(selectedMission, selectedEnginePreset);
 
-            if (session.TryEnterDesign(selectedStage, selectedEnginePreset, out _) == ResearchActionResult.Success)
+            if (session.TryEnterDesign(selectedMission, selectedEnginePreset, out _) == ResearchActionResult.Success)
             {
                 BeginDesignTransition();
             }
