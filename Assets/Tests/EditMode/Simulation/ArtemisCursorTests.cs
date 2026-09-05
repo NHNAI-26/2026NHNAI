@@ -82,6 +82,18 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void MissingPointerData_WithCachedEventSystem_RebuildsDataAndStillHovers()
+        {
+            Graphic("Button").AddComponent<Button>();
+            Assert.That(Hovers(), Is.True);
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(ArtemisCursor).GetField("pointerData", flags).SetValue(cursor, null);
+
+            Assert.That(Hovers(), Is.True);
+            Assert.That(typeof(ArtemisCursor).GetField("pointerData", flags).GetValue(cursor), Is.Not.Null);
+        }
+
+        [Test]
         public void DisabledCanvasGroup_DoesNotHoverButton()
         {
             GameObject panel = Graphic("Group");

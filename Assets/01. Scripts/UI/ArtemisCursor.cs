@@ -176,7 +176,8 @@ namespace Border.UI
             EventSystem eventSystem = EventSystem.current;
             if (eventSystem == null) return false;
 
-            if (pointerEventSystem != eventSystem)
+            // Script reload can preserve the EventSystem reference without the managed pointer data.
+            if (pointerData == null || pointerEventSystem != eventSystem)
             {
                 pointerEventSystem = eventSystem;
                 pointerData = new PointerEventData(eventSystem);
