@@ -111,13 +111,14 @@ namespace Simulation
                 EnginePresetId presetId = (EnginePresetId)i;
                 EnginePresetState researchState = model.GetEnginePreset(presetId);
                 EngineStatsSO sourcePreset = GetSourcePreset(sourceLibrary, i);
-                runtimeSlots.Add(BuildRuntimePreset(i, sourcePreset, researchState));
+                runtimeSlots.Add(BuildRuntimePreset(i, sourcePreset, researchState, model.ConfiguredEngineInstallCost));
             }
 
             return EnginePresetLibrarySO.CreateRuntime(runtimeSlots);
         }
 
-        public static EngineStatsSO BuildRuntimePreset(int presetIndex, EngineStatsSO sourcePreset, EnginePresetState researchState)
+        public static EngineStatsSO BuildRuntimePreset(int presetIndex, EngineStatsSO sourcePreset, EnginePresetState researchState,
+            int baseInstallCost = ResearchPrototypeModel.EngineInstallCost)
         {
             float scaleBase = Mathf.Max(1f, ResearchPrototypeModel.InitialEngineStat);
             float fuelScale = researchState.FuelCapacity / scaleBase;
@@ -131,7 +132,7 @@ namespace Simulation
             return EngineStatsSO.CreateRuntimeCopy(
                 presetIndex,
                 sourcePreset,
-                ResearchPrototypeModel.EngineInstallCost,
+                ResearchPrototypeModel.CalculateEngineInstallCost(researchState, baseInstallCost),
                 baseFuel * fuelScale,
                 baseCooling * coolingScale,
                 baseOutput * outputScale,
