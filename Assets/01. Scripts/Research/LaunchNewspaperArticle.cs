@@ -102,7 +102,8 @@ namespace Border.Research
 
         private static string CreateEffects(ResearchLaunchResultData result)
         {
-            string baseEffects = $"기본 보상: 즉시 지원금 {FormatSigned(result.ImmediateFunding)} / 분기 연구비 {FormatSigned(result.QuarterlyFundingDelta)}";
+            string label = result.Visibility == TestVisibility.FinalMission ? "기본 보상" : "테스트 정산";
+            string baseEffects = $"{label}: 즉시 지원금 {FormatSigned(result.ImmediateFunding)} / 분기 연구비 {FormatSigned(result.QuarterlyFundingDelta)}";
             if (result.OutcomeEvent == null || string.IsNullOrWhiteSpace(result.OutcomeEvent.EffectsText))
             {
                 return baseEffects;
