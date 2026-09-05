@@ -1043,6 +1043,7 @@ MonoBehaviour:
   editionText: {fileID: 8209609880249309807}
   articleText: {fileID: 3071269840717012279}
   effectsText: {fileID: 1729202537236902902}
+  effectsBackground: {fileID: 85238357669843362}
   photoImage: {fileID: 8636452237458089000}
   photoFallbackText: {fileID: 1721507307284246027}
   showEvent: {fileID: 0}

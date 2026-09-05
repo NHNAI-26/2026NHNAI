@@ -237,6 +237,57 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void ResultReport_MailUsesEmailPaneLayoutAndColorPhoto()
+        {
+            ResearchResultReportController report = CreateReport();
+            ResearchLaunchResultData result = CreateResult(null, visibility: TestVisibility.Private);
+
+            report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
+
+            TMP_Text headline = FindText(report.gameObject, "Headline");
+            TMP_Text body = FindText(report.gameObject, "Body");
+            TMP_Text effects = FindText(report.gameObject, "Effects");
+            TMP_Text edition = FindText(report.gameObject, "Edition");
+            RawImage photo = report.GetComponentsInChildren<RawImage>(true).Single(item => item.name == "Photo");
+            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
+            RectTransform effectsBackground = GetPrivateField<RectTransform>(newspaper, "effectsBackground");
+
+            Assert.That(headline.rectTransform.anchorMin.x, Is.GreaterThan(0.3f));
+            Assert.That(headline.rectTransform.anchorMax.y, Is.LessThan(0.82f));
+            Assert.That(headline.fontSizeMax, Is.LessThanOrEqualTo(16f));
+            Assert.That(edition.rectTransform.anchorMin.x, Is.GreaterThan(0.3f));
+            Assert.That(body.rectTransform.anchorMin.x, Is.GreaterThan(0.3f));
+            Assert.That(body.rectTransform.anchorMax.y, Is.LessThan(0.66f));
+            Assert.That(photo.rectTransform.anchorMin.x, Is.GreaterThan(0.3f));
+            Assert.That(photo.rectTransform.anchorMax.y, Is.LessThan(0.44f));
+            Assert.That(effectsBackground.anchorMin.x, Is.GreaterThan(0.3f));
+            Assert.That(effectsBackground.anchorMax.y, Is.LessThan(0.28f));
+            Assert.That(effects.rectTransform.anchorMin.x, Is.GreaterThan(0.3f));
+            Assert.That(effects.rectTransform.anchorMax.y, Is.LessThan(0.26f));
+            Assert.That(GetRawGraphicMaterial(photo), Is.Null);
+        }
+
+        [Test]
+        public void ResultReport_NewspaperRestoresSavedLayoutAndPrintedPhoto()
+        {
+            ResearchResultReportController report = CreateReport();
+            ResearchLaunchResultData privateResult = CreateResult(null, visibility: TestVisibility.Private);
+            ResearchLaunchResultData publicResult = CreateResult(null, visibility: TestVisibility.Public);
+
+            report.Initialize(ResearchFlowSession.GetOrCreate(), privateResult, null);
+            report.Initialize(ResearchFlowSession.GetOrCreate(), publicResult, null);
+
+            TMP_Text headline = FindText(report.gameObject, "Headline");
+            RawImage photo = report.GetComponentsInChildren<RawImage>(true).Single(item => item.name == "Photo");
+
+            Assert.That(headline.rectTransform.anchorMin.x, Is.EqualTo(0.24772727f).Within(0.0001f));
+            Assert.That(headline.rectTransform.anchorMax.y, Is.EqualTo(0.9446773f).Within(0.0001f));
+            Assert.That(headline.fontSizeMax, Is.EqualTo(28f).Within(0.0001f));
+            Assert.That(photo.rectTransform.anchorMin.x, Is.EqualTo(0.25f).Within(0.0001f));
+            Assert.That(GetRawGraphicMaterial(photo), Is.Not.Null);
+        }
+
+        [Test]
         public void ResultReport_NewspaperTextsDoNotTruncateOnSavedPrefab()
         {
             ResearchResultReportController report = CreateReport();
@@ -483,6 +534,20 @@ namespace Border.Research.Tests
             FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null);
             field.SetValue(target, value);
+        }
+
+        private static T GetPrivateField<T>(object target, string fieldName)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            return (T)field.GetValue(target);
+        }
+
+        private static Material GetRawGraphicMaterial(Graphic graphic)
+        {
+            FieldInfo field = typeof(Graphic).GetField("m_Material", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            return (Material)field.GetValue(graphic);
         }
     }
 }
