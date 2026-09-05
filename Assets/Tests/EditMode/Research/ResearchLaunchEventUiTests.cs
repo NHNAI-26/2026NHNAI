@@ -42,14 +42,17 @@ namespace Border.Research.Tests
         {
             var expected = new Dictionary<LaunchOutcomeEventId, string>
             {
-                { LaunchOutcomeEventId.SponsorBoost, "로켓이 뜨자, 예산도 떴다" },
-                { LaunchOutcomeEventId.CleanTelemetry, "비행은 끝났고, 연구는 앞당겨졌다" },
-                { LaunchOutcomeEventId.PublicPressure, "성공 확인, 다음 발사는 언제?" },
-                { LaunchOutcomeEventId.NearMissInspection, "땅에 남긴 흔적, 설계에 남길 교훈" },
-                { LaunchOutcomeEventId.RecoveredPayload, "못 뜬 로켓, 버리지 않은 장비" },
-                { LaunchOutcomeEventId.PadDamage, "발사는 끝났고, 수리비가 남았다" },
-                { LaunchOutcomeEventId.QuietLessons, "실패는 비공개, 교훈은 연구실로" },
-                { LaunchOutcomeEventId.MediaBacklash, "로켓은 멈추고, 여론은 들끓었다" },
+                { LaunchOutcomeEventId.SponsorBoost, "\"저건 됩니다\" 후원 기관, 뒤늦게 줄 섰다" },
+                { LaunchOutcomeEventId.CleanTelemetry, "연구진 \"이번엔 그래프가 우리 편\"" },
+                { LaunchOutcomeEventId.PublicPressure, "성공 축하합니다. 다음 건 언제죠?" },
+                { LaunchOutcomeEventId.NearMissInspection, "추락 현장서 뜻밖의 개선점 발견" },
+                { LaunchOutcomeEventId.RecoveredPayload, "이륙 실패, 장비 회수에는 성공" },
+                { LaunchOutcomeEventId.PadDamage, "발사는 짧았고, 견적서는 길었다" },
+                { LaunchOutcomeEventId.QuietLessons, "아무도 몰랐지만 연구팀은 알았다" },
+                { LaunchOutcomeEventId.MediaBacklash, "전 국민 앞에서 멈춘 로켓, 예산도 멈췄다" },
+                { LaunchOutcomeEventId.QuietBreakthrough, "공식 발표 없이 성능표만 좋아졌다" },
+                { LaunchOutcomeEventId.UsefulFailureData, "깨진 기록에서 멀쩡한 답 나왔다" },
+                { LaunchOutcomeEventId.Whistleblower, "관계자, \"비리 관계 있다\" 밝혀" },
                 { LaunchOutcomeEventId.FinalProof, "적게 태우고, 끝내 증명했다" },
             };
 
@@ -251,21 +254,27 @@ namespace Border.Research.Tests
             switch (id)
             {
                 case LaunchOutcomeEventId.SponsorBoost:
-                    return "후원 기관 추가 지원";
+                    return "돈 냄새를 맡은 사람들";
                 case LaunchOutcomeEventId.CleanTelemetry:
-                    return "깨끗한 비행 데이터";
+                    return "그래프가 우리 편";
                 case LaunchOutcomeEventId.PublicPressure:
-                    return "공개 성공 뒤 일정 압박";
+                    return "박수 뒤의 독촉장";
                 case LaunchOutcomeEventId.NearMissInspection:
-                    return "근접 사고 점검";
+                    return "추락 현장의 힌트";
                 case LaunchOutcomeEventId.RecoveredPayload:
-                    return "시험 장비 회수";
+                    return "못 뜬 덕분에 산 장비";
                 case LaunchOutcomeEventId.PadDamage:
-                    return "발사대 손상";
+                    return "수리비 착륙";
                 case LaunchOutcomeEventId.QuietLessons:
-                    return "조용한 실패 분석";
+                    return "조용히 망하고 조용히 배움";
                 case LaunchOutcomeEventId.MediaBacklash:
-                    return "공개 실패 역풍";
+                    return "공개 처형식";
+                case LaunchOutcomeEventId.QuietBreakthrough:
+                    return "닫힌 문 안의 정답";
+                case LaunchOutcomeEventId.UsefulFailureData:
+                    return "망한 김에 본 것";
+                case LaunchOutcomeEventId.Whistleblower:
+                    return "내부 고발자";
                 case LaunchOutcomeEventId.FinalProof:
                     return "최종 검증 인정";
                 default:
@@ -278,21 +287,27 @@ namespace Border.Research.Tests
             switch (id)
             {
                 case LaunchOutcomeEventId.SponsorBoost:
-                    return "공개 발사 성공을 본 후원 기관이 다음 시험 예산을 추가 지원했습니다.";
+                    return "공개 발사 뒤 후원 기관들이 뒤늦게 줄을 섰습니다. 기술 설명보다 예산 회의가 먼저 잡혔습니다.";
                 case LaunchOutcomeEventId.CleanTelemetry:
-                    return "성공한 비행의 기록으로 다음 엔진 개선 연구를 준비했습니다.";
+                    return "비행 기록이 보기 드물게 깨끗했습니다. 연구진은 실패 원인 대신 개선 목록을 적었습니다.";
                 case LaunchOutcomeEventId.PublicPressure:
-                    return "추가 지원과 함께 다음 시험 일정을 앞당겨 달라는 요청이 왔습니다.";
+                    return "성공 축하가 끝나기도 전에 다음 발사 일정을 묻는 연락이 왔습니다.";
                 case LaunchOutcomeEventId.NearMissInspection:
-                    return "지면 추락 기록을 분석하고 다음 설계 점검 비용을 지원합니다.";
+                    return "추락 지점에서 설계 결함 하나가 또렷하게 드러났습니다. 사고는 났지만 점검 방향은 잡혔습니다.";
                 case LaunchOutcomeEventId.RecoveredPayload:
-                    return "이륙하지 못한 시험 장비를 회수했습니다. 같은 미션에 다시 사용할 수 있습니다.";
+                    return "로켓은 뜨지 못했지만 장비는 멀쩡했습니다. 실패 현장에서 다음 시도 비용을 건졌습니다.";
                 case LaunchOutcomeEventId.PadDamage:
-                    return "지면 추락으로 시설과 엔진에 정비가 필요합니다.";
+                    return "발사는 짧았고 견적서는 길었습니다. 시설팀은 로켓보다 발사대를 먼저 봤습니다.";
                 case LaunchOutcomeEventId.QuietLessons:
-                    return "비공개 시험의 실패 기록을 엔진 개선에 반영했습니다.";
+                    return "밖은 몰랐고 연구실은 알았습니다. 체면은 지켰고 데이터는 남았습니다.";
                 case LaunchOutcomeEventId.MediaBacklash:
-                    return "공개 실패 소식에 후원 기관이 지원 규모를 줄였습니다.";
+                    return "실패 장면이 너무 잘 보였습니다. 후원 기관은 박수 대신 예산 검토표를 꺼냈습니다.";
+                case LaunchOutcomeEventId.QuietBreakthrough:
+                    return "공식 발표는 없었지만 성능표는 좋아졌습니다. 연구팀은 조용히 다음 설계를 고쳤습니다.";
+                case LaunchOutcomeEventId.UsefulFailureData:
+                    return "실패 순간에 평소엔 보이지 않던 흔들림이 잡혔습니다. 망했지만 빈손은 아니었습니다.";
+                case LaunchOutcomeEventId.Whistleblower:
+                    return "관계자가 비공개 실패 기록과 예산 처리에 \"비리 관계 있다\"고 주장했습니다. 후원 기관이 다음 분기 지원을 깎았습니다.";
                 case LaunchOutcomeEventId.FinalProof:
                     return "저전력 검증을 통과했습니다. 아르테미스 발사 체계가 최종 인정됐습니다.";
                 default:
@@ -320,6 +335,12 @@ namespace Border.Research.Tests
                     return "1번 엔진 완성도 +4\n1번 엔진 냉각 능력 +3";
                 case LaunchOutcomeEventId.MediaBacklash:
                     return "분기 연구비 -150\n다음 발사: 공개 성공 이벤트 연구비 -25% / 비공개 선택 시 소멸";
+                case LaunchOutcomeEventId.QuietBreakthrough:
+                    return "연구비 +75\n1번 엔진 완성도 +8\n1번 엔진 연료 탱크 용량 +2";
+                case LaunchOutcomeEventId.UsefulFailureData:
+                    return "1번 엔진 완성도 +2\n1번 엔진 연료 탱크 용량 +1";
+                case LaunchOutcomeEventId.Whistleblower:
+                    return "분기 연구비 -100";
                 case LaunchOutcomeEventId.FinalProof:
                     return "효율 검증 통과 · 최종 미션 성공\n1번 엔진 완성도 +10\n1번 엔진 연료 탱크 용량 +5";
                 default:
