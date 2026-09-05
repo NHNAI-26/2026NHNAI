@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -34,6 +34,8 @@ namespace Border.UI
         private void Update()
         {
             if (!WasEscapePressed()) return;
+            // The research part development panel closes on escape first; it stands down after one frame.
+            if (Border.Research.ResearchOperationUIController.IsPartDevelopmentOpen) return;
             if (paused) Resume();
             else Open();
         }
@@ -81,7 +83,7 @@ namespace Border.UI
 #endif
         }
 
-        private static bool WasEscapePressed()
+        internal static bool WasEscapePressed()
         {
             if (WasEscapePressedByInputSystem())
             {

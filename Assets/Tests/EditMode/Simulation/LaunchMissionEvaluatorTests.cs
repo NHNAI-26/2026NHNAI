@@ -202,6 +202,55 @@ namespace Simulation.Tests
                 Assert.That(evaluator.Step(1f, 3f + i * 0.5f, 0f, 0.5f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
         }
 
+        [TestCase(LaunchMissionId.LowAltitude, 3)]
+        [TestCase(LaunchMissionId.HighAltitude, 3)]
+        [TestCase(LaunchMissionId.TargetZone, 4)]
+        [TestCase(LaunchMissionId.ZoneHold, 5)]
+        [TestCase(LaunchMissionId.LowPowerZoneHold, 5)]
+        public void StageCount_CoversOnlyTheStagesTheMissionUses(LaunchMissionId mission, int expected)
+        {
+            Assert.That(new LaunchMissionEvaluator(mission).StageCount, Is.EqualTo(expected));
+            Assert.That(new LaunchMissionEvaluator(mission).StageIndex, Is.Zero, "발사 전에는 아무 단계도 끝나지 않았다.");
+        }
+
+        [Test]
+        public void StageIndex_AdvancesThroughIgnitionLiftoffAscentZoneAndHold()
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold);
+
+            evaluator.Step(0.1f, 0f, 0f, 10f, 0f, 0f);
+            Assert.That(evaluator.StageIndex, Is.EqualTo(1), "점화");
+            evaluator.Step(0.1f, 3f, 0f, 10f, 0f, 0f);
+            Assert.That(evaluator.StageIndex, Is.EqualTo(2), "이륙");
+            evaluator.Step(0.1f, 200f, 0f, 10f, 0f, 0f);
+            Assert.That(evaluator.StageIndex, Is.EqualTo(3), "상승");
+            evaluator.Step(0.1f, 200f, 100f, 60f, 0f, 0f);
+            Assert.That(evaluator.StageIndex, Is.EqualTo(4), "목표 구역 진입 — 속력이 커서 체류는 아직 아니다.");
+            evaluator.Step(0.1f, 200f, 100f, 10f, 0f, 0f);
+            Assert.That(evaluator.StageIndex, Is.EqualTo(5), "체류 시작");
+        }
+
+        [Test]
+        public void StageIndex_DoesNotFallBackWhenHoldBreaks()
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold);
+            evaluator.Step(0.1f, 200f, 100f, 10f, 0f, 0f);
+            Assert.That(evaluator.StageIndex, Is.EqualTo(5));
+
+            evaluator.Step(0.1f, 10f, 0f, 10f, 0f, 0f);
+            Assert.That(evaluator.HoldSeconds, Is.Zero, "체류 판정은 깨진다.");
+            Assert.That(evaluator.StageIndex, Is.EqualTo(5), "스테퍼는 어디까지 갔었는지를 남긴다.");
+        }
+
+        [Test]
+        public void StageIndex_StopsAtTheMissionsOwnStageCount()
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
+            evaluator.Step(0.1f, 200f, 100f, 10f, 0f, 0f);
+            Assert.That(evaluator.StageIndex, Is.EqualTo(2),
+                "고도 미션에는 목표 구역 단계가 없고 상승 기준은 300 m 다 — 이륙까지만 센다.");
+        }
+
         [Test]
         public void Success_IsStickyIncludingSelfDestruct()
         {

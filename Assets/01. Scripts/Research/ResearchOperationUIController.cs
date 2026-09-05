@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 using DG.Tweening;
 using TMPro;
@@ -12,6 +12,7 @@ namespace Border.Research
     public sealed class ResearchOperationUIController : MonoBehaviour
     {
         private const int EngineCount = ResearchPrototypeModel.MaxEnginePresetCount;
+        private const int StatCount = 4;
         private const string OperationScreenPrefabPath = "ResearchUI/ResearchOperationScreen";
         private const string EnginePresetCardPrefabPath = "ResearchUI/EnginePresetCard";
         private const float DesignTransitionDelaySeconds = 1f;
@@ -48,15 +49,24 @@ namespace Border.Research
         private Quaternion researchCameraBaseLocalRotation;
         private bool hasResearchCameraBaseLocalRotation;
         private bool isTransitioningToDesign;
+        private bool partDevelopmentOpen;
+        private bool focusedResearchSelected;
 
+        private readonly Button[] statButtons = new Button[StatCount];
+        private readonly TMP_Text[] statRowLabels = new TMP_Text[StatCount];
+        private readonly Slider[] statGauges = new Slider[StatCount];
+
+        private GameObject hubActionBar;
+        private GameObject enginePresetColumnRoot;
+        private GameObject detailColumnRoot;
         private TMP_Text dateText;
-        private TMP_Text remainingTurnsText;
         private TMP_Text fundsText;
         private TMP_Text quarterlyFundingText;
         private TMP_Text selectedEngineText;
         private Slider selectedEngineCompletion;
-        private TMP_Text designEntryText;
-        private TMP_Text statusText;
+        private Button partDevelopmentButton;
+        private TMP_Text partDevelopmentButtonText;
+        private Button startDevelopmentButton;
         private Button normalResearchButton;
         private TMP_Text normalResearchButtonText;
         private Button focusedResearchButton;
@@ -72,6 +82,9 @@ namespace Border.Research
         public LaunchMissionId SelectedMission => selectedMission;
         public EnginePresetId SelectedEnginePreset => selectedEnginePreset;
         public string RequestedScreenName { get; private set; } = ResearchFlowSession.ResearchScreenName;
+
+        /// <summary>Suppresses the pause menu while the part development panel owns the escape key.</summary>
+        public static bool IsPartDevelopmentOpen { get; private set; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void SpawnInMainScene()
@@ -118,6 +131,7 @@ namespace Border.Research
         private void OnDisable()
         {
             if (visibilityDialog != null) visibilityDialog.Hide();
+            IsPartDevelopmentOpen = false;
             if (initialized)
             {
                 KillDesignTransition();
@@ -238,45 +252,51 @@ namespace Border.Research
 
             RectTransform engineColumn = FindChildRectTransform(canvasTransform, "EnginePresetCards")
                 ?? FindChildRectTransform(canvasTransform, "EnginePresetColumn");
+            hubActionBar = FindChildRectTransform(canvasTransform, "HubActionBar")?.gameObject;
+            enginePresetColumnRoot = FindChildRectTransform(canvasTransform, "EnginePresetColumn")?.gameObject;
+            detailColumnRoot = FindChildRectTransform(canvasTransform, "DetailColumn")?.gameObject;
             dateText = FindRequiredText(canvasTransform, "Date");
-            remainingTurnsText = FindRequiredText(canvasTransform, "RemainingTurns");
             fundsText = FindRequiredText(canvasTransform, "Funds");
             quarterlyFundingText = FindRequiredText(canvasTransform, "QuarterlyFunding");
             selectedEngineText = FindRequiredText(canvasTransform, "SelectedEngineText");
             RectTransform completionGauge = FindChildRectTransform(canvasTransform, "SelectedEngineCompletion");
             selectedEngineCompletion = completionGauge != null ? completionGauge.GetComponent<Slider>() : null;
-            designEntryText = FindRequiredText(canvasTransform, "DesignEntryText");
-            statusText = FindRequiredText(canvasTransform, "StatusText");
+            partDevelopmentButton = FindRequiredButton(canvasTransform, "PartDevelopmentButton");
+            startDevelopmentButton = FindRequiredButton(canvasTransform, "StartDevelopmentButton");
             normalResearchButton = FindRequiredButton(canvasTransform, "NormalResearchButton");
             focusedResearchButton = FindRequiredButton(canvasTransform, "FocusedResearchButton");
             createEnginePresetButton = FindRequiredButton(canvasTransform, "CreateEnginePresetButton");
             enterDesignButton = FindRequiredButton(canvasTransform, "EnterDesignButton");
             waitButton = FindRequiredButton(canvasTransform, "WaitQuarterButton");
             Button resetButton = FindRequiredButton(canvasTransform, "ResetButton");
-            Button fuelCapacityButton = FindRequiredButton(canvasTransform, "StatButton_FuelCapacity");
-            Button coolingButton = FindRequiredButton(canvasTransform, "StatButton_Cooling");
-            Button maxOutputButton = FindRequiredButton(canvasTransform, "StatButton_MaxOutput");
-            Button ignitionReliabilityButton = FindRequiredButton(canvasTransform, "StatButton_IgnitionReliability");
+            for (int index = 0; index < StatCount; index++)
+            {
+                var statId = (EngineStatId)index;
+                statButtons[index] = FindRequiredButton(canvasTransform, $"StatButton_{statId}");
+                statRowLabels[index] = FindRequiredText(canvasTransform, $"StatRowLabel_{statId}");
+                RectTransform statGauge = FindChildRectTransform(canvasTransform, $"StatGauge_{statId}");
+                statGauges[index] = statGauge != null ? statGauge.GetComponent<Slider>() : null;
+            }
 
             if (enginePresetCardPrefab == null
                 || engineColumn == null
+                || hubActionBar == null
+                || enginePresetColumnRoot == null
+                || detailColumnRoot == null
                 || dateText == null
-                || remainingTurnsText == null
                 || fundsText == null
                 || quarterlyFundingText == null
                 || selectedEngineText == null
-                || designEntryText == null
-                || statusText == null
+                || partDevelopmentButton == null
+                || startDevelopmentButton == null
                 || normalResearchButton == null
                 || focusedResearchButton == null
                 || createEnginePresetButton == null
                 || enterDesignButton == null
                 || waitButton == null
                 || resetButton == null
-                || fuelCapacityButton == null
-                || coolingButton == null
-                || maxOutputButton == null
-                || ignitionReliabilityButton == null)
+                || Array.Exists(statButtons, button => button == null)
+                || Array.Exists(statRowLabels, label => label == null))
             {
                 if (createdInstance)
                 {
@@ -286,6 +306,7 @@ namespace Border.Research
                 return false;
             }
 
+            partDevelopmentButtonText = partDevelopmentButton.GetComponentInChildren<TMP_Text>(true);
             normalResearchButtonText = normalResearchButton.GetComponentInChildren<TMP_Text>(true);
             focusedResearchButtonText = focusedResearchButton.GetComponentInChildren<TMP_Text>(true);
             createEnginePresetButtonText = createEnginePresetButton.GetComponentInChildren<TMP_Text>(true);
@@ -296,8 +317,10 @@ namespace Border.Research
                 engineCards[(int)config.Id] = CreateEngineCard(engineColumn, config);
             }
 
-            normalResearchButton.onClick.AddListener(() => StartEngineResearch(false));
-            focusedResearchButton.onClick.AddListener(() => StartEngineResearch(true));
+            partDevelopmentButton.onClick.AddListener(() => SetPartDevelopmentOpen(true));
+            startDevelopmentButton.onClick.AddListener(() => StartEngineResearch(focusedResearchSelected));
+            normalResearchButton.onClick.AddListener(() => SelectResearchMode(false));
+            focusedResearchButton.onClick.AddListener(() => SelectResearchMode(true));
             createEnginePresetButton.onClick.AddListener(CreateNewEnginePreset);
             enterDesignButton.onClick.AddListener(EnterDesign);
             waitButton.onClick.AddListener(WaitQuarter);
@@ -306,11 +329,42 @@ namespace Border.Research
                 ResetResearchState();
                 Refresh();
             });
-            fuelCapacityButton.onClick.AddListener(() => SelectStat(EngineStatId.FuelCapacity));
-            coolingButton.onClick.AddListener(() => SelectStat(EngineStatId.Cooling));
-            maxOutputButton.onClick.AddListener(() => SelectStat(EngineStatId.MaxOutput));
-            ignitionReliabilityButton.onClick.AddListener(() => SelectStat(EngineStatId.IgnitionReliability));
+            for (int index = 0; index < StatCount; index++)
+            {
+                var statId = (EngineStatId)index;
+                statButtons[index].onClick.AddListener(() => SelectStat(statId));
+            }
+
+            // Bind() has cached the panel positions by now, so the columns can be hidden safely.
+            SetPartDevelopmentOpen(false);
             return true;
+        }
+
+        private void SetPartDevelopmentOpen(bool open)
+        {
+            partDevelopmentOpen = open;
+            IsPartDevelopmentOpen = open;
+            if (hubActionBar != null) hubActionBar.SetActive(!open);
+            if (enginePresetColumnRoot != null) enginePresetColumnRoot.SetActive(open);
+            if (detailColumnRoot != null) detailColumnRoot.SetActive(open);
+            if (open) PlayResearchEntryAnimation();
+        }
+
+        private void SelectResearchMode(bool focused)
+        {
+            if (isTransitioningToDesign) return;
+            focusedResearchSelected = focused;
+            Refresh();
+        }
+
+        private void LateUpdate()
+        {
+            // Runs after PauseMenuController.Update, which stands down while this panel owns escape.
+            // The panel only owns it while actually on screen — the mini game hides the canvas without closing it.
+            if (!initialized || isTransitioningToDesign) return;
+            bool ownsEscape = partDevelopmentOpen && canvasTransform != null && canvasTransform.gameObject.activeInHierarchy;
+            IsPartDevelopmentOpen = ownsEscape;
+            if (ownsEscape && Border.UI.PauseMenuController.WasEscapePressed()) SetPartDevelopmentOpen(false);
         }
 
         private void EnsureDefaultPrefabs()
@@ -512,9 +566,8 @@ namespace Border.Research
             ShowResearchLab();
             PlayResearchCameraDrift();
             ShowEnginePreview();
-            dateText.text = $"날짜\n{model.Year} Q{model.Quarter}";
-            remainingTurnsText.text = $"남은 분기\n{model.RemainingTurns}";
-            fundsText.text = $"예산\n{model.Funds}";
+            dateText.text = $"날짜\n{model.Year} Q{model.Quarter} · 남은 {model.RemainingTurns}분기";
+            fundsText.text = $"보유 자금\n{model.Funds}";
             quarterlyFundingText.text = $"분기 예산\n+{model.QuarterlyFunding}";
 
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
@@ -529,17 +582,40 @@ namespace Border.Research
             LaunchMissionState selectedMissionState = model.GetMission(selectedMission);
 
             selectedEngineText.text = $"{selectedEngineConfig.DisplayName}  완성도 {selectedEngine.Completion}/{ResearchPrototypeModel.MaxEngineCompletion}  "
-                + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}  설치 {model.ConfiguredEngineInstallCost}\n"
-                + $"연료량 {selectedEngine.FuelCapacity} / 냉각 {selectedEngine.Cooling} / 최대 출력 {selectedEngine.MaxOutput} / 점화 신뢰도 {selectedEngine.IgnitionReliability}\n"
+                + $"성능 {model.CalculateEnginePerformanceScore(selectedEnginePreset)}\n"
+                + $"기본 {model.ConfiguredEngineNormalResearchCost} / 집중 {model.ConfiguredEngineFocusedResearchCost}  설치 {model.ConfiguredEngineInstallCost}\n"
                 + $"선택 스탯: {ResearchPrototypeModel.GetStatDisplayName(selectedStat)}";
-            normalResearchButtonText.text = $"일반 연구\n{model.ConfiguredEngineNormalResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
+
+            for (int index = 0; index < StatCount; index++)
+            {
+                var statId = (EngineStatId)index;
+                int statValue = selectedEngine.GetStat(statId);
+                statRowLabels[index].text = $"{ResearchPrototypeModel.GetStatDisplayName(statId)} {statValue}";
+                if (statGauges[index] != null) statGauges[index].SetValueWithoutNotify(statValue);
+                SetSelectedTint(statButtons[index], selectedStat == statId);
+            }
+
+            // Never strand the player in a mode they can no longer pay for.
+            if (focusedResearchSelected && !CanResearch(selectedEngine, model.ConfiguredEngineFocusedResearchCost))
+            {
+                focusedResearchSelected = false;
+            }
+
+            normalResearchButtonText.text = $"기본 연구\n{model.ConfiguredEngineNormalResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
             focusedResearchButtonText.text = $"집중 연구\n{model.ConfiguredEngineFocusedResearchCost} / 완성도 +{model.ConfiguredResearchCompletionGain}";
+            SetSelectedTint(normalResearchButton, !focusedResearchSelected);
+            SetSelectedTint(focusedResearchButton, focusedResearchSelected);
             createEnginePresetButtonText.text = model.ActiveEnginePresetCount >= ResearchPrototypeModel.MaxEnginePresetCount
                 ? "새로운 엔진 개발\n최대 10개"
                 : $"새로운 엔진 개발\n{model.ConfiguredNewEnginePresetCost} / 시간 0분기";
-            enterDesignButtonText.text = $"설계 진입\n예산 {selectedMissionConfig.LaunchCost}";
-            waitButtonText.text = $"1분기 대기   예산 0 / 분기 예산 +{model.QuarterlyFunding}";
+            partDevelopmentButtonText.text = $"부품 개발\n{model.ConfiguredEngineNormalResearchCost}~";
+            enterDesignButtonText.text = $"로켓 설계\n{selectedMissionConfig.LaunchCost}";
+            waitButtonText.text = $"건너뛰기\n+{model.QuarterlyFunding}";
 
+            partDevelopmentButton.interactable = !model.DeadlineReached && model.Funds >= model.ConfiguredEngineNormalResearchCost;
+            startDevelopmentButton.interactable = CanResearch(selectedEngine, focusedResearchSelected
+                ? model.ConfiguredEngineFocusedResearchCost
+                : model.ConfiguredEngineNormalResearchCost);
             normalResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineNormalResearchCost);
             focusedResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineFocusedResearchCost);
             createEnginePresetButton.interactable = !model.DeadlineReached && model.ActiveEnginePresetCount < ResearchPrototypeModel.MaxEnginePresetCount;
@@ -549,23 +625,12 @@ namespace Border.Research
             {
                 SetResearchControlsInteractable(false);
             }
+        }
 
-            if (session.HasPendingDesignEntry)
-            {
-                designEntryText.text = FormatDesignEntry(session.PendingDesignEntry);
-            }
-            else if (session.HasLastLaunchResult)
-            {
-                designEntryText.text = FormatLaunchResult(session.LastLaunchResult);
-            }
-            else
-            {
-                designEntryText.text = "아직 설계 진입 또는 발사 결과가 없습니다.";
-            }
-
-            statusText.text = model.DeadlineReached
-                ? $"{model.LastMessage}\n2026 Q4 종료. 목표를 확인하세요."
-                : model.LastMessage;
+        private static void SetSelectedTint(Button button, bool selected)
+        {
+            Image image = button.GetComponent<Image>();
+            if (image != null) image.color = selected ? Color.white : new Color(0.6f, 0.66f, 0.72f, 1f);
         }
 
         private void RefreshEngineCard(EnginePresetConfig config)
@@ -606,18 +671,6 @@ namespace Border.Research
             }
 
             selectedEnginePreset = EnginePresetId.Engine01;
-        }
-
-        private string FormatDesignEntry(ResearchDesignEntryData data)
-        {
-            return $"{data.MissionId} / {ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId).DisplayName} / {data.Year} Q{data.Quarter}\n"
-                + $"지불한 예산 {data.LaunchCost}, 예약 설치비 {data.ReservedInstallCost}, 설계 적합도 {data.DesignFit}, {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)}";
-        }
-
-        private static string FormatLaunchResult(ResearchLaunchResultData result)
-        {
-            return $"{result.MissionId} 결과 {result.Grade} / 성공 {result.SuccessChance}% / 굴림 {result.Roll}\n"
-                + $"총 비용 {result.TotalCost}, 지원금 +{result.ImmediateFunding}, 분기 예산 {result.QuarterlyFundingDelta:+#;-#;0}";
         }
 
         private void ShowDesignScreen()
@@ -677,6 +730,7 @@ namespace Border.Research
 
             RequestedScreenName = ResearchFlowSession.ResearchScreenName;
             isTransitioningToDesign = false;
+            SetPartDevelopmentOpen(false);
             if (canvasTransform != null)
             {
                 canvasTransform.gameObject.SetActive(true);
@@ -752,6 +806,8 @@ namespace Border.Research
             if (visibilityDialog != null) visibilityDialog.Hide();
             KillDesignTransition();
             isTransitioningToDesign = false;
+            focusedResearchSelected = false;
+            SetPartDevelopmentOpen(false);
             resultReport?.Hide();
             endingScreen?.Hide();
             session.ResetResearch();
@@ -848,6 +904,8 @@ namespace Border.Research
         {
             KillDesignTransition();
             isTransitioningToDesign = true;
+            // The hub row is not one of the animator's panels, so hide it instead of leaving it behind.
+            if (hubActionBar != null) hubActionBar.SetActive(false);
             SetResearchControlsInteractable(false);
             ShowResearchLab();
             ResolveEnginePreview();
@@ -986,6 +1044,16 @@ namespace Border.Research
                 {
                     engineCards[i].Button.interactable = interactable;
                 }
+            }
+
+            if (partDevelopmentButton != null)
+            {
+                partDevelopmentButton.interactable = interactable;
+            }
+
+            if (startDevelopmentButton != null)
+            {
+                startDevelopmentButton.interactable = interactable;
             }
 
             if (normalResearchButton != null)

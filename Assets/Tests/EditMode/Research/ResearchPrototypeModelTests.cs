@@ -847,7 +847,7 @@ namespace Border.Research.Tests
                 ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
                 controller.InitializeForTests();
 
-                FindButton(host.transform, "NormalResearchButton").onClick.Invoke();
+                FindButton(host.transform, "StartDevelopmentButton").onClick.Invoke();
 
                 Assert.That(controller.Model.GetEnginePreset(EnginePresetId.Engine01).Completion, Is.EqualTo(0));
                 Assert.That(controller.GetActiveMiniGameControllerForTests(), Is.Not.Null);

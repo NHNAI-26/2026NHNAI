@@ -8,11 +8,11 @@
 | Field | Value |
 | --- | --- |
 | Working language | Korean |
-| Current revision | 6 |
+| Current revision | 7 |
 | Last updated | 2026-09-05 |
 | Project root | `C:\Users\angel\OneDrive\문서\GitHub\2026NHNAI` |
 | Source of truth | `docs/artemis-2026-gdd/` |
-| Status | research reset, terminal-state routing, balance binding, and outcome prefabs implemented |
+| Status | research reset, terminal-state routing, balance binding, outcome prefabs, and the hub / part development split implemented |
 
 ## 1. 핵심 변경
 
@@ -56,21 +56,31 @@
 
 냉각 밸브 미니게임은 네 번의 정답에 60점, 반응 속도에 최대 40점을 배분한다. 평균 반응 0.35초 이하는 반응 만점, 0.9초 이상은 반응 가점이 없고 오답마다 18점을 감점한다. 기존 전체 제한 시간 9초는 유지한다. 연료/출력 판정 연출은 TMP 알파와 크기를 DOTween으로 조정하며 CanvasGroup을 요구하지 않는다.
 
+연구 운영 화면은 허브와 부품 개발 패널 두 상태를 한 프리팹 안에서 전환한다. 허브는 제목, 정보 칩 3개, 하단 중앙 행동 버튼 3개(`부품 개발`, `로켓 설계`, `건너뛰기`)만 보여준다. 각 버튼은 자기 비용을 라벨에 달고 자금이 모자라면 비활성으로 어두워진다. `부품 개발` 버튼은 최소 비용인 기본 연구비를 `350~` 형태로 표시하고 그 금액을 못 내면 비활성이다. `부품 개발`을 누르면 허브 버튼이 사라지고 좌측 엔진 프리셋 열과 우측 상세 열이 슬라이드로 들어온다. 패널은 ESC로만 닫으며 별도의 닫기 버튼은 두지 않는다. ESC 한 번은 패널만 닫고 일시정지 메뉴를 열지 않는다 — `PauseMenuController`가 `ResearchOperationUIController.IsPartDevelopmentOpen` 동안 물러나고, 컨트롤러는 `LateUpdate`에서 ESC를 읽어 모든 `Update`보다 늦게 처리한다. 실행 순서 에셋은 쓰지 않는다.
+
+`기본 연구`와 `집중 연구` 버튼은 실행 버튼이 아니라 모드 선택이다. 선택된 쪽만 밝게 표시하고, 우하단 `개발 시작` 버튼만 미니게임을 연다. 감당할 수 없는 집중 연구 모드에 갇히지 않도록, 자금이 집중 연구비 아래로 떨어지면 모드는 기본으로 되돌아간다. 미니게임을 마치면 허브가 아니라 부품 개발 패널로 복귀한다.
+
+선택 엔진의 완성도 게이지 아래에 네 스탯(연료량, 냉각, 최대 출력, 점화 신뢰도)마다 이름·수치 라벨과 0~100 게이지를 한 줄씩 둔다. 게이지는 완성도 게이지와 같은 `AddGauge` 경로로 아트 적용기가 만들며, 없으면 라벨만 표시되고 화면 빌드는 실패하지 않는다.
+
+`미션 결과 요약`과 `상태` 패널은 연구 화면에서 제거한다. 발사 결과는 결과 보고서 화면이 담당하며 `model.LastMessage`는 이 화면에 표시하지 않는다. 상단 칩은 날짜, 보유 자금, 분기 예산 3개이며 남은 분기는 날짜 칩에 `2018 Q1 · 남은 34분기`로 병기한다.
+
+`docs/artemis-2026-gdd/11_UI_UX_화면설계.md`의 와이어프레임은 아직 옛 단일 화면(`[일반 연구] [집중 연구] [설계 진입] / [1분기 대기]` 한 줄)을 그리고 있다. 그 문서는 `확정` 상태라 이번 변경으로 수정하지 않았으므로, GDD 개정 여부는 별도 결정이 필요하다.
+
 ## 2. 연구 단계 범위
 
 연구 화면은 프로젝트 운영 화면이다.
 
 담당 기능:
 
-- 날짜, 남은 분기, 연구비, 분기 연구비 표시
+- 상단 칩 3개로 날짜(남은 분기 병기), 보유 자금, 분기 예산 표시
+- 허브 하단 행동 버튼 3개(`부품 개발`, `로켓 설계`, `건너뛰기`)와 각 비용 표시
 - 개발된 엔진 프리셋 상태 표시
 - 새로운 엔진 개발 버튼 제공
 - 연구할 엔진 프리셋 선택
-- 연구할 스탯 선택
-- 일반 연구와 집중 연구 실행
+- 연구할 스탯 선택과 스탯별 완성도 게이지 표시
+- 기본 연구와 집중 연구 모드 선택, `개발 시작`으로 실행
 - 현재 미션, 해금 조건, 최고 등급, 시도, 경험 보너스, 진입 비용 및 주요 위험 정보란은 연구 화면에서 표시하지 않음
-- 설계 진입 버튼 제공
-- 1분기 대기 제공
+- 미션 결과 요약과 상태 메시지는 연구 화면에서 표시하지 않음
 
 담당하지 않는 기능:
 
@@ -179,13 +189,13 @@ bestGrade
 ### Phase 2. 연구 운영 UI
 
 - 프리팹 기반 연구 운영 UI 구성
+- 허브 상태: `TopInfoBar`(제목 + 칩 3개 + `ResetButton`)와 `HubActionBar`(`PartDevelopmentButton`, `EnterDesignButton`, `WaitQuarterButton`)
+- 부품 개발 패널: `EnginePresetColumn`(카드 + `CreateEnginePresetButton`)과 `DetailColumn`/`SelectedPanel`
+- `SelectedPanel` 구성 순서: `SelectedEngineText` → `SelectedEngineCompletion` → `StatRows`(`StatRow_*`/`StatRowLabel_*`/`StatGauge_*`) → `StatButtons` → `ResearchModeButtons` → `StartDevelopmentRow`
+- `HubActionBar`는 `TopInfoBar`/`EnginePresetColumn`/`DetailColumn`과 달리 전환 애니메이터 대상이 아니므로 설계 전환 때 즉시 숨긴다
 - 개발된 엔진 프리셋 카드만 표시
-- `새로운 엔진 개발` 버튼 표시
-- 선택 엔진 상세 스탯 표시
-- 선택 엔진 완성도 표시
-- 낮음/보통/높음 임시 점수 입력 제공
-- 일반 연구, 집중 연구, 설계 진입, 대기 버튼 연결
-- 잠긴 발사 미션 조건 표시
+- 선택 엔진 상세 스탯과 스탯별 게이지 표시
+- 기본/집중은 모드 선택, `개발 시작`만 미니게임 실행
 - 날씨/환경/예보 문구 제거
 
 ### Phase 3. 설계 진입 경계
@@ -230,6 +240,9 @@ bestGrade
 - 결과 재표시와 버튼 연타로 보상 중복 없음
 - 날씨/환경 예보/발사창 보정 상태 없음
 - 정식 UI가 프리팹 기반임
+- 부품 개발 패널은 ESC로 닫히고 허브 버튼이 다시 보임. 그 ESC로 일시정지 메뉴는 열리지 않음
+- 기본/집중 연구 버튼은 모드 선택이며 `개발 시작`만 미니게임을 엶
+- 자금이 집중 연구비 아래로 떨어지면 연구 모드가 기본으로 되돌아감
 
 ## 8. 현재 구현 메모
 

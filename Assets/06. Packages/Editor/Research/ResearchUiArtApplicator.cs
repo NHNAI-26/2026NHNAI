@@ -116,7 +116,7 @@ namespace Border.Research.Editor
                 Skin(Find(root.transform, name)?.GetComponent<Image>(), sprites[0]);
 
             // The outer frames carry the artwork; keep the inner content groups unframed.
-            foreach (string name in new[] { "SelectedPanel", "ActionPanel", "DesignEntryPanel", "StatusPanel", "DateChip", "RemainingTurnsChip", "FundsChip", "QuarterlyFundingChip" })
+            foreach (string name in new[] { "SelectedPanel", "DateChip", "FundsChip", "QuarterlyFundingChip" })
             {
                 Image image = Find(root.transform, name)?.GetComponent<Image>();
                 if (image == null) continue;
@@ -128,19 +128,22 @@ namespace Border.Research.Editor
             {
                 if (button.name.StartsWith("EngineCard_")) ApplyCard(button.gameObject, sprites);
                 else SkinButton(button, sprites[button.name.StartsWith("StatButton_") ? 4
-                    : button.name == "NormalResearchButton" || button.name == "FocusedResearchButton" || button.name == "EnterDesignButton" ? 5 : 6]);
+                    : button.name is "NormalResearchButton" or "FocusedResearchButton" or "StartDevelopmentButton"
+                        or "PartDevelopmentButton" or "EnterDesignButton" or "WaitQuarterButton" ? 5 : 6]);
             }
             Transform selectedPanel = Find(root.transform, "SelectedPanel");
-            if (selectedPanel != null)
+            if (selectedPanel != null) AddGauge(selectedPanel, "SelectedEngineCompletion", ResearchPrototypeModel.MaxEngineCompletion, sprites);
+            foreach (EngineStatId stat in System.Enum.GetValues(typeof(EngineStatId)))
             {
-                AddCompletionGauge(selectedPanel, sprites);
-                selectedPanel.GetComponent<LayoutElement>().preferredHeight = 190f;
+                Transform statRowTransform = Find(root.transform, $"StatRow_{stat}");
+                // Stats clamp to 0..100 in EnginePresetState.SetStat; there is no named constant for it.
+                if (statRowTransform != null) AddGauge(statRowTransform, $"StatGauge_{stat}", 100f, sprites);
             }
             LayoutElement statRow = Find(root.transform, "StatButtons")?.GetComponent<LayoutElement>();
             if (statRow != null) statRow.flexibleHeight = 0f;
             VerticalLayoutGroup cards = Find(root.transform, "EnginePresetCards")?.GetComponent<VerticalLayoutGroup>();
             if (cards != null) cards.spacing = 5f;
-            foreach (string name in new[] { "EngineColumnTitle", "ActionTitle", "DesignEntryTitle", "StatusTitle" })
+            foreach (string name in new[] { "EngineColumnTitle" })
             {
                 Transform title = Find(root.transform, name);
                 if (title == null) continue;
@@ -206,11 +209,11 @@ namespace Border.Research.Editor
             }
         }
 
-        private static void AddCompletionGauge(Transform parent, Sprite[] sprites)
+        private static void AddGauge(Transform parent, string name, float maxValue, Sprite[] sprites)
         {
-            Transform existing = parent.Find("SelectedEngineCompletion");
+            Transform existing = parent.Find(name);
             GameObject root = existing != null ? existing.gameObject
-                : new GameObject("SelectedEngineCompletion", typeof(RectTransform), typeof(Image), typeof(Slider), typeof(LayoutElement));
+                : new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Slider), typeof(LayoutElement));
             root.transform.SetParent(parent, false);
             root.transform.SetSiblingIndex(1);
             LayoutElement layout = root.GetComponent<LayoutElement>();
@@ -238,7 +241,7 @@ namespace Border.Research.Editor
             fill.raycastTarget = false;
             Slider slider = root.GetComponent<Slider>();
             slider.minValue = 0f;
-            slider.maxValue = ResearchPrototypeModel.MaxEngineCompletion;
+            slider.maxValue = maxValue;
             slider.wholeNumbers = true;
             slider.fillRect = fillRect;
             slider.direction = Slider.Direction.LeftToRight;

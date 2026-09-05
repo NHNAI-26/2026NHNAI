@@ -1,4 +1,4 @@
-using TMPro;
+﻿using TMPro;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -107,6 +107,8 @@ namespace Border.Research.Editor
                 && FindChild(operationScreen.transform, "EngineCard_Engine01") != null
                 && FindChild(designScreen.transform, "DesignPresetButton_Engine01") != null
                 && FindChild(operationScreen.transform, "EnginePreviewReservedArea") != null
+                && FindChild(operationScreen.transform, "HubActionBar") != null
+                && FindChild(operationScreen.transform, "StatusPanel") == null
                 && FindChild(miniGameScreen.transform, "FuelOuterBand") != null
                 && FindChild(miniGameScreen.transform, "FuelPerfectBand") != null
                 && FindChild(miniGameScreen.transform, "OutputJudgementText") != null;
@@ -149,10 +151,8 @@ namespace Border.Research.Editor
             RectTransform titleGroup = CreateGroup("ProjectTitleGroup", topBar);
             AddVerticalLayout(titleGroup, 0f, 0f, 0f, 2f);
             titleGroup.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            CreateText("Title", titleGroup, 27, FontStyles.Bold, TextAlignmentOptions.Left, "ARTEMIS: 2026 연구 단계");
-            CreateText("Subtitle", titleGroup, 14, FontStyles.Normal, TextAlignmentOptions.Left, "첫 엔진에서 시작해 새 엔진 프리셋을 열고, 준비되면 설계로 진입");
+            CreateText("Title", titleGroup, 27, FontStyles.Bold, TextAlignmentOptions.Left, "ARTEMIS : 2026 연구실");
             CreateInfoChip("Date", topBar);
-            CreateInfoChip("RemainingTurns", topBar);
             CreateInfoChip("Funds", topBar);
             CreateInfoChip("QuarterlyFunding", topBar);
             CreateButton("ResetButton", topBar, "초기화", 86f, 50f);
@@ -160,8 +160,20 @@ namespace Border.Research.Editor
             RectTransform previewReservedArea = CreateGroup("EnginePreviewReservedArea", root);
             previewReservedArea.anchorMin = Vector2.zero;
             previewReservedArea.anchorMax = Vector2.one;
-            previewReservedArea.offsetMin = new Vector2(332f, 16f);
+            previewReservedArea.offsetMin = new Vector2(332f, 132f);
             previewReservedArea.offsetMax = new Vector2(-432f, -98f);
+
+            // Hub row. No Image, so it needs no art-applicator entry and never eats raycasts.
+            RectTransform hubActionBar = CreateGroup("HubActionBar", root);
+            hubActionBar.anchorMin = new Vector2(0.5f, 0f);
+            hubActionBar.anchorMax = new Vector2(0.5f, 0f);
+            hubActionBar.pivot = new Vector2(0.5f, 0f);
+            hubActionBar.anchoredPosition = new Vector2(0f, 40f);
+            hubActionBar.sizeDelta = new Vector2(720f, 84f);
+            AddHorizontalLayout(hubActionBar, 12f, 12f, 10f, 16f);
+            CreateButton("PartDevelopmentButton", hubActionBar, string.Empty, 0f, 64f);
+            CreateButton("EnterDesignButton", hubActionBar, string.Empty, 0f, 64f);
+            CreateButton("WaitQuarterButton", hubActionBar, string.Empty, 0f, 64f);
 
             RectTransform engineColumn = CreatePanel("EnginePresetColumn", root, new Color(0.11f, 0.14f, 0.18f, 0.94f));
             engineColumn.anchorMin = Vector2.zero;
@@ -352,39 +364,55 @@ namespace Border.Research.Editor
         {
             RectTransform selectedPanel = CreatePanel("SelectedPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
             AddVerticalLayout(selectedPanel, 12f, 12f, 10f, 7f);
-            selectedPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 238f;
+            selectedPanel.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
             CreateText("SelectedEngineText", selectedPanel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
+
+            // SelectedEngineCompletion is inserted here (sibling index 1) by ResearchUiArtApplicator.
+            RectTransform statRows = CreateGroup("StatRows", selectedPanel);
+            AddVerticalLayout(statRows, 0f, 0f, 0f, 4f);
+            LayoutElement statRowsLayout = statRows.gameObject.AddComponent<LayoutElement>();
+            statRowsLayout.preferredHeight = 100f;
+            statRowsLayout.flexibleHeight = 0f;
+            foreach (EngineStatId stat in System.Enum.GetValues(typeof(EngineStatId)))
+            {
+                RectTransform statGaugeRow = CreateGroup($"StatRow_{stat}", statRows);
+                AddHorizontalLayout(statGaugeRow, 0f, 0f, 0f, 8f);
+                LayoutElement statGaugeRowLayout = statGaugeRow.gameObject.AddComponent<LayoutElement>();
+                statGaugeRowLayout.preferredHeight = 22f;
+                statGaugeRowLayout.flexibleHeight = 0f;
+                TMP_Text statLabel = CreateText($"StatRowLabel_{stat}", statGaugeRow, 12, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
+                LayoutElement statLabelLayout = statLabel.gameObject.AddComponent<LayoutElement>();
+                statLabelLayout.preferredWidth = 120f;
+                statLabelLayout.flexibleWidth = 0f;
+            }
 
             RectTransform statRow = CreateGroup("StatButtons", selectedPanel);
             AddHorizontalLayout(statRow, 0f, 0f, 0f, 6f);
-            statRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 36f;
+            LayoutElement statRowLayout = statRow.gameObject.AddComponent<LayoutElement>();
+            statRowLayout.preferredHeight = 36f;
+            statRowLayout.flexibleHeight = 0f;
             CreateButton("StatButton_FuelCapacity", statRow, "연료량", 0f, 36f);
             CreateButton("StatButton_Cooling", statRow, "냉각", 0f, 36f);
             CreateButton("StatButton_MaxOutput", statRow, "최대 출력", 0f, 36f);
             CreateButton("StatButton_IgnitionReliability", statRow, "점화 신뢰도", 0f, 36f);
-            RectTransform actionPanel = CreatePanel("ActionPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
-            AddVerticalLayout(actionPanel, 12f, 12f, 10f, 8f);
-            actionPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 160f;
-            CreateText("ActionTitle", actionPanel, 18, FontStyles.Bold, TextAlignmentOptions.Left, "행동");
-            RectTransform actionRow = CreateGroup("ActionRow", actionPanel);
-            AddHorizontalLayout(actionRow, 0f, 0f, 0f, 8f);
-            actionRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 58f;
-            CreateButton("NormalResearchButton", actionRow, string.Empty, 0f, 58f);
-            CreateButton("FocusedResearchButton", actionRow, string.Empty, 0f, 58f);
-            CreateButton("EnterDesignButton", actionRow, string.Empty, 0f, 58f);
-            CreateButton("WaitQuarterButton", actionPanel, string.Empty, 0f, 42f);
 
-            RectTransform designPanel = CreatePanel("DesignEntryPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
-            AddVerticalLayout(designPanel, 12f, 12f, 10f, 6f);
-            designPanel.gameObject.AddComponent<LayoutElement>().preferredHeight = 102f;
-            CreateText("DesignEntryTitle", designPanel, 17, FontStyles.Bold, TextAlignmentOptions.Left, "미션 결과 요약");
-            CreateText("DesignEntryText", designPanel, 13, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
+            RectTransform modeRow = CreateGroup("ResearchModeButtons", selectedPanel);
+            AddHorizontalLayout(modeRow, 0f, 0f, 0f, 8f);
+            LayoutElement modeRowLayout = modeRow.gameObject.AddComponent<LayoutElement>();
+            modeRowLayout.preferredHeight = 52f;
+            modeRowLayout.flexibleHeight = 0f;
+            CreateButton("NormalResearchButton", modeRow, string.Empty, 0f, 52f);
+            CreateButton("FocusedResearchButton", modeRow, string.Empty, 0f, 52f);
 
-            RectTransform statusPanel = CreatePanel("StatusPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
-            AddVerticalLayout(statusPanel, 12f, 12f, 10f, 6f);
-            statusPanel.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
-            CreateText("StatusTitle", statusPanel, 17, FontStyles.Bold, TextAlignmentOptions.Left, "상태");
-            CreateText("StatusText", statusPanel, 14, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
+            CreateGroup("DetailSpacer", selectedPanel).gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+
+            RectTransform startRow = CreateGroup("StartDevelopmentRow", selectedPanel);
+            AddHorizontalLayout(startRow, 0f, 0f, 0f, 0f);
+            startRow.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleRight;
+            LayoutElement startRowLayout = startRow.gameObject.AddComponent<LayoutElement>();
+            startRowLayout.preferredHeight = 52f;
+            startRowLayout.flexibleHeight = 0f;
+            CreateButton("StartDevelopmentButton", startRow, "개발 시작", 168f, 52f);
         }
 
         private static void CreateMapPanel(RectTransform parent)

@@ -188,7 +188,7 @@ namespace Border.Research.Tests
             CreateOperation();
             WaitUntilLastQuarter(operation.Model);
             operation.RefreshForTests();
-            FindButton(host, "NormalResearchButton").onClick.Invoke();
+            FindButton(host, "StartDevelopmentButton").onClick.Invoke();
             var game = operation.GetActiveMiniGameControllerForTests();
             game.ForceCompleteForTests(100);
             Assert.That(ending.gameObject.activeSelf, Is.False);
@@ -196,6 +196,16 @@ namespace Border.Research.Tests
             game.ForceDismissForTests();
             Assert.That(operation.RequestedScreenName, Is.EqualTo("Ending"));
             Assert.That(ending.gameObject.activeSelf, Is.True);
+        }
+
+        [Test]
+        public void Operation_FocusedModeButtonRoutesStartToFocusedResearch()
+        {
+            CreateOperation();
+            FindButton(host, "FocusedResearchButton").onClick.Invoke();
+            FindButton(host, "StartDevelopmentButton").onClick.Invoke();
+            ResearchMiniGameController game = operation.GetActiveMiniGameControllerForTests();
+            Assert.That(FindText(game.gameObject, "Title").text, Does.Contain("집중"));
         }
 
         [Test]

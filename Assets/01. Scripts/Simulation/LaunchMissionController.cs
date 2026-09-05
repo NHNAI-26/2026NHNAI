@@ -30,6 +30,12 @@ namespace Simulation
         public string Objective { get; private set; }
         public string Status { get; private set; } = "발사 대기";
         public float Altitude => Mathf.Max(0f, transform.position.y - origin.y);
+
+        /// <summary>관제 화면 스테퍼가 읽는 진행 단계. 발사 전에는 0 이다.</summary>
+        public int Stage => evaluator != null ? evaluator.StageIndex : 0;
+
+        /// <summary>이 미션이 쓰는 단계 수. 초기화 전에는 전체 단계로 본다.</summary>
+        public int StageCount => evaluator != null ? evaluator.StageCount : LaunchMissionEvaluator.StageNames.Length;
         public float Speed => body.linearVelocity.magnitude;
         public UnityEvent ExplosionRequested => explosionRequested;
 

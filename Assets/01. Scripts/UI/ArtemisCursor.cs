@@ -25,6 +25,8 @@ namespace Border.UI
         {
             Move,
             Rotate,
+            StageDot,
+            StageDotHollow,
         }
 
         private const int Size = 64;
@@ -92,7 +94,13 @@ namespace Border.UI
         {
             if (icons.TryGetValue(icon, out Sprite cached) && cached != null) return cached;
 
-            Texture2D texture = icon == Icon.Move ? DrawMove() : DrawRotateIcon();
+            Texture2D texture = icon switch
+            {
+                Icon.Move => DrawMove(),
+                Icon.Rotate => DrawRotateIcon(),
+                Icon.StageDot => DrawStageDot(true),
+                _ => DrawStageDot(false),
+            };
             var sprite = Sprite.Create(texture, new Rect(0f, 0f, Size, Size), new Vector2(0.5f, 0.5f));
             sprite.name = $"ArtemisIcon_{icon}";
             icons[icon] = sprite;
@@ -229,6 +237,18 @@ namespace Border.UI
             FillPolygon(texture, new[] { new Vector2(8, 32), new Vector2(20, 21), new Vector2(20, 43) }, Metal);
             FillPolygon(texture, new[] { new Vector2(56, 32), new Vector2(44, 21), new Vector2(44, 43) }, Metal);
             FillCircle(texture, 32, 32, 4, Cyan);
+            return Finalize(texture);
+        }
+
+        /// <summary>
+        /// 비행 단계 표시의 점. 흰색으로만 그려 <see cref="UnityEngine.UI.Image.color"/> 가 색을 정하게 한다 —
+        /// 상태별로 텍스처를 따로 만들지 않는다.
+        /// </summary>
+        private static Texture2D DrawStageDot(bool filled)
+        {
+            Texture2D texture = CreateTexture();
+            if (filled) FillCircle(texture, 32, 32, 22, MetalLight);
+            else DrawCircle(texture, 32, 32, 20, MetalLight, 5);
             return Finalize(texture);
         }
 

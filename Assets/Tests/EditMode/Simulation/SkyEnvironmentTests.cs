@@ -48,6 +48,13 @@ namespace Simulation.Tests
             foreach (string property in new[]
                      { "_SkyTint", "_HorizonColor", "_Exposure", "_AtmosphereThickness", "_SpaceBlend" })
                 Assert.IsTrue(material.HasProperty(property), property);
+
+            // 별밭은 셰이더 안에서만 산다 — C# 이 구동하지 않으므로 이름이 틀려도 로그조차 없다.
+            // 머티리얼 인스펙터에서 톤을 잡는 노브라서, 사라지면 조용히 튜닝 불가가 된다.
+            foreach (string property in new[]
+                     { "_StarBrightness", "_StarDensity", "_StarCoverage", "_StarGlow",
+                       "_StarTwinkle", "_StarWashout", "_StarWarm", "_StarCool" })
+                Assert.IsTrue(material.HasProperty(property), property);
         }
 
         [Test]
@@ -126,21 +133,6 @@ namespace Simulation.Tests
 
             Assert.Less(SkyEnvironment.SphereDrop(300f, 848f),
                 SkyEnvironment.SphereDrop(600f, 848f), "멀수록 더 내려간다.");
-        }
-
-        [Test]
-        public void StarLag_IsZeroBelowSpace_AndParksTheShellAbove()
-        {
-            Assert.AreEqual(0f, SkyEnvironment.StarLagUnits(69f, 70f, 250f, 1f), 1e-4f,
-                "우주 아래에서는 별이 카메라에 붙어 있어야 한다 — 경계에서 껍질이 튀면 안 된다.");
-
-            // 정점 434 유닛 = 108.5 km, spaceKm 70 = 280 유닛. 계수 1 이면 껍질이 우주 진입점에 그대로 선다.
-            Assert.AreEqual(154f, SkyEnvironment.StarLagUnits(108.5f, 70f, 250f, 1f), 1e-2f);
-            Assert.AreEqual(77f, SkyEnvironment.StarLagUnits(108.5f, 70f, 250f, 0.5f), 1e-2f,
-                "계수는 시차를 선형으로 줄인다.");
-
-            // 껍질 반지름 400(프리팹 ShapeModule). 넘어서면 카메라가 별 바깥으로 나가 천정이 빈다.
-            Assert.Less(SkyEnvironment.StarLagUnits(108.5f, 70f, 250f, 1f), 400f);
         }
 
         private SkyEnvironment Create(out Transform target, out GameObject root,

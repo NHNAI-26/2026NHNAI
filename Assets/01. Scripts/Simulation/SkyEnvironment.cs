@@ -5,9 +5,10 @@ using UnityEngine.Rendering;
 namespace Simulation
 {
     /// <summary>
-    /// 로켓 고도에 따라 하늘·안개·태양·별·지구를 바꾼다. 씬에는 프리팹 인스턴스 하나로만 들어간다.
-    /// Volume 없이 내장 <see cref="RenderSettings"/> 와 파티클, 그리고 대기 그라디언트와 우주 큐브맵을
-    /// 섞는 스카이박스 셰이더 하나(<c>Sky/AtmosphereNebulaBlend</c>)만 쓴다.
+    /// 로켓 고도에 따라 하늘·안개·태양·구름·수면을 바꾼다. 씬에는 프리팹 인스턴스 하나로만 들어간다.
+    /// Volume 없이 내장 <see cref="RenderSettings"/> 와 구름 파티클, 그리고 대기 그라디언트·우주 큐브맵·
+    /// 절차 별밭을 한 패스에서 섞는 스카이박스 셰이더 하나(<c>Sky/AtmosphereNebulaBlend</c>)만 쓴다.
+    /// 별은 셰이더가 그린다 — 여기서 구동하는 프로퍼티는 없다.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class SkyEnvironment : MonoBehaviour
@@ -15,7 +16,6 @@ namespace Simulation
         private static readonly int SkyTintId = Shader.PropertyToID("_SkyTint");
         private static readonly int AtmosphereThicknessId = Shader.PropertyToID("_AtmosphereThickness");
         private static readonly int ExposureId = Shader.PropertyToID("_Exposure");
-        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int HorizonColorId = Shader.PropertyToID("_HorizonColor");
         private static readonly int SpaceBlendId = Shader.PropertyToID("_SpaceBlend");
 
@@ -28,8 +28,6 @@ namespace Simulation
         [Header("구성 요소")]
         [SerializeField] private Material skyboxSource;
         [SerializeField] private ParticleSystem clouds;
-        [SerializeField] private ParticleSystem stars;
-        [SerializeField] private Transform earth;
 
         [Header("고도 스케일")]
         // 1 유닛이 실제 몇 m 인가. 프로토타입 비행은 정점이 434 유닛뿐이라 250 으로 부풀려 108 km 로 읽는다.
@@ -45,19 +43,10 @@ namespace Simulation
         [SerializeField] private AnimationCurve fogDensity = AnimationCurve.EaseInOut(0f, 0.004f, 1f, 0f);
         [SerializeField] private AnimationCurve atmosphereThickness = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
         [SerializeField] private AnimationCurve skyExposure = AnimationCurve.EaseInOut(0f, 1.3f, 1f, 0f);
-        [SerializeField] private AnimationCurve starAlpha = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
-        // 우주에서 별 껍질이 카메라 Y 를 얼마나 놓아주는가. 0 이면 카메라에 못박혀 상대 운동이 0 이고,
-        // 1 이면 spaceKm 지점에 그대로 서서 진짜 시차가 난다 — 정점까지 154 유닛, 껍질 반지름 400 의 38 %
-        // 라 카메라가 별 바깥으로 나가지 않는다. 1 을 넘기면 위쪽 별이 빈다. XZ 는 그대로 따라붙는다.
-        [SerializeField, Range(0f, 1f)] private float starParallax = 1f;
         // 대기 그라디언트와 우주 큐브맵을 스카이박스 안에서 섞는 비율. 스카이박스는 far depth 에 그려져
-        // 바다도 지구도 가리지 않으므로 구간과 상한을 자유롭게 그으면 된다.
+        // 바다를 가리지 않으므로 구간과 상한을 자유롭게 그으면 된다.
         [SerializeField] private AnimationCurve spaceBlend = AnimationCurve.EaseInOut(0.4f, 0f, 1f, 1f);
         [SerializeField] private AnimationCurve sunIntensity = AnimationCurve.EaseInOut(0f, 1f, 1f, 1.6f);
-        [SerializeField] private AnimationCurve earthDistance = AnimationCurve.Linear(0f, 800f, 1f, 850f);
-        // 카메라에서 earthDistance 만큼 떨어진 구의 지름. 지름 < 거리라야 '공'으로 보인다 — 같으면 눈높이가
-        // 표면에 붙어 지평선만 남는다.
-        [SerializeField] private AnimationCurve earthScale = AnimationCurve.Linear(0f, 1200f, 1f, 600f);
 
         [Header("수면 곡률")]
         // 지평선까지의 수평 거리. 이 거리에서 수면이 카메라 높이만큼 내려가도록 반지름을 역산한다.
@@ -72,9 +61,7 @@ namespace Simulation
         private Material _skyBefore;
         private bool _fogBefore;
         private FogMode _fogModeBefore;
-        private ParticleSystemRenderer _starRenderer;
         private ParticleSystemRenderer _cloudRenderer;
-        private MaterialPropertyBlock _starBlock;
         private float _zeroY;
         private bool _bound;
         private MeshFilter _groundFilter;
@@ -123,10 +110,6 @@ namespace Simulation
                 clouds.transform.position = new Vector3(0f, _zeroY + cloudKm * 1000f / worldMetersPerUnit, 0f);
                 _cloudRenderer = clouds.GetComponent<ParticleSystemRenderer>();
             }
-
-            if (stars != null) _starRenderer = stars.GetComponent<ParticleSystemRenderer>();
-
-            if (earth != null) earth.gameObject.SetActive(false);
 
             BindGroundMesh();
         }
@@ -182,39 +165,12 @@ namespace Simulation
             // 가 필요하고 그 비용이 이 연출값보다 크다. 하늘색 반사가 필요해지면 그때 단계적으로 부른다.
             if (sun != null) sun.intensity = sunIntensity.Evaluate(t);
 
-            if (_starRenderer != null)
-            {
-                // 카메라에 완전히 못박으면 우주에서 화면 안 모든 것이 정지한다. XZ 만 따라가고 Y 는
-                // spaceKm 위에서 놓아줘 별이 아래로 흐르게 한다(내려올 때는 반대로 위로 흐른다).
-                Vector3 eye = cam.transform.position;
-                stars.transform.position = new Vector3(
-                    eye.x,
-                    eye.y - StarLagUnits(AltitudeKm, spaceKm, worldMetersPerUnit, starParallax),
-                    eye.z);
-                // 도메인 리로드는 _bound/_starRenderer 는 복원해도 직렬화 못 하는 이 블록은 null 로 되돌린다.
-                // Bind 는 _bound 때문에 다시 돌지 않으므로 여기서 채운다.
-                _starBlock ??= new MaterialPropertyBlock();
-                _starRenderer.GetPropertyBlock(_starBlock);
-                _starBlock.SetColor(BaseColorId, new Color(1f, 1f, 1f, starAlpha.Evaluate(t)));
-                _starRenderer.SetPropertyBlock(_starBlock);
-            }
-
             bool inSpace = AltitudeKm >= spaceKm;
             if (groundRenderer != null) groundRenderer.enabled = !inSpace;
             if (!inSpace) CurveGround();
-            // 우주에서 내려다보면 구름 판이 지구 위에 떠 있는 덩어리로 보인다. 렌더러만 끈다 —
+            // 우주에서 내려다보면 구름 판이 허공에 떠 있는 덩어리로 보인다. 렌더러만 끈다 —
             // 오브젝트를 껐다 켜면 한 번뿐인 버스트가 다시 터진다.
             if (_cloudRenderer != null) _cloudRenderer.enabled = !inSpace;
-            if (earth == null) return;
-
-            if (earth.gameObject.activeSelf != inSpace) earth.gameObject.SetActive(inSpace);
-            if (!inSpace) return;
-
-            // ponytail: 지구는 실제 크기가 아니라 카메라 바로 아래 고정 거리에 놓인 가짜 구다. 카메라가 늘 로켓을
-            // 궤도로 돌기 때문에 시차가 드러나지 않고, far clip 1000 안에 들어와 씬 카메라를 손댈 필요도 없다.
-            // 실제 스케일 비행이 붙으면 진짜 반지름·위치를 가진 구로 교체할 것.
-            earth.position = new Vector3(0f, cam.transform.position.y - earthDistance.Evaluate(t), 0f);
-            earth.localScale = Vector3.one * earthScale.Evaluate(t);
         }
 
         /// <summary>
@@ -352,16 +308,5 @@ namespace Simulation
             float d = Mathf.Min(Mathf.Abs(horizontalDistance), radius);
             return radius - Mathf.Sqrt(radius * radius - d * d);
         }
-
-        /// <summary>
-        /// 우주 구간에서 별 껍질이 카메라보다 뒤처지는 거리(유닛). <paramref name="spaceKm"/> 아래에서는 0 이라
-        /// 경계에서 껍질이 튀지 않는다. 위에서는 껍질이 그 자리에 서고 카메라만 올라가므로 시차가 그대로 난다.
-        /// ponytail: 껍질 반지름(프리팹 400)에 대한 상한은 걸지 않는다 — 정점 434 유닛에서 이탈이 154 로
-        /// 38 % 라 여유가 있다. 비행이 470 유닛을 넘게 되면 카메라가 위쪽 껍질을 뚫어 천정이 비므로,
-        /// 그때 starParallax 를 내리거나 여기서 shape.radius 기준으로 클램프한다.
-        /// </summary>
-        public static float StarLagUnits(float altitudeKm, float spaceKm, float worldMetersPerUnit,
-            float parallax) =>
-            Mathf.Max(altitudeKm - spaceKm, 0f) * 1000f / Mathf.Max(worldMetersPerUnit, 0.001f) * parallax;
     }
 }

@@ -77,11 +77,29 @@ namespace Simulation
         public float HoldSeconds { get; private set; }
         public string FailureReason { get; private set; } = string.Empty;
 
+        /// <summary>비행 단계의 이름. 관제 화면 스테퍼가 이 배열을 그대로 읽는다.</summary>
+        public static readonly string[] StageNames = { "점화", "이륙", "상승", "목표 구역", "체류" };
+
+        /// <summary>
+        /// 끝난 단계 수(0..<see cref="StageCount"/>). 조건이 깨져도 되돌아가지 않는다 — 스테퍼가
+        /// 체류 판정이 리셋될 때마다 뒤로 튀면 어디까지 갔었는지 읽을 수 없다.
+        /// </summary>
+        public int StageIndex { get; private set; }
+
+        /// <summary>이 미션이 실제로 쓰는 단계 수. 나머지 단계는 화면에서 흐리게 나온다.</summary>
+        public int StageCount { get; }
+
         public LaunchMissionEvaluator(LaunchMissionId missionId, LaunchMissionRules rules = null)
         {
             ValidateMission(missionId);
             _missionId = missionId;
             _rules = (rules ?? new LaunchMissionRules()).Snapshot();
+            StageCount = missionId switch
+            {
+                LaunchMissionId.LowAltitude or LaunchMissionId.HighAltitude => 3, // 점화·이륙·상승
+                LaunchMissionId.TargetZone => 4,                                  // + 목표 구역
+                _ => StageNames.Length,                                           // + 체류
+            };
         }
 
         public LaunchMissionOutcome Step(float deltaTime, float altitude, float horizontalDistance,
@@ -116,6 +134,16 @@ namespace Simulation
             _groundedSeconds = settled ? _groundedSeconds + deltaTime : 0f;
             _splashedSeconds = evaluateFailure && hasSplashed ? _splashedSeconds + deltaTime : 0f;
 
+            // 단계는 판정에 쓰인 값에서 그대로 유도한다. Step 이 불렸다는 것 자체가 점화가 끝났다는 뜻이다.
+            int stage = 1;
+            if (_hasLiftedOff) stage = 2;
+            if (altitude >= AscentAltitude) stage = 3;
+            // 이 미션이 안 쓰는 단계는 조건이 우연히 맞아도 세지 않는다 —
+            // 고도 미션은 목표 구역 안을 지나가더라도 그것으로 진행했다고 보지 않는다.
+            if (StageCount > 3 && inZone) stage = Math.Max(stage, 4);
+            if (StageCount > 4 && HoldSeconds > 0f) stage = 5;
+            StageIndex = Math.Max(StageIndex, stage);
+
             bool succeeded;
             switch (_missionId)
             {
@@ -142,6 +170,14 @@ namespace Simulation
                 Fail(_hasLiftedOff ? "로켓이 지면에 추락해 멈췄습니다." : "제한 시간 안에 이륙하지 못했습니다.");
             return Outcome;
         }
+
+        /// <summary>상승 단계의 기준 고도. 미션의 목표 고도와 같아서 고도 미션은 성공 순간 스테퍼가 찬다.</summary>
+        private float AscentAltitude => _missionId switch
+        {
+            LaunchMissionId.LowAltitude => _rules.LowAltitude,
+            LaunchMissionId.HighAltitude => _rules.HighAltitude,
+            _ => _rules.TargetAltitude,
+        };
 
         public LaunchMissionOutcome SelfDestruct()
         {
