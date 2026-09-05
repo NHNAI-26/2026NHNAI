@@ -213,6 +213,23 @@ namespace Border.Research.Tests
         }
 
         [Test]
+        public void Operation_ReturnFromDesignRestoresEnginePresetSelection()
+        {
+            CreateOperation();
+            FindButton(host, "CreateEnginePresetButton").onClick.Invoke();
+            FindButton(host, "EngineCard_Engine01").onClick.Invoke();
+            Assert.That(operation.SelectedEnginePreset, Is.EqualTo(EnginePresetId.Engine01));
+
+            Invoke(operation, "SetResearchControlsInteractable", false);
+            operation.ReturnFromDesignScreenForTests();
+
+            Button secondPreset = FindButton(host, "EngineCard_Engine02");
+            Assert.That(secondPreset.interactable, Is.True);
+            secondPreset.onClick.Invoke();
+            Assert.That(operation.SelectedEnginePreset, Is.EqualTo(EnginePresetId.Engine02));
+        }
+
+        [Test]
         public void Operation_LastWaitShowsFinalFailureReportAndRestartReusesScreens()
         {
             CreateOperation();
