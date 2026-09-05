@@ -19,7 +19,8 @@ namespace Simulation
     [DisallowMultipleComponent]
     public sealed class SimulationStageHost : MonoBehaviour
     {
-        private const string SimulationSceneName = "SimulationTest";
+        // 엔딩 연출이 이 씬을 그대로 쓰므로 이름을 공개한다 — 두 곳에 문자열을 복제하면 어긋난다.
+        public const string SimulationSceneName = "SimulationTest";
         private const string MainCameraTag = "MainCamera";
         private const string UntaggedTag = "Untagged";
 
@@ -32,6 +33,7 @@ namespace Simulation
         private Camera mainCamera;
         private int mainCameraCullingMask;
         private CameraClearFlags mainCameraClearFlags;
+        private Color mainCameraBackground;
         private RocketDesignUI designUI;
         private bool loaded;
         private bool busy;
@@ -112,10 +114,15 @@ namespace Simulation
                 // 이 카메라는 뷰포트 바깥을 채우는 클리어 전용으로 쓴다. 마스크를 비우지 않으면
                 // additive 로 올라온 시뮬레이션 씬을 전체 화면으로 한 번 더 그린다 — 배경에 3D 가
                 // 비치고 지오메트리도 두 번 그려진다. 끄지는 않는다: 끄면 사각형 바깥이 안 지워진다.
+                // 지우는 색까지 여기서 정한다. 씬에 저작된 색(01_Main 은 유니티 기본 파랑)을 그대로
+                // 두면 뷰포트 사각형 밖 — CRT 화면 안의 UI 뒤 — 이 그 색으로 채워진다. 씬에서 고치면
+                // 병합·재저장 때마다 되살아나므로 코드가 잡고 복원한다.
                 mainCameraCullingMask = mainCamera.cullingMask;
                 mainCameraClearFlags = mainCamera.clearFlags;
+                mainCameraBackground = mainCamera.backgroundColor;
                 mainCamera.cullingMask = 0;
                 mainCamera.clearFlags = CameraClearFlags.SolidColor;
+                mainCamera.backgroundColor = Color.black;
             }
 
             yield return SceneManager.LoadSceneAsync(SimulationSceneName, LoadSceneMode.Additive);
@@ -170,6 +177,7 @@ namespace Simulation
                 mainCamera.tag = MainCameraTag;
                 mainCamera.cullingMask = mainCameraCullingMask;
                 mainCamera.clearFlags = mainCameraClearFlags;
+                mainCamera.backgroundColor = mainCameraBackground;
             }
             if (research != null)
             {
@@ -250,37 +258,34 @@ namespace Simulation
         }
 
         /// <summary>
-        /// 시뮬레이션 씬을 내리되 연구 화면을 되살리지 않고 엔딩에 넘긴다. 로켓의 시각 계층은
-        /// 언로드 <b>전에</b> 복제해 둔다 — 파트 배치는 직렬화되지 않아 씬과 함께 사라진다.
+        /// 시뮬레이션 씬을 <b>내리지 않고</b> 엔딩에 넘긴다. 엔딩이 그 발사대에서 로켓을 다시 올리고,
+        /// 3D 구간이 끝나면 스스로 씬을 언로드한다.
         /// </summary>
         private IEnumerator HappyEndingRoutine(ResearchLaunchResultData result)
         {
             busy = true;
             while (photoCapture != null && photoCapture.IsCapturing) yield return null;
 
-            GameObject rocketVisual = HappyEndingSequence.PreserveRocket(FindFirstObjectByType<Rocket>());
-
+            // CRT 합성만 걷어 낸다. 이 경로는 화면을 되돌리지 않고 엔딩에 그대로 넘긴다.
             if (crt != null) yield return crt.PowerOffRoutine();
-            designUI = null;
-
-            Scene scene = SceneManager.GetSceneByName(SimulationSceneName);
-            if (scene.isLoaded) yield return SceneManager.UnloadSceneAsync(scene);
 
             if (mainCamera != null)
             {
                 mainCamera.tag = MainCameraTag;
                 mainCamera.cullingMask = mainCameraCullingMask;
                 mainCamera.clearFlags = mainCameraClearFlags;
+                mainCamera.backgroundColor = mainCameraBackground;
             }
 
             ResearchFlowSession.GetOrCreate().ClearPendingDesignEntry();
+            designUI = null;
             mission = null;
             photoCapture = null;
             loaded = false;
             busy = false;
 
             // 커튼은 걷지 않는다 — 엔딩이 자기 검은 화면을 세운 뒤 직접 걷는다.
-            HappyEndingSequence.Play(rocketVisual, research, result, crt);
+            HappyEndingSequence.Play(research, result, crt);
         }
 
         /// <summary>

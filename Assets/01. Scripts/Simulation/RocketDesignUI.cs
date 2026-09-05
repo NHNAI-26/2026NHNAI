@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Border.Research;
 using Border.UI;
 using TMPro;
@@ -37,8 +37,7 @@ namespace Simulation
         // 찌꺼기가 보인다. 오버레이 캔버스는 3D 뷰 위에 그려지므로 전체 화면 배경으로 덮을 수도 없다.
         private const float Margin = 16f;      // 테스터 화면의 가장자리 여백
         private const float BarHeight = 64f;   // 상·하단 바 높이 — 프리팹과 같은 값이어야 한다
-        private const float DockWidth = 200f;  // 좌측 도크 폭 — 같음
-        private const float ViewportLeft = DockWidth;
+        private const float DockWidth = 200f;  // 테스터 화면의 좌측 도크 폭 — 관제 화면은 프리팹이 정한다
 
         // 프로젝트 기본 UI 아트 시트. 연구·메뉴 화면은 에디터에서 프리팹에 구워 넣지만
         // (ResearchUiArtApplicator, MenuUiPrefabBuilder) 이 화면은 런타임에 만들어지므로
@@ -77,6 +76,11 @@ namespace Simulation
         private RectTransform taskPanel;
         private TMP_Text taskText;
         private RectTransform stageStrip;
+
+        // 도크가 밀어내는 폭은 프리팹 저작값이 소유한다. Bind 시점의 왼쪽 오프셋을 그대로 기억해 두고
+        // 도크가 비면 0 으로 접었다가 되돌린다 — 코드 상수와 프리팹이 어긋날 자리를 아예 없앤다.
+        private float viewportDockLeft;
+        private float stageStripDockLeft;
         private Image[] stageDots;
         private Image[] stageLines;
         private TMP_Text[] stageLabels;
@@ -397,11 +401,12 @@ namespace Simulation
             // 관제 모드에서는 프리셋 패널과 발사 정보 패널이 같은 도크를 번갈아 쓰므로 폭이 그대로 유지된다.
             bool dockOccupied = presetPanel.gameObject.activeSelf
                 || (flightInfoPanel != null && flightInfoPanel.gameObject.activeSelf);
-            float left = dockOccupied ? ViewportLeft : 0f;
+            float left = dockOccupied ? viewportDockLeft : 0f;
             if (!Mathf.Approximately(viewport.offsetMin.x, left))
             {
                 viewport.offsetMin = new Vector2(left, viewport.offsetMin.y);
-                stageStrip.offsetMin = new Vector2(left, stageStrip.offsetMin.y);
+                stageStrip.offsetMin = new Vector2(
+                    dockOccupied ? stageStripDockLeft : 0f, stageStrip.offsetMin.y);
             }
 
             viewport.GetWorldCorners(viewportCorners);
@@ -719,10 +724,12 @@ namespace Simulation
             fundsText = topBar.Find("FundsCell/Funds").GetComponent<TMP_Text>();
 
             viewport = (RectTransform)canvasRect.Find("Viewport");
+            viewportDockLeft = viewport.offsetMin.x;
             taskPanel = (RectTransform)viewport.Find("taskPanel");
             taskText = taskPanel.GetComponentInChildren<TMP_Text>(true);
 
             stageStrip = (RectTransform)canvasRect.Find("StageStrip");
+            stageStripDockLeft = stageStrip.offsetMin.x;
             int count = LaunchMissionEvaluator.StageNames.Length;
             stageDots = new Image[count];
             stageLines = new Image[count];
