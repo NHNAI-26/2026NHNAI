@@ -1,4 +1,5 @@
 using System;
+using Border.Audio;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -103,6 +104,10 @@ namespace Border.Research
         private int ignitionClickedIndex = -1;
         private bool ignitionAdvancePending;
         private Tween feedbackTween;
+        private SoundHandle resultSuccessSound;
+        private SoundHandle fuelGaugeSound;
+        private Color fuelDialRestColor;
+        private float fuelPromptElapsed;
 
         private TMP_Text titleText;
         private TMP_Text instructionText;
@@ -175,6 +180,8 @@ namespace Border.Research
 
         public void HideForReuse()
         {
+            StopResultSound();
+            StopFuelFeedback();
             feedbackTween?.Kill();
             feedbackTween = null;
             completedCallback = null;
@@ -188,6 +195,8 @@ namespace Border.Research
 
         private void OnDestroy()
         {
+            StopResultSound();
+            StopFuelFeedback();
             if (coolingPipeMaterial != null) DestroyUnityObject(coolingPipeMaterial);
             if (coolingValveMaterial != null) DestroyUnityObject(coolingValveMaterial);
             if (fuelReadoutMaterial != null) DestroyUnityObject(fuelReadoutMaterial);
@@ -515,6 +524,7 @@ namespace Border.Research
             fuelJudgementText = FindRequiredText(canvasTransform, "FuelJudgementText");
             fuelFillImage = FindRequiredImage(canvasTransform, "FuelFill");
             fuelDialImage = FindRequiredImage(canvasTransform, "FuelDial");
+            if (fuelDialImage != null) fuelDialRestColor = fuelDialImage.color;
             fuelReadoutImage = FindRequiredImage(canvasTransform, "FuelReadout");
             fuelNeedle = FindRequiredRectTransform(canvasTransform, "FuelNeedle");
             coolingPipeImage = FindRequiredImage(canvasTransform, "CoolingPipe");
@@ -592,6 +602,8 @@ namespace Border.Research
 
         private void ResetRunState()
         {
+            StopResultSound();
+            StopFuelFeedback();
             feedbackTween?.Kill();
             feedbackTween = null;
             gameCompleted = false;
@@ -640,7 +652,7 @@ namespace Border.Research
             switch (statId)
             {
                 case EngineStatId.FuelCapacity:
-                    instructionText.text = "계기판을 누르고 있다가 바늘이 하늘색 구간의 가장 오른쪽 흰색 선에 닿으면 놓으세요.";
+                    instructionText.text = "최대게이지까지 채우세요";
                     BuildFuelGame();
                     break;
                 case EngineStatId.Cooling:
@@ -756,11 +768,15 @@ namespace Border.Research
 
         private void UpdateFuelGame(float deltaSeconds)
         {
+            fuelPromptElapsed += deltaSeconds;
+            UpdateFuelPrompt();
             if (fuelFilling)
             {
                 fuelHoldSeconds += deltaSeconds;
                 fuelGaugeValue = Mathf.Clamp01(fuelHoldSeconds / fuelFillDuration);
                 SetFuelGaugeValue(fuelGaugeValue);
+                if (fuelGaugeValue >= 1f) StopFuelGaugeSound();
+                else StartFuelGaugeSound();
                 if (fuelHoldSeconds >= fuelFillDuration + FuelOverfillSeconds) RecordFuelAttempt();
             }
             UpdateFuelStatusText();
@@ -846,12 +862,50 @@ namespace Border.Research
             SetStateText(ignitionShowingSequence ? $"순서 보기 {roundIndex + 1}/{IgnitionRoundCount}" : $"입력 {roundIndex + 1}/{IgnitionRoundCount}", false);
         }
 
+        private void StartFuelGaugeSound()
+        {
+            if (!Application.isPlaying || !isActiveAndEnabled || fuelGaugeSound.IsPlaying) return;
+            fuelGaugeSound = SoundManager.Instance != null
+                ? SoundManager.Instance.PlaySfx("Gauge") : SoundHandle.Invalid;
+            fuelGaugeSound.SetLoop(true);
+        }
+
+        private void StopFuelGaugeSound()
+        {
+            fuelGaugeSound.Stop();
+            fuelGaugeSound = SoundHandle.Invalid;
+        }
+
+        private void UpdateFuelPrompt()
+        {
+            if (fuelDialImage == null) return;
+            float brightness = fuelFilling ? 1f : 0.5f + 0.5f * Mathf.Cos(fuelPromptElapsed * Mathf.PI * 2f / 0.9f);
+            fuelDialImage.color = Color.Lerp(new Color(0.12f, 0.4f, 0.18f, fuelDialRestColor.a),
+                new Color(0.35f, 1f, 0.45f, fuelDialRestColor.a), brightness);
+        }
+
+        private void StopFuelFeedback()
+        {
+            StopFuelGaugeSound();
+            if (fuelDialImage != null) fuelDialImage.color = fuelDialRestColor;
+        }
+
+        private void StopResultSound()
+        {
+            resultSuccessSound.Stop();
+            resultSuccessSound = SoundHandle.Invalid;
+        }
+
         private void SetupFuelAttempt()
         {
+            StopResultSound();
+            StopFuelFeedback();
+            fuelPromptElapsed = 0f;
             fuelGaugeValue = 0f;
             fuelHoldSeconds = 0f;
             fuelFilling = false;
             fuelFillDuration = NextFloat(FuelMinimumFillSeconds, FuelMaximumFillSeconds);
+            UpdateFuelPrompt();
             SetFuelGaugeValue(0f);
             fuelJudgementText.gameObject.SetActive(false);
             UpdateFuelStatusText();
@@ -862,6 +916,8 @@ namespace Border.Research
             if (gameCompleted || fuelJudgementShowing || statId != EngineStatId.FuelCapacity
                 || fuelAttemptIndex >= FuelAttemptCount || fuelFilling) return;
             fuelFilling = true;
+            UpdateFuelPrompt();
+            StartFuelGaugeSound();
         }
 
         private void RecordFuelAttempt()
@@ -869,6 +925,8 @@ namespace Border.Research
             if (gameCompleted || fuelJudgementShowing || statId != EngineStatId.FuelCapacity
                 || fuelAttemptIndex >= FuelAttemptCount || !fuelFilling) return;
             fuelFilling = false;
+            StopResultSound();
+            StopFuelFeedback();
             int score = CalculateFuelAttemptScore(fuelGaugeValue, Mathf.Max(0f, fuelHoldSeconds - fuelFillDuration));
             fuelScores[fuelAttemptIndex++] = score;
             ShowFuelJudgement(1f - score / 100f);
@@ -1096,11 +1154,19 @@ namespace Border.Research
                 return;
             }
 
+            StopResultSound();
+            StopFuelFeedback();
             gameCompleted = true;
             fuelFilling = false;
             coolingDragging = false;
             pendingResult = new ResearchMiniGameResult(presetId, statId, focused, score);
             ShowResult();
+            if (pendingResult.Score >= 50 && !(statId == EngineStatId.Cooling && coolingHeat >= 1f)
+                && Application.isPlaying && isActiveAndEnabled && SoundManager.Instance != null)
+            {
+                resultSuccessSound = SoundManager.Instance.PlaySfx("success");
+                resultSuccessSound.SetLoop(false);
+            }
         }
 
         private void ShowResult()
@@ -1135,6 +1201,7 @@ namespace Border.Research
                 return;
             }
 
+            StopResultSound();
             resultDismissed = true;
             resultShowing = false;
             completedCallback?.Invoke(pendingResult);
@@ -1347,6 +1414,8 @@ namespace Border.Research
 
         private void OnDisable()
         {
+            StopResultSound();
+            StopFuelFeedback();
             ReleaseHeldInput();
         }
 

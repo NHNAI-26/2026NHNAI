@@ -204,3 +204,19 @@ MonoBehaviour:
     useSpatialAudio: 0
     minDistance: 1
     maxDistance: 50
+  - id: Gauge
+    clip: {fileID: 8300000, guid: f709050f085b14aa2b9af515dac32e0c, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 1
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: success
+    clip: {fileID: 8300000, guid: d5355a853836e4583b10cf58d1fbce66, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
