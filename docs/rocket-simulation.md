@@ -351,7 +351,7 @@ FOV 40 / 0.1 / 5000이고 브레인이 그 값을 카메라에 밀어넣으므�
 공유해도 서로 간섭하지 않는다. 프리팹에 물려 두는 이유는 가이드 선과 같다: `Shader.Find` 폴백은
 빌드에서 스트리핑될 수 있다.
 
-`SkyEnvironment` 가 강제로 켜는 안개(`fogDensity` 0.004 → 0)가 발사대 근처 점을 배경색 쪽으로 씻어낸다.
+`SkyEnvironment` 가 강제로 켜는 안개(`fogDensity` 0.005 → 0)가 발사대 근처 점을 배경색 쪽으로 씻어낸다.
 의도한 것은 아니지만 아래쪽이 흐리고 위쪽이 또렷해 고도감에 도움이 되므로 그대로 둔다.
 
 이 값들은 전부 **월드 유닛**이지 `SkyEnvironment` 의 연출용 km 가 아니다(`worldMetersPerUnit = 250`).
@@ -525,16 +525,44 @@ UI 쪽은 `RocketDesignUI.BuildLaunchPip()`이다. 우하단 `(-16, 16)`은 미�
 `AltitudeKm` 은 public 이다. GDD 의 텔레메트리 HUD(`docs/artemis-2026-gdd/08_로켓_발사.md`)가 붙을 때
 고도 표시는 여기서 읽으면 된다.
 
-### 왜 Volume 도 커스텀 셰이더도 안 썼나
+### 왜 Volume 은 안 쓰고 커스텀 셰이더는 스카이박스 하나뿐인가
 
-전부 내장 `RenderSettings`(스카이박스 `Skybox/Procedural` 의 `_AtmosphereThickness`/`_Exposure`/`_SkyTint`,
-지수 안개)와 파티클 두 개로 끝난다. Uber 계열에 키워드를 하나라도 더하면 `UberShaderVariantManifest` 행과
-`UberShaderSuiteTests` 상수를 같이 고쳐야 하는데(`CLAUDE.md` 참조) 하늘색 하나에 치를 값이 아니다.
-엔진 불꽃이 스톡 URP `Particles/Unlit` 을 쓰는 것과 같은 이유다.
+내장 `RenderSettings`(지수 안개)와 파티클 두 개, 스톡 셰이더를 쓴 메시 하나, 그리고 커스텀 스카이박스
+셰이더 하나(`Sky/AtmosphereNebulaBlend`)로 끝난다. Uber 계열에 키워드를 하나라도 더하면
+`UberShaderVariantManifest` 행과 `UberShaderSuiteTests` 상수를 같이 고쳐야 하는데(`CLAUDE.md` 참조)
+하늘색 하나에 치를 값이 아니다. 엔진 불꽃이 스톡 URP `Particles/Unlit` 을 쓰는 것과 같은 이유다.
+
+스카이박스만 예외인 이유는 아래 "우주는 스카이박스 안에서 섞인다" 에 적었다. 요점은 산란 모델을
+포크하지 않았다는 것이다 — 빌트인 `Skybox-Procedural.shader` 를 벤더링하면 대기 산란만 250줄인데,
+필요한 것은 천정색과 지평선색 사이의 그라디언트뿐이라 새로 쓰는 쪽이 훨씬 짧았다.
+
+새 셰이더가 Uber 스위트를 건드리지 않는 근거는 셋이다. `Assets/05. Arts/Shader/Sky/` 는
+`UberShaderSuiteTests` 의 디렉터리 스캔(`Uber/` 와 `Editor/` 만, `TopDirectoryOnly`) 밖이고 —
+`Shader/Water/` 가 같은 선례다. `UberShaderVariants.shadervariants`·Graphics Settings 의
+Always Included Shaders·Preloaded Shaders 셋은 테스트가 정확한 목록으로 잠그고 있어 **건드리면 즉시
+깨지는데, 건드릴 필요도 없다** — 빌드 생존은 프리팹의 `skyboxSource` 직렬화 참조가 보장하고
+(`multi_compile` 이 하나도 없어 배리언트는 1개다), 스카이박스는 URP 가 엔진 네이티브 렌더러 리스트로
+넘기므로 URP 전용 태그도 붙이지 않았다.
 
 스카이박스 머티리얼은 **복사본**을 만들어 `RenderSettings.skybox` 에 넣는다. 공유 에셋을 그대로 굴리면
-Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 남는다. 안개 설정도 스크립트가 켜고 끄므로
-씬 라이팅 설정에는 디프가 남지 않는다.
+Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 남는다.
+
+#### 안개 값의 소유자는 프리팹 커브다 — 씬 라이팅 설정이 아니다
+
+`Bind()` 가 `RenderSettings.fog`/`fogMode` 를 켜고, `Update()` 가 매 프레임 `fogColor`/`fogDensity` 를
+프리팹의 그라디언트·커브로 덮어쓴다. 따라서 씬 라이팅 설정(`Window > Rendering > Lighting > Environment`)
+에서 안개 색이나 밀도를 만져도 **첫 프레임에 사라진다**. 값을 바꾸려면
+`Assets/03. Prefabs/Simulation/SkyEnvironment.prefab` 의 `fogColor`/`fogDensity` 를 고쳐야 한다.
+
+`SkyEnvironment` 에는 `[ExecuteAlways]` 가 없어서 편집 모드에서는 `Update()` 가 돌지 않는다. 그래서
+Scene/Game 뷰에는 씬 값이, Play Mode 에는 프리팹 커브 값이 보인다 — 둘이 다르면 "플레이하면 안개가
+사라진다"로 읽힌다. 실제로 그런 적이 있었다(커밋 `7801e43`). `SimulationTest.unity` 의
+`m_FogColor`/`m_FogDensity` 는 그 착시를 막으려고 프리팹의 t=0 키와 **같은 값으로 맞춰 둔 편집 모드
+미리보기 사본**이다. 한쪽을 바꾸면 다른 쪽도 같이 바꾼다.
+
+추가로 `SimulationTest` 를 `01_Main` 위에 additive 로 올리는 경로(`SimulationStageHost`)에서는
+활성 씬이 `01_Main` 이라 `SimulationTest` 의 `m_Fog` 자체가 아예 안 읽힌다. Unity 의 `RenderSettings` 는
+씬별이고 활성 씬 것만 쓰인다 — 그 경로에서 안개를 켜는 것은 오직 `Bind()` 다.
 
 앰비언트는 고도에 따라 갱신하지 않는다. Skybox 앰비언트를 따라가게 하려면 매 프레임
 `DynamicGI.UpdateEnvironment()` 가 필요하고, 그 비용이 이 연출값보다 크다.
@@ -542,18 +570,97 @@ Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 �
 ### 지구는 카메라 아래 놓인 가짜 구다
 
 실제 반지름의 지구를 놓으면 100 km 상공에서는 곡률이 거의 안 보인다 — 현실적이지만 원하는 그림이 아니다.
-그래서 지구는 카메라 바로 아래 고정 거리(곡선값, 900 유닛 이내)에 떠 있고 고도에 따라 크기만 준다.
-상승 구간의 `LaunchCam` 은 Y 로만 움직여 시차가 드러나지 않고, 900 유닛 안이라 vcam Lens 의 far clip
-1000 을 손댈 필요도 없다. 지구가 켜지는 고도(`spaceKm`)에서 수면은 반대로 꺼진다 — 그 높이에서는
-1400 m 짜리 판이 이미 점만 하다.
+그래서 지구는 카메라 바로 아래 고정 거리(곡선값)에 떠 있고 고도에 따라 크기만 준다. 상승 구간의
+`LaunchCam` 은 Y 로만 움직여 시차가 드러나지 않는다. 지구가 켜지는 고도(`spaceKm`)에서 수면은 반대로
+꺼진다 — 그 높이에서는 1400 m 짜리 판이 이미 점만 하다.
+
+이 거리는 far clip 과 맞물려 있다. 두 커브는 선형이다: 거리 `d(t) = 800 + 50t`,
+반지름 `r(t) = 600 − 300t`. **화면에 보이는 지구의 최원거리는 `d + r` 이 아니라 실루엣 림까지의 접선 거리
+`√(d² − r²)`** 이고 — 그 너머는 전부 뒷면이라 앞면에 가려진다 — 최대값은 t=1 에서 **795 유닛**이다.
+그래서 성립하는 부등식이 **지구 림 795 < far clip 1000** 이다. 지구의 뒷면(`d + r` 이 1150~1254)은
+지금도 far plane 에 잘리지만 전부 backfacing 이라 화면에 나오지 않는다 — far clip 을 올릴 이유로
+착각하지 말 것. 반대로 `earthScale` 을 키우면 림이 far plane 을 뚫고 나가며 조용히 잘린다.
 
 별은 텍스처 없는 파티클 점 800개이고, 매 프레임 카메라 위치로 따라붙는다. 알파는 고도 곡선이 올린다.
-구름은 `cloudKm` 에 배치된 파티클 판이고 로켓이 통과해 지나가야 하므로 `simulationSpace = World` 다
-(불꽃과 같은 이유). `spaceKm` 위에서는 구름 판의 **렌더러만** 끈다 — 우주에서 내려다보면 지구 위에 뜬
-덩어리로 보이기 때문이고, 오브젝트째 껐다 켜면 한 번뿐인 버스트가 다시 터져 구름이 재배치된다.
 
-지구·구름 텍스처(`Assets/05. Arts/Texture/Sky/`)는 절차적으로 생성한 임시 에셋이다. 아트가 들어오면
-같은 경로를 덮어쓰면 된다.
+지구 텍스처(`Assets/05. Arts/Texture/Sky/Earth_Albedo.png`)는 절차적으로 생성한 임시 에셋이다. 아트가
+들어오면 같은 경로를 덮어쓰면 된다.
+
+### 구름은 파티클이 그리는 메시다
+
+구름은 `cloudKm` 에 배치된 파티클이고 로켓이 통과해 지나가야 하므로 `simulationSpace = World` 다
+(불꽃과 같은 이유). `spaceKm` 위에서는 **렌더러만** 끈다 — 우주에서 내려다보면 지구 위에 뜬 덩어리로
+보이기 때문이고, 오브젝트째 껐다 켜면 한 번뿐인 버스트가 다시 터져 구름이 재배치된다.
+
+빌보드 판이 아니라 **SimpleSky 의 `Cloud_01`~`Cloud_04` 메시**를 파티클이 뿌린다
+(`Assets/SimpleSky/Models/`). ParticleSystemRenderer 를 Mesh 모드로 돌린 것뿐이라 배치·토글 로직은
+그대로다 — C# 은 한 줄도 바뀌지 않았다. 대신 Mesh 모드에서만 성립하는 제약이 셋 붙는다. 전부
+"안 지키면 눈에 보이게 깨지는" 항목이라 여기 적어 둔다.
+
+- **GPU Instancing 을 꺼야 한다.** Mesh 모드의 인스턴싱 경로는 셰이더가 `vertInstancingSetup` 을
+  지원해야 파티클별 트랜스폼이 먹는다. SimpleSky 머티리얼의 레거시 `Unlit/Texture` 는 지원하지 않는다.
+  끄면 CPU 가 위치·회전·크기를 정점 버퍼에 구워 넣어 어떤 셰이더든 정상 동작한다.
+- **Render Alignment 는 World 여야 한다.** 기본값 View 는 Mesh 모드에서도 살아 있어 메시를 매 프레임
+  카메라 쪽으로 돌린다 — 카메라가 로켓 궤도를 도는 동안 구름 전체가 통째로 따라 돈다.
+- **회전은 `startRotationY`(요) 랜덤이다.** 빌보드의 단일 `startRotation` 은 화면 롤이지만 메시에서는
+  정렬축 롤이라 구름이 옆으로 눕는다. `startRotation3D` 를 켜고 Y 에만 랜덤을 준다.
+
+`startSize` 도 의미가 바뀐다. 빌보드에서는 월드 크기였지만 Mesh 모드에서는 **메시 로컬 바운즈에 곱하는
+배율**이다. Cloud 메시가 긴 축 기준 23~50 유닛이라 배율 1.0~2.0 이 예전 판 크기(30~80)와 얼추 맞는다.
+빌보드 전용 클램프인 `Min/MaxParticleSize` 도 더는 걸리지 않으므로 크기를 키울 때 안전장치가 없다.
+
+머티리얼은 SimpleSky 가 돔과 구름에 함께 쓰는 `Assets/SimpleSky/Materials/SimpleSky.mat` 하나다
+(레거시 `Unlit/Texture`. `LightMode` 태그가 없는 패스라 URP 가 `SRPDefaultUnlit` 으로 집어 그린다).
+구름 메시의 UV 가 그 그라디언트 스트립 전용이라 다른 텍스처로 갈아끼울 수 없다. 불투명이므로 예전
+알파 블렌드 구름과 달리 깊이를 쓰고, 소프트 엣지 대신 카툰 실루엣이 된다 — 에셋팩의 의도된 룩이다.
+SimpleSky 의 `SkyDome.fbx` 는 쓰지 않는다. 스카이박스와 역할이 겹쳐, 쓰는 순간 고도별
+하늘색 커브 전체를 SimpleSky 그라디언트로 갈아엎게 된다.
+
+예전 구름 머티리얼 `Assets/05. Arts/Material/Sky/Cloud.mat` 과 `Cloud_Puff.png` 는 참조가 사라져
+고아로 남아 있다. 구름 룩을 되돌릴 여지를 남겨 두려고 지우지 않았다.
+
+### 우주는 스카이박스 안에서 섞인다
+
+하늘과 우주는 **같은 스카이박스 셰이더 한 패스**에서 나온다
+(`Assets/05. Arts/Shader/Sky/SkyBlend.shader`, 셰이더 이름 `Sky/AtmosphereNebulaBlend`,
+머티리얼 `Assets/05. Arts/Material/Sky/SkyBlend.mat`). 프래그먼트가 하는 일은 세 줄이다: 시선 방향의
+Y 로 지평선색과 천정색을 섞고, 같은 방향으로 우주 큐브맵을 샘플하고, 둘을 `_SpaceBlend` 로 `lerp` 한다.
+
+이렇게 한 이유는 이전 시도의 반례가 명확했기 때문이다. 네뷸라를 카메라에 붙는 반투명 돔으로 얹으면
+스카이박스는 그대로 둘 수 있지만, 돔 반지름이 지구 실루엣 림(795)과 far clip(1000) 사이에 끼어야 하고,
+카메라 중심 구는 투명 정렬 거리가 0 이라 애디티브가 강제되고, 바다 반폭(1050)이 돔보다 커서 저고도
+알파를 0 으로 묶어야 하고, Update/LateUpdate 한 프레임 지연이 far clip 마진을 먹는다. 스카이박스는
+far depth 에 그려져 바다도 지구도 절대 가리지 않으므로 **그 제약이 전부 사라진다.**
+
+프로퍼티는 전부 프리팹의 커브·그라디언트가 매 프레임 구동한다. 상수는 하나도 없다.
+
+| 셰이더 프로퍼티 | 구동원 | 하는 일 |
+|---|---|---|
+| `_SkyTint` | `skyTint` Gradient | 천정색. 파란 하늘 → 검정 |
+| `_HorizonColor` | `fogColor` Gradient | 지평선색. **안개색과 같은 값**이라 구조적으로 어긋날 수가 없다 |
+| `_Exposure` | `skyExposure` 커브 | 대기 밝기. t=1 에서 0 이라 하늘이 완전히 꺼진다 |
+| `_AtmosphereThickness` | `atmosphereThickness` 커브 | 지평선 띠의 폭. `pow(saturate(dir.y), thickness * 0.5)` 의 지수다 |
+| `_SpaceBlend` | `spaceBlend` 커브 | 대기 ↔ 큐브맵 비율 |
+
+주의할 지점 셋:
+
+- **지면색 프로퍼티는 없다.** `saturate(dir.y)` 가 아래 반구를 0 으로 눌러 지평선 아래는 전부
+  `_HorizonColor` 가 된다. 안개색 하나가 지평선색과 지면색을 겸하는 셈인데, 둘 다 `fogColor` 로
+  구동할 거라면 별도 프로퍼티는 `lerp(fog, fog, x)` 라 죽은 노브다. 지평선 아래에 다른 톤이 실제로
+  필요해지면 전용 Gradient 와 함께 되살리면 된다.
+- **Gradient 는 `.linear` 를 거쳐 넘긴다.** 인스펙터의 Gradient 는 sRGB 로 authoring 하지만
+  `Material.SetColor` 는 값을 변환 없이 셰이더로 보낸다. 프로젝트가 Linear 색공간이라 변환을 빼면
+  스와치보다 밝고 탁하게 나온다.
+- **`_Exposure` 의 의미가 바뀌었다.** `Skybox/Procedural` 시절에는 산란 모델에 먹는 값이라 기본 1.3
+  이었지만 지금은 authoring 한 색에 그냥 곱해진다. `skyExposure` 첫 키를 1.0 으로 내려 둔 이유다.
+
+큐브맵은 `Assets/DinV/Dynamic Space Background/Sprites/Nebula Blue.png` 를 **제자리에서** Cube /
+**Spheremap** / Convolution None / 면 1024 (DXT1+밉맵 약 4.2 MB) 로 재임포트한 것이다. 원본은 파노라마가
+아니라 4096² 정사각 스프라이트라 매핑을 골라야 했는데, Cylindrical(lat-long)은 무늬가 가로로 2배 늘어나고
+극점 소용돌이와 경도 이음매(세로 직선)가 남는다. 둘 다 직선·회전 대칭이라 눈이 즉시 잡아낸다. Spheremap 은
+네 모서리를 버리고 뒤쪽 반구가 방사형으로 뭉개지지만, 그 실패 모드는 성운의 방사형 필라멘트와 구분되지
+않는다. **DinV 팩을 갱신하면 이 `.png.meta` 가 덮여 큐브맵이 2D 텍스처로 돌아가고, 우주가 조용히
+검은색이 된다.**
 
 ## 씬 구조에서 주의할 점
 
@@ -665,17 +772,17 @@ Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 �
 패키지 폴더를 직접 고치지 않은 이유는 머티리얼을 복사해 나온 이유와 같다 — 재임포트에 덮인다.
 대신 업스트림 갱신은 이 포크에 자동으로 오지 않는다.
 
-#### 스카이박스 지면색도 같이 움직인다
+#### 지평선 아래도 안개색이다
 
-수면이 굽어 내려가면 그 아래로 `Skybox/Procedural` 의 지면 반구가 드러난다. 기본 회색을 그대로 두면
-바다 밑에 회색 판이 깔린 것처럼 보이므로 `_GroundColor` 를 안개색(`fogColor`)과 같이 굴린다 —
-저고도에서는 먼 바다의 헤이즈, 고고도에서는 어두운 우주로 읽힌다.
+수면이 굽어 내려가면 그 아래로 스카이박스가 드러난다. 별도 지면색을 두지 않고 지평선색
+(`_HorizonColor` = `fogColor`)이 그대로 아래 반구를 채우므로, 저고도에서는 먼 바다의 헤이즈로,
+고고도에서는 어두운 우주로 읽힌다 — 안개와 색이 어긋날 여지 자체가 없다.
 
 #### 한계
 
 - **카메라 피치가 0 이다.** 후퇴 뷰는 수평을 보므로 지평선이 화면에 남는 것은 카메라 높이가 대략
   120 유닛(`horizonDistance` × tan 15°) 아래일 때까지다. 그 위로는 바다가 화면 아래로 빠지고
-  하늘·별과 스카이박스 지면색만 남는다. 정점에서도 지구를 내려다보고 싶다면 고도에 따라 피치를
+  하늘·별과 지평선 아래 안개색만 남는다. 정점에서도 지구를 내려다보고 싶다면 고도에 따라 피치를
   주거나 `spaceKm` 의 가짜 지구를 앞당겨야 한다 — 이번 변경에는 들어 있지 않다.
 - **물리는 평면 그대로다.** `Rocket.waterLevel` 은 −8.9 이고, 로켓이 옆으로 수백 유닛 밀려 착수할
   때만 화면 수면과 어긋난다. 발사대 근처는 낙차 0 이라 같다.
@@ -736,8 +843,8 @@ Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 �
 
 - 몸통 — `Assets/03. Prefabs/3D/RocketBody.prefab` 을 씬의 `Rocket/Body` 자식으로 중첩.
 - 엔진 — `Assets/03. Prefabs/3D/Engine_01.prefab` 을 `RocketEngine.prefab` 루트의 자식으로 중첩.
-  `RocketPart`·`BoxCollider`·`Flame` 은 그대로 두고 메시만 바꿨다. 프리셋 10개가 여전히 같은
-  프리팹을 쓰므로 외형은 전부 같다.
+  `RocketPart`·`BoxCollider`·`Flame` 은 그대로 두고 메시만 바꿨다. 이 메시는 **기본값일 뿐이고**,
+  프리셋에 따라 통째로 갈린다 — 아래 "엔진 외형은 프리셋이 고른다".
 
 두 프리팹 다 **X −90° 회전**이 필요하다. 원본 FBX 의 긴 축이 로컬 +Z 이고, X −90° 가 그것을 +Y 로
 올린다. 회전이 없으면 로켓이 옆으로 눕는다.
@@ -751,6 +858,45 @@ Play Mode 에서 바꾼 값이 `.mat` 에셋에 눌어붙어 씬을 끄고도 �
   들어가고, 교체 전 실린더 임시본(4 m × 1 m)과 같은 높이라 카메라·부착 좌표가 그대로 산다.
 - 엔진: 중첩 인스턴스 스케일 **100**(원본 그대로) → 1 m × 0.55 m. 임시본 Cube(0.8 m × 0.5 m)와
   거의 같아 조정할 이유가 없었다.
+
+### 엔진 외형은 프리셋이 고른다
+
+연구가 만든 프리셋은 스탯 구성에서 다섯 아키타입 중 하나가 정해지고(`EngineVisualClassifier`,
+한 스탯이 2위를 `SpecializationLeadThreshold` 8 만큼 앞서야 특화로 친다), 그 아키타입의 메시가
+`RocketEngine.prefab` 의 기본 메시를 대체한다. 매핑은
+`Assets/02. ScriptableObjects/Research/EnginePresetVisualLibrary.asset` 한 곳이고, 연구 운영 화면의
+홀로그램 프리뷰(`ResearchEnginePreviewController`)와 **같은 에셋·같은 해석 규칙**을 탄다 — 두 화면이
+같은 엔진에 다른 모양을 보여주면 연동됐다는 신호 자체가 사라지기 때문이다.
+
+교체는 `RocketPart.ApplyPreset` 안에서 일어난다. 스탯이 정해지는 지점이 곧 아키타입이 정해지는
+지점이고, 부품을 만드는 경로가 프리셋 드래그 하나뿐이라(`RocketBuilder.BeginPresetDrag`) 여기 하나면
+설계·부착·발사가 전부 따라온다. `RocketBuilder` 는 이 기능을 모른다.
+
+탈출구는 둘이고 서로 다른 것을 막는다. `RocketPart.visualLibrary` 가 비어 있으면 — 프리팹을 거치지
+않고 만든 부품, 즉 EditMode 테스트가 그렇다 — 교체 판정 자체를 지나지 않는다. `ResearchFlowSession`
+을 만들지 않는 것도 이 가드 덕이다(`GetOrCreate()` 는 이름 그대로 오브젝트를 만드는 호출이다).
+프리셋의 `PresetIndex` 가 `-1`(저작 에셋)이면 매핑이 `null` 로 떨어져 프리팹 기본 메시가 남는다 —
+`SimulationTest` 단독 재생이 이쪽이다.
+
+**아트 원본 스케일을 그대로 쓴다.** 메시를 고정 높이로 정규화하지 않는 대신, 교체 직후
+`BoxCollider` 와 `Flame` 을 새 메시 bounds 로 다시 맞춘다(`RocketPart.FitToMesh`). 따라서 프리팹에
+박힌 `(0.547, 1, 0.541)` 은 이제 **기본 메시의 값일 뿐 계약이 아니다** — 아래 콜라이더 문단의 수치는
+기본 메시를 설명하는 것이다.
+
+- 메시를 옮겨 기하 중심을 부품 원점으로 끌어온다. `RocketBuilder.HalfExtents` 가
+  `BoxCollider.center == 0` 을 가정하고 그 가정이 코드에 `ponytail:` 로 못 박혀 있어서다.
+  중심을 콜라이더에 적어 넣는 대신 메시를 옮기면 그 가정이 그대로 산다.
+- 불꽃은 새 bounds 의 바닥(`-extents.y`)으로 내려간다. 프리팹 기본값 `-0.5` 는 길이 1 짜리 기본
+  메시의 바닥이었다.
+- `Flame` 은 메시의 자식이 아니라 **형제**다. 교체를 "자식을 전부 지운다"로 쓰면 불꽃이 같이 죽는다 —
+  `RocketPart.meshRoot` 가 가리키는 하나만 지운다.
+- bounds 는 `Renderer.localBounds` 를 행렬로 부품 로컬로 옮겨 잰다. `Renderer.bounds`(월드 AABB)를
+  되돌리는 방식은 부품이 돌아가 있으면 부풀어 오른다.
+- 머티리얼 인스턴스 캐시(`_uberMaterials`)는 교체 때 반납한다. 렌더러가 통째로 바뀌므로 남겨두면
+  사라진 렌더러의 인스턴스를 붙든 채 샌다.
+
+알려진 천장: 콜라이더가 메시를 따라가므로 `partSeatSink` 를 1 아래로 내리면 아키타입마다 안착
+깊이가 달라진다. 지금은 1 이라 `ProjectOntoBody` 의 그 항이 0 이다.
 
 콜라이더는 모델 bounds 에 맞춰 다시 잡았다. 몸통 `CapsuleCollider` 는 `radius 0.338 / height 4`,
 `Body` 로컬 스케일은 `(1, 1, 1)` 로 되돌렸다 — 스케일 1 이면 `CacheBodyShape()` 의 환산 결과가 곧
@@ -855,10 +1001,12 @@ UI Controller` 의 자식이 아니라 별개 루트라 진입할 때 같이 꺼
 
 ## 테스트
 
-`Assets/Tests/EditMode/Simulation/RocketSimulationTests.cs` 세 개뿐이다. 연료 소진 경계
-(`TryBurn`이 마지막 프레임에는 추력을 내고 그 다음부터 거부), 부착 계약(표면 좌표 유지 + 로켓 기준 자세),
-불꽃 토글(연소 중 켜짐 / 소진 후 꺼짐). 씬 에셋을 로드하지 않고 in-memory 오브젝트로 만들며,
-private 직렬화 필드는 리플렉션으로 넣는다 — `Border.Audio.EditModeTests`와 같은 방식.
+`Assets/Tests/EditMode/Simulation/RocketSimulationTests.cs` 한 파일이다. 잠그는 것은 계약이지 구현이
+아니다: 연료 소진 경계(마지막 프레임에는 추력을 내고 그 다음부터 거부), 과열, 부착 계약(표면 좌표 유지 +
+로켓 기준 자세), 불꽃 토글, 연구 런타임 브리지(스탯 스케일·체크섬·설계 패널 필터), 그리고 프리셋 외형
+교체(아키타입 선택, 저작 에셋은 기본 메시 유지, 콜라이더·불꽃 refit, `Flame` 생존, 머티리얼 캐시 반납).
+씬 에셋을 로드하지 않고 in-memory 오브젝트로 만들며, private 직렬화 필드와 private 메서드는 리플렉션으로
+다룬다 — `Border.Audio.EditModeTests`와 같은 방식.
 
 `ParticleSystem.Play()`와 `isEmitting`은 EditMode에서도 정상 동작한다(확인함). 상태를 미러링하는
 bool 필드를 따로 두지 않은 이유다.

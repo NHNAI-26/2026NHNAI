@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Border.Core;
+using Border.Research;
 using UnityEngine;
 
 namespace Simulation
@@ -16,6 +17,12 @@ namespace Simulation
         [SerializeField, Range(0f, 1f)] private float throttle = 1f; // 설계 단계의 힘 슬라이더 자리
         [SerializeField] private ParticleSystem flame;
 
+        // 프리셋 외형. 연구가 만든 프리셋은 스탯 구성에서 아키타입이 정해지고(EngineVisualClassifier),
+        // 그 아키타입의 메시가 기본 메시(meshRoot)를 대체한다. 라이브러리가 비어 있으면 교체 자체가
+        // 일어나지 않는다 — 프리팹을 거치지 않고 만든 부품(EditMode 테스트)이 그 경로다.
+        [SerializeField] private Transform meshRoot;
+        [SerializeField] private EnginePresetVisualLibrarySO visualLibrary;
+
         // Uber 3D Object 셰이더의 두 기능을 부품 단위로 켠다. MaterialPropertyBlock 은 못 쓴다 —
         // _StencilOutlineEnabled 는 포워드 패스의 스텐실 WriteMask 라 렌더 스테이트고, 키워드도
         // 블록으로는 못 바꾼다. 그래서 렌더러당 머티리얼 인스턴스를 하나 만들어 들고 있는다.
@@ -24,6 +31,13 @@ namespace Simulation
         private const string OutlineKeyword = "_STENCIL_OUTLINE_ON";
         private const string HologramKeyword = "_HOLOGRAM_ON";
         private const string OutlinePass = "StencilOutline";
+
+        // 로컬 bounds 여덟 꼭짓점의 부호. 회전에 안전한 bounds 환산에 쓴다.
+        private static readonly Vector3[] BoundsCorners =
+        {
+            new(-1f, -1f, -1f), new(-1f, -1f, 1f), new(-1f, 1f, -1f), new(-1f, 1f, 1f),
+            new(1f, -1f, -1f), new(1f, -1f, 1f), new(1f, 1f, -1f), new(1f, 1f, 1f),
+        };
 
         private float _remaining;
         private float _temperature;
@@ -36,8 +50,113 @@ namespace Simulation
         /// <summary>
         /// 설계 화면의 프리셋 패널에서 꺼낸 인스턴스에 프리셋을 심는다. 씬 인스턴스에만 쓰는 경로이며
         /// 프리셋 에셋 자체는 건드리지 않는다 — 스탯은 여전히 SO 쪽이 원본이다.
+        /// 외형도 여기서 갈린다: 스탯이 정해지는 지점이 곧 아키타입이 정해지는 지점이다.
         /// </summary>
-        public void ApplyPreset(EngineStatsSO preset) => stats = preset;
+        public void ApplyPreset(EngineStatsSO preset)
+        {
+            stats = preset;
+
+            // 라이브러리가 없으면 외형 교체를 통째로 건너뛴다. ResearchFlowSession.GetOrCreate() 는
+            // 이름 그대로 오브젝트를 만드는 호출이라, 이 가드가 EditMode 테스트를 연구 세션에서 떼어 놓는다.
+            // SimulationTest 단독 재생은 여기를 지나지만 저작 에셋의 PresetIndex 가 -1 이라 아래에서 걸린다.
+            if (visualLibrary == null) return;
+
+            SetMesh(ResolveMeshPrefab(preset, ResearchFlowSession.GetOrCreate().Model, visualLibrary));
+        }
+
+        /// <summary>
+        /// 프리셋에 맞는 메시 프리팹. 연구 런타임 사본만 슬롯 인덱스 0..9 를 가지므로
+        /// (<see cref="EngineStatsSO.CreateRuntimeCopy"/>) 저작 에셋(-1)은 여기서 null 로 떨어져 프리팹
+        /// 기본 메시를 그대로 쓴다 — <c>RocketDesignUI.TryGetPresetId</c> 와 같은 판별이다.
+        /// 아키타입 해석은 연구 프리뷰와 같은 <see cref="EnginePresetVisualLibrarySO.GetPreviewPrefab"/>
+        /// 규칙을 타므로 두 화면의 외형이 어긋나지 않는다.
+        /// </summary>
+        private static GameObject ResolveMeshPrefab(
+            EngineStatsSO preset, ResearchPrototypeModel model, EnginePresetVisualLibrarySO library)
+        {
+            if (preset == null || model == null || library == null) return null;
+
+            int index = preset.PresetIndex;
+            if (index < 0 || index >= ResearchPrototypeModel.MaxEnginePresetCount) return null;
+
+            var presetId = (EnginePresetId)index;
+            return library.GetPreviewPrefab(
+                presetId, EngineVisualClassifier.Classify(model.GetEnginePreset(presetId)));
+        }
+
+        /// <summary>
+        /// 기본 메시를 아키타입 메시로 갈아끼운다. 엔진 프리팹은 전부 루트에 X −90° 를 이미 들고 있으므로
+        /// 회전은 복사하지 않는다. 아트 원본 스케일을 그대로 쓰기로 했으므로 치수가 프리팹마다 다르고,
+        /// 콜라이더와 불꽃은 <see cref="FitToMesh"/> 가 뒤따라 맞춘다.
+        /// </summary>
+        private void SetMesh(GameObject prefab)
+        {
+            if (prefab == null) return; // 매핑이 비면 프리팹 기본 메시를 그대로 둔다
+
+            ReleaseMaterials(); // 렌더러가 통째로 바뀐다 — 우리가 만든 인스턴스를 여기서 반납한다
+
+            if (meshRoot != null)
+            {
+                // Destroy 는 프레임 끝으로 미뤄진다. 꺼두지 않으면 머티리얼이 사라진 렌더러가 한 프레임 그려진다.
+                meshRoot.gameObject.SetActive(false);
+                if (Application.isPlaying) Destroy(meshRoot.gameObject);
+                else DestroyImmediate(meshRoot.gameObject);
+            }
+
+            meshRoot = Instantiate(prefab, transform, false).transform;
+            meshRoot.localPosition = Vector3.zero; // Engine_01 프리팹만 씬에서 딴 좌표가 박혀 있다
+            FitToMesh();
+        }
+
+        /// <summary>
+        /// 콜라이더와 불꽃을 새 메시 치수에 맞춘다. 프리팹에 박힌 <c>(0.547, 1, 0.541)</c> 은 이제 기본
+        /// 메시의 값일 뿐 계약이 아니다 — 아트 원본 스케일을 쓰기로 한 대가다.
+        /// 메시를 옮겨 기하 중심을 부품 원점으로 끌어오는 것이 핵심이다: <c>RocketBuilder.HalfExtents</c> 가
+        /// <c>BoxCollider.center</c> 를 0 으로 가정한다. 콜라이더는 <b>BoxCollider 로 남아야</b> 한다 —
+        /// <c>Rocket.CacheBodyShape()</c> 가 <c>GetComponentInChildren&lt;CapsuleCollider&gt;()</c> 로 몸통을 찾는다.
+        /// </summary>
+        private void FitToMesh()
+        {
+            if (!TryGetComponent(out BoxCollider box) || !TryLocalBounds(meshRoot, out Bounds bounds)) return;
+
+            meshRoot.localPosition -= bounds.center;
+            box.center = Vector3.zero;
+            box.size = bounds.size;
+
+            // 불꽃은 노즐 바닥에서 나온다. 프리팹 기본값 −0.5 는 길이 1 짜리 기본 메시의 바닥이었다.
+            if (flame != null) flame.transform.localPosition = new Vector3(0f, -bounds.extents.y, 0f);
+        }
+
+        /// <summary>
+        /// 부품 로컬 공간의 렌더러 합 bounds. <see cref="Renderer.bounds"/>(월드 AABB)를 되돌리면 부품이
+        /// 돌아가 있을 때 부풀어 오르므로, 로컬 bounds 의 여덟 꼭짓점을 행렬로 직접 옮긴다.
+        /// </summary>
+        private bool TryLocalBounds(Transform mesh, out Bounds bounds)
+        {
+            bounds = default;
+            bool any = false;
+
+            foreach (Renderer renderer in mesh.GetComponentsInChildren<Renderer>(true))
+            {
+                Matrix4x4 toPart = transform.worldToLocalMatrix * renderer.localToWorldMatrix;
+                Bounds local = renderer.localBounds;
+
+                foreach (Vector3 sign in BoundsCorners)
+                {
+                    Vector3 point = toPart.MultiplyPoint3x4(local.center + Vector3.Scale(local.extents, sign));
+                    if (!any)
+                    {
+                        bounds = new Bounds(point, Vector3.zero);
+                        any = true;
+                        continue;
+                    }
+
+                    bounds.Encapsulate(point);
+                }
+            }
+
+            return any;
+        }
 
         /// <summary>실제로 내고 있는 출력(N). 발열과 연료 소모가 모두 이 값을 따른다.</summary>
         public float Output => stats == null ? 0f : stats.MaxOutput * throttle;
@@ -150,11 +269,17 @@ namespace Simulation
             }
         }
 
-        private void OnDestroy()
+        private void OnDestroy() => ReleaseMaterials();
+
+        /// <summary>
+        /// 인스턴스는 우리가 만들었으니 우리가 지운다. 부품 파괴와 메시 교체가 둘 다 여기를 지난다 —
+        /// 교체 때 반납하지 않으면 갈아끼울 때마다 머티리얼이 샌다.
+        /// EditMode 테스트에서도 도는 경로라 분기한다.
+        /// </summary>
+        private void ReleaseMaterials()
         {
             if (_uberMaterials == null) return;
 
-            // 인스턴스는 우리가 만들었으니 우리가 지운다. EditMode 테스트에서도 도는 경로라 분기한다.
             foreach (Material material in _uberMaterials)
                 if (Application.isPlaying) Destroy(material);
                 else DestroyImmediate(material);

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
@@ -31,6 +31,23 @@ namespace Simulation.Tests
             // 에디터의 현재 씬이 안개투성이로 남지 않게 여기서 한 번 더 못을 박는다.
             RenderSettings.skybox = _skyboxBefore;
             RenderSettings.fog = _fogBefore;
+        }
+
+        [Test]
+        public void SkyboxShader_CompilesAndKeepsDrivenProperties()
+        {
+            Shader shader = Shader.Find("Sky/AtmosphereNebulaBlend");
+            Assert.IsNotNull(shader, "셰이더가 사라지면 하늘이 분홍색이 된다.");
+            Assert.IsFalse(UnityEditor.ShaderUtil.ShaderHasError(shader), "스카이박스 셰이더가 컴파일에 실패했다.");
+
+            Material material = new(shader);
+            _spawned.Add(material);
+
+            // Material.SetColor/SetFloat 는 없는 이름에도 예외를 던지지 않는다. 오타 하나면 고도별
+            // 하늘이 통째로 얼어붙는데 로그도 안 남으므로, Update 가 쓰는 이름을 여기서 못 박는다.
+            foreach (string property in new[]
+                     { "_SkyTint", "_HorizonColor", "_Exposure", "_AtmosphereThickness", "_SpaceBlend" })
+                Assert.IsTrue(material.HasProperty(property), property);
         }
 
         [Test]

@@ -4907,6 +4907,8 @@ MonoBehaviour:
   stats: {fileID: 0}
   throttle: 1
   flame: {fileID: 7948344617107075714}
+  meshRoot: {fileID: 1549700929794384151}
+  visualLibrary: {fileID: 11400000, guid: 7c39d02e38b92ac4986e91f97e108c20, type: 2}
 --- !u!1001 &7961184348700868549
 PrefabInstance:
   m_ObjectHideFlags: 0

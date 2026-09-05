@@ -6,7 +6,8 @@ namespace Simulation
 {
     /// <summary>
     /// 로켓 고도에 따라 하늘·안개·태양·별·지구를 바꾼다. 씬에는 프리팹 인스턴스 하나로만 들어간다.
-    /// 커스텀 셰이더나 Volume 없이 내장 <see cref="RenderSettings"/> 와 파티클만 쓴다.
+    /// Volume 없이 내장 <see cref="RenderSettings"/> 와 파티클, 그리고 대기 그라디언트와 우주 큐브맵을
+    /// 섞는 스카이박스 셰이더 하나(<c>Sky/AtmosphereNebulaBlend</c>)만 쓴다.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class SkyEnvironment : MonoBehaviour
@@ -15,7 +16,8 @@ namespace Simulation
         private static readonly int AtmosphereThicknessId = Shader.PropertyToID("_AtmosphereThickness");
         private static readonly int ExposureId = Shader.PropertyToID("_Exposure");
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-        private static readonly int GroundColorId = Shader.PropertyToID("_GroundColor");
+        private static readonly int HorizonColorId = Shader.PropertyToID("_HorizonColor");
+        private static readonly int SpaceBlendId = Shader.PropertyToID("_SpaceBlend");
 
         [Header("씬 참조")]
         [SerializeField] private Transform target;
@@ -44,6 +46,9 @@ namespace Simulation
         [SerializeField] private AnimationCurve atmosphereThickness = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
         [SerializeField] private AnimationCurve skyExposure = AnimationCurve.EaseInOut(0f, 1.3f, 1f, 0f);
         [SerializeField] private AnimationCurve starAlpha = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+        // 대기 그라디언트와 우주 큐브맵을 스카이박스 안에서 섞는 비율. 스카이박스는 far depth 에 그려져
+        // 바다도 지구도 가리지 않으므로 구간과 상한을 자유롭게 그으면 된다.
+        [SerializeField] private AnimationCurve spaceBlend = AnimationCurve.EaseInOut(0.4f, 0f, 1f, 1f);
         [SerializeField] private AnimationCurve sunIntensity = AnimationCurve.EaseInOut(0f, 1f, 1f, 1.6f);
         [SerializeField] private AnimationCurve earthDistance = AnimationCurve.Linear(0f, 800f, 1f, 850f);
         // 카메라에서 earthDistance 만큼 떨어진 구의 지름. 지름 < 거리라야 '공'으로 보인다 — 같으면 눈높이가
@@ -154,17 +159,20 @@ namespace Simulation
 
             if (_sky != null)
             {
-                _sky.SetColor(SkyTintId, skyTint.Evaluate(t));
+                // Gradient 는 인스펙터에서 sRGB 로 authoring 하지만 Material.SetColor 는 값을 변환 없이
+                // 셰이더로 넘긴다. 프로젝트가 Linear 색공간이라 .linear 를 거쳐야 스와치와 화면이 맞는다.
+                _sky.SetColor(SkyTintId, skyTint.Evaluate(t).linear);
                 _sky.SetFloat(AtmosphereThicknessId, atmosphereThickness.Evaluate(t));
                 _sky.SetFloat(ExposureId, skyExposure.Evaluate(t));
+                _sky.SetFloat(SpaceBlendId, spaceBlend.Evaluate(t));
             }
 
             Color haze = fogColor.Evaluate(t);
             RenderSettings.fogColor = haze;
             RenderSettings.fogDensity = fogDensity.Evaluate(t);
-            // 수면이 굽어 내려가면 그 아래로 스카이박스의 지면 반구가 드러난다. 기본 회색을 그대로 두면
-            // 바다 밑에 회색 판이 깔린 것처럼 보인다 — 안개색을 따라가게 해서 먼 바다·우주로 읽히게 한다.
-            if (_sky != null) _sky.SetColor(GroundColorId, haze);
+            // 지평선색은 안개색 그대로다. 스카이박스가 지평선 아래도 이 색으로 채우므로, 수면이 굽어
+            // 내려가 그 아래가 드러나도 먼 바다의 헤이즈로 읽힌다.
+            if (_sky != null) _sky.SetColor(HorizonColorId, haze.linear);
 
             // 앰비언트는 갱신하지 않는다 — Skybox 앰비언트를 따라가게 하려면 매 프레임 DynamicGI.UpdateEnvironment()
             // 가 필요하고 그 비용이 이 연출값보다 크다. 하늘색 반사가 필요해지면 그때 단계적으로 부른다.

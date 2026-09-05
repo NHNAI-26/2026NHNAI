@@ -287,8 +287,8 @@ ParticleSystem:
     startSize:
       serializedVersion: 2
       minMaxState: 3
-      scalar: 80
-      minScalar: 30
+      scalar: 2
+      minScalar: 1
       maxCurve:
         serializedVersion: 2
         m_Curve:
@@ -498,8 +498,8 @@ ParticleSystem:
         m_RotationOrder: 4
     startRotationY:
       serializedVersion: 2
-      minMaxState: 0
-      scalar: 0
+      minMaxState: 3
+      scalar: 6.28
       minScalar: 0
       maxCurve:
         serializedVersion: 2
@@ -551,8 +551,8 @@ ParticleSystem:
         m_RotationOrder: 4
     startRotation:
       serializedVersion: 2
-      minMaxState: 3
-      scalar: 6.28
+      minMaxState: 0
+      scalar: 0
       minScalar: 0
       maxCurve:
         serializedVersion: 2
@@ -607,7 +607,7 @@ ParticleSystem:
     maxNumParticles: 80
     customEmitterVelocity: {x: 0, y: 0, z: 0}
     size3D: 0
-    rotation3D: 0
+    rotation3D: 1
     gravityModifier:
       serializedVersion: 2
       minMaxState: 0
@@ -4840,7 +4840,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: f04961636587ee34aa03de4c85ba1518, type: 2}
+  - {fileID: 2100000, guid: e68f77e240a7f8643b5cc4253dc37516, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -4863,7 +4863,7 @@ ParticleSystemRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_RenderMode: 0
+  m_RenderMode: 4
   m_MeshDistribution: 0
   m_SortMode: 0
   m_MinParticleSize: 0
@@ -4874,10 +4874,10 @@ ParticleSystemRenderer:
   m_SortingFudge: 0
   m_NormalDirection: 1
   m_ShadowBias: 0
-  m_RenderAlignment: 0
+  m_RenderAlignment: 1
   m_Pivot: {x: 0, y: 0, z: 0}
   m_Flip: {x: 0, y: 0, z: 0}
-  m_EnableGPUInstancing: 1
+  m_EnableGPUInstancing: 0
   m_ApplyActiveColorSpace: 1
   m_AllowRoll: 1
   m_FreeformStretching: 0
@@ -4886,10 +4886,10 @@ ParticleSystemRenderer:
   m_VertexStreams: 00010304
   m_UseCustomTrailVertexStreams: 0
   m_TrailVertexStreams: 00010304
-  m_Mesh: {fileID: 0}
-  m_Mesh1: {fileID: 0}
-  m_Mesh2: {fileID: 0}
-  m_Mesh3: {fileID: 0}
+  m_Mesh: {fileID: 4300000, guid: d6a294bdf7386d64f8c846e5ac334ffa, type: 3}
+  m_Mesh1: {fileID: 4300000, guid: c943ee3841fcbd94d9630c5e4529b603, type: 3}
+  m_Mesh2: {fileID: 4300000, guid: 1b2c48376dafb734ab58d2226e1b7747, type: 3}
+  m_Mesh3: {fileID: 4300000, guid: 5df7daeab707230409664c66ca47c5ad, type: 3}
   m_MeshWeighting: 1
   m_MeshWeighting1: 1
   m_MeshWeighting2: 1
@@ -4945,7 +4945,7 @@ MonoBehaviour:
   cam: {fileID: 0}
   sun: {fileID: 0}
   groundRenderer: {fileID: 0}
-  skyboxSource: {fileID: 2100000, guid: 340dc29ddf5ecd14fa0e4a806845f976, type: 2}
+  skyboxSource: {fileID: 2100000, guid: 33938f1c9ef2b8745a5454865782cd68, type: 2}
   clouds: {fileID: 4233347052645007185}
   stars: {fileID: 5804959133886367510}
   earth: {fileID: 7419918417534682922}
@@ -4955,18 +4955,18 @@ MonoBehaviour:
   spaceKm: 70
   skyTint:
     serializedVersion: 2
-    key0: {r: 0.5, g: 0.5, b: 0.5, a: 1}
-    key1: {r: 0.35, g: 0.42, b: 0.55, a: 1}
-    key2: {r: 0.08, g: 0.1, b: 0.16, a: 0}
-    key3: {r: 0, g: 0, b: 0, a: 0}
+    key0: {r: 0.29, g: 0.51, b: 0.87, a: 1}
+    key1: {r: 0.16, g: 0.32, b: 0.68, a: 1}
+    key2: {r: 0.04, g: 0.08, b: 0.24, a: 0}
+    key3: {r: 0, g: 0, b: 0.03, a: 0}
     key4: {r: 0, g: 0, b: 0, a: 0}
     key5: {r: 0, g: 0, b: 0, a: 0}
     key6: {r: 0, g: 0, b: 0, a: 0}
     key7: {r: 0, g: 0, b: 0, a: 0}
     ctime0: 0
-    ctime1: 32768
-    ctime2: 65535
-    ctime3: 0
+    ctime1: 19661
+    ctime2: 38010
+    ctime3: 65535
     ctime4: 0
     ctime5: 0
     ctime6: 0
@@ -4981,11 +4981,11 @@ MonoBehaviour:
     atime7: 0
     m_Mode: 0
     m_ColorSpace: -1
-    m_NumColorKeys: 3
+    m_NumColorKeys: 4
     m_NumAlphaKeys: 2
   fogColor:
     serializedVersion: 2
-    key0: {r: 0.72, g: 0.8, b: 0.88, a: 1}
+    key0: {r: 0.9568628, g: 1, b: 1, a: 1}
     key1: {r: 0.45, g: 0.58, b: 0.75, a: 1}
     key2: {r: 0.02, g: 0.02, b: 0.05, a: 0}
     key3: {r: 0, g: 0, b: 0, a: 0}
@@ -5018,7 +5018,7 @@ MonoBehaviour:
     m_Curve:
     - serializedVersion: 3
       time: 0
-      value: 0.004
+      value: 0.005
       inSlope: 0
       outSlope: 0
       tangentMode: 0
@@ -5066,7 +5066,7 @@ MonoBehaviour:
     m_Curve:
     - serializedVersion: 3
       time: 0
-      value: 1.3
+      value: 1
       inSlope: 0
       outSlope: 0
       tangentMode: 0
@@ -5090,6 +5090,30 @@ MonoBehaviour:
     m_Curve:
     - serializedVersion: 3
       time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spaceBlend:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0.4
       value: 0
       inSlope: 0
       outSlope: 0
@@ -5181,6 +5205,8 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+  horizonDistance: 450
+  oceanResolution: 96
 --- !u!1 &3915530317010850623
 GameObject:
   m_ObjectHideFlags: 0
