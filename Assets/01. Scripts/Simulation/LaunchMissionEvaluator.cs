@@ -18,7 +18,7 @@ namespace Simulation
         public float TargetAltitude { get; set; } = 200f;
         public float TargetHorizontalMin { get; set; } = 80f;
         public float TargetHorizontalMax { get; set; } = 120f;
-        public Vector3 TargetBoxCenterOffset { get; set; } = new(0f, 260f, 100f);
+        public Vector3 TargetBoxCenterOffset { get; set; } = new(0f, 260f, 130f);
         public Vector3 TargetBoxSize { get; set; } = Vector3.one * 168f;
         public float RequiredHoldSeconds { get; set; } = 3f;
         public float MaxAttitudeError { get; set; } = 30f;
