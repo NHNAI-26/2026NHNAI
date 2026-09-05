@@ -50,6 +50,7 @@ namespace Border.Research.Editor
 
         public static void ApplyMiniGame(GameObject root)
         {
+            ApplyIgnitionArt(root);
             Sprite[] sprites = LoadSprites();
             if (sprites == null) return;
             LayoutElement topRow = Find(root.transform, "TopRow")?.GetComponent<LayoutElement>();
@@ -73,7 +74,7 @@ namespace Border.Research.Editor
 
             // Keep runtime-driven valve colours, ignition flashes and judgement bands unobscured.
             foreach (Button button in root.GetComponentsInChildren<Button>(true))
-                if (button.name.StartsWith("CoolingValve_") || button.name.StartsWith("Igniter_"))
+                if (button.name.StartsWith("CoolingValve_"))
                     AddFrame(button.transform, sprites[4]);
             Transform hotspot = Find(root.transform, "CoolingHotspot");
             if (hotspot != null) AddFrame(hotspot, sprites[5]);
@@ -84,6 +85,98 @@ namespace Border.Research.Editor
                 text.enableAutoSizing = true;
                 text.fontSizeMin = name == "ResultDetailText" ? 14f : 24f;
                 text.fontSizeMax = name == "ResultDetailText" ? 21f : 38f;
+            }
+        }
+
+        [MenuItem("Border/Research/Apply Ignition UI Art")]
+        public static void ApplyIgnitionToPrefab()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            UpdatePrefab("ResearchMiniGameScreen", ApplyIgnitionArt);
+        }
+
+        public static void ApplyIgnitionArt(GameObject root)
+        {
+            const string folder = "Assets/05. Arts/UI/MiniGame/Reliability_Button/";
+            Sprite background = AssetDatabase.LoadAssetAtPath<Sprite>(folder + "reliability.png");
+            Sprite buttonSprite = AssetDatabase.LoadAssetAtPath<Sprite>(folder + "Button.png");
+            Shader shader = Shader.Find("Border/UI/IgnitionButton");
+            Texture2D tintMask = AssetDatabase.LoadAssetAtPath<Texture2D>(folder + "ButtonTintMask.png");
+            Transform group = Find(root.transform, "IgnitionGame");
+            Transform grid = Find(root.transform, "IgniterGrid");
+            if (background == null || buttonSprite == null || shader == null || tintMask == null || group == null || grid == null)
+            {
+                Debug.LogError("Ignition UI requires imported reliability.png and Button.png sprites and the ignition game group.");
+                return;
+            }
+
+            const string materialPath = "Assets/03. Prefabs/UI/Resources/ResearchUI/IgnitionButton.mat";
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, materialPath);
+            }
+            material.shader = shader;
+            material.SetTexture("_TintMask", tintMask);
+            EditorUtility.SetDirty(material);
+
+            Transform board = group.Find("IgnitionBoard");
+            if (board == null)
+            {
+                var boardObject = new GameObject("IgnitionBoard", typeof(RectTransform), typeof(Image), typeof(AspectRatioFitter));
+                boardObject.transform.SetParent(group, false);
+                board = boardObject.transform;
+            }
+            board.SetAsFirstSibling();
+            var boardRect = (RectTransform)board;
+            boardRect.anchorMin = Vector2.zero;
+            boardRect.anchorMax = Vector2.one;
+            boardRect.offsetMin = boardRect.offsetMax = Vector2.zero;
+            var aspect = board.GetComponent<AspectRatioFitter>();
+            aspect.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            aspect.aspectRatio = 1f;
+            Image boardImage = board.GetComponent<Image>();
+            boardImage.sprite = background;
+            boardImage.color = Color.white;
+            boardImage.raycastTarget = false;
+
+            grid.SetParent(board, false);
+            var gridRect = (RectTransform)grid;
+            gridRect.anchorMin = new Vector2(0.16f, 0.23f);
+            gridRect.anchorMax = new Vector2(0.84f, 0.72f);
+            gridRect.offsetMin = gridRect.offsetMax = Vector2.zero;
+            var layout = grid.GetComponent<GridLayoutGroup>();
+            if (layout != null) Object.DestroyImmediate(layout);
+            for (int i = 0; i < 4; i++)
+            {
+                Button button = Find(grid, $"Igniter_{i}")?.GetComponent<Button>();
+                if (button == null) continue;
+                Transform frame = button.transform.Find("UiArtFrame");
+                if (frame != null) Object.DestroyImmediate(frame.gameObject);
+                var rect = (RectTransform)button.transform;
+                float x = i % 2 == 0 ? 0.02f : 0.57f;
+                float y = i < 2 ? 0.53f : 0f;
+                rect.anchorMin = new Vector2(x, y);
+                rect.anchorMax = new Vector2(x + 0.41f, y + 0.47f);
+                rect.offsetMin = rect.offsetMax = Vector2.zero;
+                Image image = button.GetComponent<Image>();
+                image.sprite = buttonSprite;
+                image.material = material;
+                Color[] colors = { new Color(0.62f, 0.12f, 0.08f), new Color(0.75f, 0.35f, 0.06f), new Color(0.08f, 0.48f, 0.43f), new Color(0.12f, 0.32f, 0.58f) };
+                image.color = colors[i];
+                image.type = Image.Type.Simple;
+                image.preserveAspect = true;
+                button.transition = Selectable.Transition.None;
+                TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+                if (label != null)
+                {
+                    label.color = new Color(0.06f, 0.08f, 0.1f, 1f);
+                    label.enableAutoSizing = true;
+                    label.fontSizeMin = 12f;
+                    label.fontSizeMax = 24f;
+                    label.raycastTarget = false;
+                }
             }
         }
 
@@ -209,6 +302,7 @@ namespace Border.Research.Editor
                 detail.fontSizeMin = 10f;
                 detail.fontSizeMax = 12f;
             }
+            ResearchUiPrefabBuilder.LayoutEngineNameEditor(root);
         }
 
         private static void AddGauge(Transform parent, string name, float maxValue, Sprite[] sprites, int siblingIndex)

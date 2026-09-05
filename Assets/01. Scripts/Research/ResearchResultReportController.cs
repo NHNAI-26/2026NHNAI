@@ -28,6 +28,7 @@ namespace Border.Research
             result = launchResult;
             LaunchMissionConfig missionConfig = session.Model.GetConfiguredMissionConfig(result.MissionId);
             titleText.text = $"{missionConfig.DisplayName} 결과 보고서";
+            ConfigureReportText(bodyText);
             bodyText.text = BuildBody(missionConfig);
             responseCallback = onClose;
             awaitingResponse = true;
@@ -40,15 +41,33 @@ namespace Border.Research
         {
             string outcome = result.Grade <= ResearchGrade.B ? "성공" : result.Grade == ResearchGrade.C ? "부분 성공" : "실패";
             string nextUnlock = CreateNextUnlockText();
-            EngineRiskInfo[] risks = session.Model.GetTopEngineRisks(result.SelectedEnginePresetId, 2);
-            string guidance = risks.Length > 0 ? risks[0].Description : "현재 엔진은 큰 약점 없이 균형형에 가깝습니다.";
+            LaunchOutcomeEventResult outcomeEvent = result.OutcomeEvent;
+            string eventText = outcomeEvent != null
+                ? $"발생 이벤트: {outcomeEvent.Name}\n"
+                    + $"이벤트 설명: {outcomeEvent.Description}\n"
+                    + $"이벤트 효과: {outcomeEvent.EffectsText}\n"
+                : "발생 이벤트: 없음\n";
 
-            return $"등급: {result.Grade} / 판정: {outcome}\n"
+            return $"등급: {result.Grade} / 실제 판정: {outcome}\n"
                 + $"미션: {missionConfig.DisplayName} / {ResearchPrototypeModel.GetVisibilityDisplayName(result.Visibility)}\n"
-                + $"비용: {result.TotalCost}  즉시 지원금: +{result.ImmediateFunding}  분기 연구비: {result.QuarterlyFundingDelta:+#;-#;0}\n"
-                + $"성공 {result.SuccessChance}% / 부분 {result.PartialChance}% / 실패 {result.FailureChance}% / 굴림 {result.Roll}\n"
-                + $"다음 해금: {nextUnlock}\n"
-                + $"안내: {guidance}";
+                + $"비용: {result.TotalCost}\n"
+                + $"기본 보상: 즉시 지원금 +{result.ImmediateFunding} / 분기 연구비 {result.QuarterlyFundingDelta:+#;-#;0}\n"
+                + eventText
+                + $"다음 해금: {nextUnlock}";
+        }
+
+        private static void ConfigureReportText(TMP_Text text)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.textWrappingMode = TextWrappingModes.Normal;
+            text.overflowMode = TextOverflowModes.Truncate;
+            text.enableAutoSizing = true;
+            text.fontSizeMin = text.fontSizeMin > 0f ? Math.Min(text.fontSizeMin, 14f) : 14f;
+            text.fontSizeMax = text.fontSize;
         }
 
         private string CreateNextUnlockText()

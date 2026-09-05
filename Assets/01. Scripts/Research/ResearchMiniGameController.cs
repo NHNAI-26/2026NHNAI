@@ -40,6 +40,7 @@ namespace Border.Research
         private const float CoolingReactionWindowSeconds = 0.9f;
         private const int OutputStageCount = 3;
         private const int IgnitionRoundCount = 3;
+        private const float IgnitionClickFlashSeconds = 0.18f;
 
         private readonly float[] fuelErrors = new float[FuelAttemptCount];
         private readonly float[] outputErrors = new float[OutputStageCount];
@@ -83,6 +84,8 @@ namespace Border.Research
         private float outputGaugeValue;
         private bool fuelFilling;
         private bool ignitionShowingSequence;
+        private int ignitionClickedIndex = -1;
+        private bool ignitionAdvancePending;
         private Tween feedbackTween;
 
         private TMP_Text titleText;
@@ -597,6 +600,8 @@ namespace Border.Research
             outputGaugeValue = 0f;
             fuelFilling = false;
             ignitionShowingSequence = false;
+            ignitionClickedIndex = -1;
+            ignitionAdvancePending = false;
             Array.Clear(fuelErrors, 0, fuelErrors.Length);
             Array.Clear(outputErrors, 0, outputErrors.Length);
             Array.Clear(ignitionSequence, 0, ignitionSequence.Length);
@@ -770,6 +775,19 @@ namespace Border.Research
         {
             if (!ignitionShowingSequence)
             {
+                bool flashing = roundElapsedSeconds < IgnitionClickFlashSeconds;
+                for (int i = 0; i < ignitionButtons.Length; i++)
+                {
+                    ignitionButtons[i].GetComponent<Image>().color = GetIgniterColor(i, flashing && i == ignitionClickedIndex);
+                }
+
+                if (ignitionAdvancePending && !flashing)
+                {
+                    ignitionAdvancePending = false;
+                    AdvanceIgnitionRound();
+                    return;
+                }
+
                 SetStateText($"입력 {roundIndex + 1}/{IgnitionRoundCount}", false);
                 return;
             }
@@ -997,6 +1015,8 @@ namespace Border.Research
 
         private void SetupIgnitionRound()
         {
+            ignitionClickedIndex = -1;
+            ignitionAdvancePending = false;
             roundElapsedSeconds = 0f;
             ignitionShowingSequence = true;
             int length = GetIgnitionRoundLength(roundIndex);
@@ -1014,7 +1034,7 @@ namespace Border.Research
 
         private void PressIgniter(int igniterIndex)
         {
-            if (gameCompleted || statId != EngineStatId.IgnitionReliability || ignitionShowingSequence)
+            if (gameCompleted || statId != EngineStatId.IgnitionReliability || ignitionShowingSequence || ignitionAdvancePending)
             {
                 return;
             }
@@ -1023,6 +1043,11 @@ namespace Border.Research
             ignitionTotalInputs++;
             ignitionReactionTotal += roundElapsedSeconds;
             roundElapsedSeconds = 0f;
+            ignitionClickedIndex = igniterIndex;
+            for (int i = 0; i < ignitionButtons.Length; i++)
+            {
+                ignitionButtons[i].GetComponent<Image>().color = GetIgniterColor(i, i == igniterIndex);
+            }
 
             if (ignitionSequence[ignitionInputIndex] == igniterIndex)
             {
@@ -1030,13 +1055,22 @@ namespace Border.Research
                 ignitionInputIndex++;
                 if (ignitionInputIndex >= length)
                 {
-                    AdvanceIgnitionRound();
+                    QueueIgnitionRoundAdvance();
                 }
 
                 return;
             }
 
-            AdvanceIgnitionRound();
+            QueueIgnitionRoundAdvance();
+        }
+
+        private void QueueIgnitionRoundAdvance()
+        {
+            ignitionAdvancePending = true;
+            foreach (Button button in ignitionButtons)
+            {
+                button.interactable = false;
+            }
         }
 
         private void AdvanceIgnitionRound()
@@ -1320,8 +1354,13 @@ namespace Border.Research
 
         private static Color GetIgniterColor(int index, bool active)
         {
-            Color color = index % 2 == 0 ? new Color(0.32f, 0.42f, 0.58f, 1f) : new Color(0.45f, 0.34f, 0.54f, 1f);
-            return active ? new Color(1f, 0.82f, 0.24f, 1f) : color;
+            switch (index)
+            {
+                case 0: return active ? new Color(1f, 0.38f, 0.18f) : new Color(0.62f, 0.12f, 0.08f);
+                case 1: return active ? new Color(1f, 0.88f, 0.12f) : new Color(0.75f, 0.35f, 0.06f);
+                case 2: return active ? new Color(0.25f, 1f, 0.82f) : new Color(0.08f, 0.48f, 0.43f);
+                default: return active ? new Color(0.35f, 0.7f, 1f) : new Color(0.12f, 0.32f, 0.58f);
+            }
         }
 
         private void SetFuelGaugeValue(float value)

@@ -127,7 +127,12 @@ namespace Border.Research
 
         public ResearchActionResult CompleteActiveLaunch(bool succeeded, string reason, out ResearchLaunchResultData result)
         {
-            ResearchActionResult action = Model.CompleteLaunch(succeeded, out result);
+            return CompleteActiveLaunch(succeeded, reason, succeeded ? LaunchTerminationReason.Succeeded : LaunchTerminationReason.Unknown, out result);
+        }
+
+        public ResearchActionResult CompleteActiveLaunch(bool succeeded, string reason, LaunchTerminationReason terminationReason, out ResearchLaunchResultData result)
+        {
+            ResearchActionResult action = Model.CompleteLaunch(succeeded, terminationReason, out result);
             if (action == ResearchActionResult.Success)
             {
                 lastLaunchResult = result;

@@ -72,6 +72,9 @@ namespace Simulation
         private RectTransform viewport;
         private TMP_Text dateText;
         private TMP_Text fundsText;
+        private TMP_Text pendingEffectsText;
+        private RectTransform pendingEffectsPanel;
+        private readonly int[] installedPresetCounts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
         private TMP_Text missionText;
         private RectTransform stageStrip;
         private Image[] stageDots;
@@ -225,6 +228,15 @@ namespace Simulation
 
             BuildTopBar(canvasTransform);
             BuildFlightInfoPanel(canvasTransform);
+
+            pendingEffectsPanel = CreateArtPanel("PendingLaunchEffects", canvasTransform, PanelSprite);
+            pendingEffectsPanel.anchorMin = new Vector2(0f, 1f);
+            pendingEffectsPanel.anchorMax = Vector2.one;
+            pendingEffectsPanel.pivot = new Vector2(0.5f, 1f);
+            pendingEffectsText = CreateText("Effects", pendingEffectsPanel, 16, FontStyles.Normal, string.Empty);
+            pendingEffectsText.raycastTarget = false;
+            pendingEffectsText.textWrappingMode = TextWrappingModes.Normal;
+            Fill((RectTransform)pendingEffectsText.transform, 12f);
 
             // 카메라 뷰포트의 유일한 원천. 정규화 상수를 따로 두면 CanvasScaler 가 늘어나는 비율에서
             // 좌측 패널과 어긋난다 — 매 프레임 이 사각형을 읽어 카메라에 먹인다.
@@ -710,18 +722,42 @@ namespace Simulation
             // builder.Changed 는 부착 때 발생하지 않으므로(EndDrag 가 Attach 만 부른다) 캐시하면
             // 낡은 값이 남는다. 부품 몇 개짜리 합이라 매 프레임 다시 세는 편이 싸다.
             int installed = 0;
+            System.Array.Clear(installedPresetCounts, 0, installedPresetCounts.Length);
             if (rocket != null)
             {
                 rocket.GetComponentsInChildren(placedParts);
                 for (int i = 0; i < placedParts.Count; i++)
                 {
                     if (placedParts[i].Stats != null) installed += placedParts[i].Stats.Price;
+                    if (placedParts[i].Stats != null && TryGetPresetId(placedParts[i].Stats, out EnginePresetId presetId))
+                        installedPresetCounts[(int)presetId]++;
                 }
             }
 
             // 설치비는 발사 순간에야 실제로 빠져나가므로(ResearchPrototypeModel.BeginLaunch), 설계 중에는
             // 예산에서 미리 뺀 값을 보여 준다 — 엔진을 붙일 때마다 그 자리에서 줄어드는 것이 읽혀야 한다.
-            ResearchPrototypeModel model = ResearchFlowSession.GetOrCreate().Model;
+            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
+            ResearchPrototypeModel model = session.Model;
+            if (!launched && session.HasPendingDesignEntry)
+            {
+                ResearchDesignEntryData entry = session.PendingDesignEntry;
+                ResearchDesignEntryData quote = model.CreateDesignEntry(entry.MissionId, entry.SelectedEnginePresetId,
+                    installedPresetCounts, entry.DesignFit, entry.Visibility, entry.LaunchCostPaid, entry.LaunchCost);
+                installed = quote.ReservedInstallCost;
+                launchButton.interactable = placedParts.Count > 0 && model.Funds >= model.GetLaunchPaymentCost(quote);
+            }
+            string pending = launched ? string.Empty : model.PendingLaunchEffectsText;
+            pendingEffectsPanel.gameObject.SetActive(!string.IsNullOrEmpty(pending));
+            float effectsHeight = 0f;
+            if (!string.IsNullOrEmpty(pending))
+            {
+                pendingEffectsText.text = "남은 이벤트 효과\n" + pending;
+                float width = Mathf.Max(100f, canvasRect.rect.width - ViewportLeft - 24f);
+                effectsHeight = pendingEffectsText.GetPreferredValues(pendingEffectsText.text, width, 0f).y + 24f;
+                pendingEffectsPanel.offsetMin = new Vector2(ViewportLeft, -BarHeight - effectsHeight);
+                pendingEffectsPanel.offsetMax = new Vector2(0f, -BarHeight);
+            }
+            viewport.offsetMax = new Vector2(0f, -BarHeight - effectsHeight);
             dateText.text = $"{model.Year}.{model.Quarter}분기   ·   남은 {model.RemainingTurns}분기";
             fundsText.text = $"잔여 자금 {model.Funds - installed:N0}"
                              + $"   (설치 {installed:N0} · 분기 +{model.QuarterlyFunding:N0})";
@@ -818,7 +854,7 @@ namespace Simulation
         {
             if (TryGetPresetId(preset, out EnginePresetId presetId))
             {
-                return ResearchPrototypeModel.GetEnginePresetConfig(presetId).DisplayName;
+                return ResearchFlowSession.GetOrCreate().Model.GetEnginePresetName(presetId);
             }
 
             const string Prefix = "EngineStats_";

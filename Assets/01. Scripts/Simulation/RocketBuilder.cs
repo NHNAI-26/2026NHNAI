@@ -261,7 +261,7 @@ namespace Simulation
             Vector2 delta = position - _lastMouse;
             // 패널 위에서 시작한 입력은 3D 로 새면 안 된다 — 패널을 드래그하면 카메라가 돌아버린다.
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
-            RequestCursor(overUI);
+            RequestCursor(overUI, position);
 
             // 핸들을 잡은 동안에는 카메라를 묶는다. 잡을 때의 t·각도는 고정이지만 광선은 아니라,
             // 궤도 회전이나 휠 줌이 끼어들면 부품이 한 프레임에 튄다.
@@ -671,7 +671,7 @@ namespace Simulation
         /// <summary>
         /// 광선에 맞은 부품 중 가장 가까운 것. 맨 <c>Physics.Raycast</c> 로는 집을 수 없다 —
         /// 붙어 있는 엔진은 본체 콜라이더와 맞닿아 있어, 실루엣 가장자리를 찍으면 본체 캡슐이
-        /// 먼저 맞아 집기가 실패했다. 클릭 한 번뿐인 경로라 RaycastAll 로 충분하다.
+        /// 먼저 맞아 집기가 실패했다. 클릭과 호버가 같은 부품을 고르도록 판정을 공유한다.
         /// </summary>
         private RocketPart PickPart(Ray ray)
         {
@@ -1353,13 +1353,9 @@ namespace Simulation
             Changed?.Invoke();
         }
 
-        private void RequestCursor(bool overUI)
+        private void RequestCursor(bool overUI, Vector2 position)
         {
-            if (rocket.Launched)
-            {
-                ArtemisCursor.Request(overUI ? ArtemisCursor.Visual.Hover : ArtemisCursor.Visual.Default);
-                return;
-            }
+            if (rocket.Launched) return;
 
             if (_dragged != null)
             {
@@ -1367,19 +1363,24 @@ namespace Simulation
                 return;
             }
 
-            if (_mode == EditMode.Rotate)
+            if (_grabAxis < 0 && overUI) return;
+
+            bool overHandle = _selected != null && _mode != EditMode.None &&
+                (_grabAxis >= 0 || PickHandle(position) >= 0);
+            if (overHandle && _mode == EditMode.Rotate)
             {
                 ArtemisCursor.Request(ArtemisCursor.Visual.Rotate, 10);
                 return;
             }
 
-            if (_mode == EditMode.Move)
+            if (overHandle && _mode == EditMode.Move)
             {
                 ArtemisCursor.Request(ArtemisCursor.Visual.Drag, 10);
                 return;
             }
 
-            if (overUI)
+            RocketPart part = PickPart(cam.ScreenPointToRay(position));
+            if (part != null && (_mode != EditMode.None || part.HasStats))
             {
                 ArtemisCursor.Request(ArtemisCursor.Visual.Hover);
             }

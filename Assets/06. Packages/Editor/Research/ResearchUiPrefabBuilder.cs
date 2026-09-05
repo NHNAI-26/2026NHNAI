@@ -132,7 +132,111 @@ namespace Border.Research.Editor
             TMP_Text detail = CreateText("Detail", content, 12, FontStyles.Normal, TextAlignmentOptions.Right, string.Empty);
             detail.gameObject.AddComponent<LayoutElement>().preferredWidth = 150f;
             ResearchUiArtApplicator.ApplyCard(button.gameObject);
+            AddEngineNameEditor(button.gameObject);
             return button.gameObject;
+        }
+
+        [MenuItem("Border/Research/Add Preset Name Editors")]
+        public static void AddPresetNameEditors()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            foreach (string name in new[] { "EnginePresetCard", "ResearchOperationScreen" })
+            {
+                string path = $"{ResourceFolder}/{name}.prefab";
+                GameObject contents = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    if (name == "EnginePresetCard") AddEngineNameEditor(contents);
+                    else
+                        foreach (Button button in contents.GetComponentsInChildren<Button>(true))
+                            if (button.name.StartsWith("EngineCard_")) AddEngineNameEditor(button.gameObject);
+                    PrefabUtility.SaveAsPrefabAsset(contents, path);
+                }
+                finally { PrefabUtility.UnloadPrefabContents(contents); }
+            }
+        }
+
+        private static void AddEngineNameEditor(GameObject card)
+        {
+            if (card.GetComponent<EnginePresetNameEditor>() != null)
+            {
+                LayoutEngineNameEditor(card);
+                return;
+            }
+            Transform content = card.transform.Find("Content");
+            HorizontalLayoutGroup horizontal = content.GetComponent<HorizontalLayoutGroup>();
+            if (horizontal != null) Object.DestroyImmediate(horizontal);
+            TMP_Text title = content.Find("Title").GetComponent<TMP_Text>();
+            TMP_Text detail = content.Find("Detail").GetComponent<TMP_Text>();
+            SetNameRect(title.rectTransform, new Vector2(0, 0.42f), Vector2.one, -48f);
+            SetNameRect(detail.rectTransform, Vector2.zero, new Vector2(1, 0.42f), -48f);
+            title.enableAutoSizing = true;
+            title.fontSizeMin = 10f;
+            title.fontSizeMax = 13f;
+            title.richText = false;
+            detail.alignment = TextAlignmentOptions.Left;
+            RectTransform inputRect = CreatePanel("NameInput", content, new Color(0.08f, 0.12f, 0.15f, 1f));
+            SetNameRect(inputRect, new Vector2(0, 0.42f), Vector2.one, -48f);
+            RectTransform viewport = CreateGroup("Viewport", inputRect);
+            Stretch(viewport, 3f);
+            viewport.gameObject.AddComponent<RectMask2D>();
+            TMP_Text inputText = CreateText("Text", viewport, 13, FontStyles.Normal, TextAlignmentOptions.Left, "");
+            Stretch(inputText.rectTransform, 0f);
+            inputText.richText = false;
+            var input = inputRect.gameObject.AddComponent<TMP_InputField>();
+            input.textViewport = viewport;
+            input.textComponent = inputText;
+            input.targetGraphic = inputRect.GetComponent<Image>();
+            input.lineType = TMP_InputField.LineType.SingleLine;
+            input.richText = false;
+            input.characterLimit = 0;
+            input.restoreOriginalTextOnEscape = true;
+            Button rename = CreateButton("RenameButton", content, "변경", 40f, 28f);
+            var renameRect = (RectTransform)rename.transform;
+            renameRect.anchorMin = renameRect.anchorMax = new Vector2(1f, 0.5f);
+            renameRect.pivot = new Vector2(1f, 0.5f);
+            renameRect.anchoredPosition = Vector2.zero;
+            renameRect.sizeDelta = new Vector2(40f, 28f);
+            TMP_Text label = rename.GetComponentInChildren<TMP_Text>();
+            label.fontSize = 11f;
+            card.AddComponent<EnginePresetNameEditor>().Configure(title, input, rename, label);
+            inputRect.gameObject.SetActive(false);
+            LayoutEngineNameEditor(card);
+        }
+
+        public static void LayoutEngineNameEditor(GameObject card)
+        {
+            if (card.GetComponent<EnginePresetNameEditor>() == null) return;
+            Transform content = card.transform.Find("Content");
+            if (content == null) return;
+            HorizontalLayoutGroup horizontal = content.GetComponent<HorizontalLayoutGroup>();
+            if (horizontal != null) Object.DestroyImmediate(horizontal);
+            Stretch((RectTransform)content, 7f);
+            RectTransform icon = content.Find("EngineIcon") as RectTransform;
+            if (icon != null)
+            {
+                icon.anchorMin = icon.anchorMax = new Vector2(0f, 0.5f);
+                icon.pivot = new Vector2(0f, 0.5f);
+                icon.anchoredPosition = Vector2.zero;
+                icon.sizeDelta = new Vector2(30f, 30f);
+            }
+            foreach (string name in new[] { "Title", "Detail", "NameInput" })
+            {
+                RectTransform rect = content.Find(name) as RectTransform;
+                if (rect == null) continue;
+                bool detail = name == "Detail";
+                SetNameRect(rect, detail ? Vector2.zero : new Vector2(0f, 0.42f),
+                    detail ? new Vector2(1f, 0.42f) : Vector2.one, -48f);
+                rect.offsetMin = new Vector2(38f, 0f);
+            }
+        }
+
+        private static void SetNameRect(RectTransform rect, Vector2 min, Vector2 max, float right)
+        {
+            rect.anchorMin = min;
+            rect.anchorMax = max;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = new Vector2(right, 0f);
         }
 
         private static GameObject CreateDesignEnginePresetButton()

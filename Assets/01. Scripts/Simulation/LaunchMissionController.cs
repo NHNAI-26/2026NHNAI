@@ -29,6 +29,8 @@ namespace Simulation
         public bool CanSelfDestruct => rocket != null && rocket.Launched && !returning && !IsExploding;
         public string Objective { get; private set; }
         public string Status { get; private set; } = "발사 대기";
+        public LaunchTerminationReason TerminationReason =>
+            evaluator == null ? LaunchTerminationReason.Unknown : evaluator.TerminationReason;
         public float Altitude => Mathf.Max(0f, transform.position.y - origin.y);
 
         /// <summary>
