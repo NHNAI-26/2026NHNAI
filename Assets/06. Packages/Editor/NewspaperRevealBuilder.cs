@@ -13,6 +13,39 @@ public static class NewspaperRevealBuilder
     private const string NewspaperPrefabPath = "Assets/03. Prefabs/UI/NewspaperReveal.prefab";
     private const string MailPrefabPath = "Assets/03. Prefabs/UI/MailReveal.prefab";
 
+    [InitializeOnLoadMethod]
+    private static void ScheduleMissingMailMigration()
+    {
+        EditorApplication.delayCall += MigrateMissingMail;
+        EditorApplication.playModeStateChanged -= MigrateAfterPlayMode;
+        EditorApplication.playModeStateChanged += MigrateAfterPlayMode;
+    }
+
+    private static void MigrateAfterPlayMode(PlayModeStateChange state)
+    {
+        if (state == PlayModeStateChange.EnteredEditMode)
+            EditorApplication.delayCall += MigrateMissingMail;
+    }
+
+    private static void MigrateMissingMail()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+        if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+        {
+            EditorApplication.delayCall += MigrateMissingMail;
+            return;
+        }
+        const string reportPath = "Assets/03. Prefabs/UI/ResearchResultReport.prefab";
+        GameObject report = AssetDatabase.LoadAssetAtPath<GameObject>(reportPath);
+        if (report == null) return;
+        var controller = report.GetComponent<ResearchResultReportController>();
+        if (controller == null) return;
+        var serialized = new SerializedObject(controller);
+        if (serialized.FindProperty("mail").objectReferenceValue != null) return;
+        ApplyLaunchNewspaper();
+        Debug.Log("Created and connected the missing MailReveal prefab for private launch results.");
+    }
+
     [MenuItem("Border/UI/Apply Launch Newspaper")]
     public static void ApplyLaunchNewspaper()
     {
@@ -109,15 +142,20 @@ public static class NewspaperRevealBuilder
         GameObject report = PrefabUtility.LoadPrefabContents(reportPath);
         try
         {
-            // Keep the report root/GUID so all existing scene result routes remain connected.
-            for (int i = report.transform.childCount - 1; i >= 0; i--)
-                Object.DestroyImmediate(report.transform.GetChild(i).gameObject);
-            var paperInstance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(NewspaperPrefabPath), report.transform);
-            var mailInstance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(MailPrefabPath), report.transform);
-            mailInstance.SetActive(false);
             var adapter = new SerializedObject(report.GetComponent<ResearchResultReportController>());
-            adapter.FindProperty("newspaper").objectReferenceValue = paperInstance.GetComponent<NewspaperReveal>();
-            adapter.FindProperty("mail").objectReferenceValue = mailInstance.GetComponent<NewspaperReveal>();
+            if (adapter.FindProperty("newspaper").objectReferenceValue == null)
+            {
+                var paperInstance = (GameObject)PrefabUtility.InstantiatePrefab(
+                    AssetDatabase.LoadAssetAtPath<GameObject>(NewspaperPrefabPath), report.transform);
+                adapter.FindProperty("newspaper").objectReferenceValue = paperInstance.GetComponent<NewspaperReveal>();
+            }
+            if (adapter.FindProperty("mail").objectReferenceValue == null)
+            {
+                var mailInstance = (GameObject)PrefabUtility.InstantiatePrefab(
+                    AssetDatabase.LoadAssetAtPath<GameObject>(MailPrefabPath), report.transform);
+                mailInstance.SetActive(false);
+                adapter.FindProperty("mail").objectReferenceValue = mailInstance.GetComponent<NewspaperReveal>();
+            }
             adapter.ApplyModifiedPropertiesWithoutUndo();
             report.SetActive(false);
             PrefabUtility.SaveAsPrefabAsset(report, reportPath);

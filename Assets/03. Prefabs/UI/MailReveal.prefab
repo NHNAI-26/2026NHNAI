@@ -35,8 +35,8 @@ RectTransform:
   - {fileID: 8860537029306509771}
   - {fileID: 3734692974732852049}
   - {fileID: 5595363914709323116}
-  - {fileID: 85238357669843362}
   - {fileID: 2391987043725664498}
+  - {fileID: 85238357669843362}
   - {fileID: 562436509048308746}
   - {fileID: 3989770211702243449}
   m_Father: {fileID: 7982109864236497128}
@@ -74,7 +74,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -358238143, guid: 69df57a2876c647d9a8590a5f47c4468, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 0116bd2fbef09419da38ae91169dcf7f, type: 3}
   m_Type: 0
   m_PreserveAspect: 1
   m_FillCenter: 1
@@ -153,7 +153,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.AspectRatioFitter
   m_AspectMode: 3
-  m_AspectRatio: 0.7376362
+  m_AspectRatio: 1
 --- !u!1 &350811569637568622
 GameObject:
   m_ObjectHideFlags: 0
@@ -186,8 +186,8 @@ RectTransform:
   - {fileID: 7459302325581859165}
   m_Father: {fileID: 9206502520243659996}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.1, y: 0.025}
-  m_AnchorMax: {x: 0.9, y: 0.975}
+  m_AnchorMin: {x: 0.04, y: 0.04}
+  m_AnchorMax: {x: 0.96, y: 0.96}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -235,8 +235,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7459302325581859165}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.6875, y: 0.47862533}
-  m_AnchorMax: {x: 0.9443182, y: 0.7183571}
+  m_AnchorMin: {x: 0.34290272, y: 0.45135567}
+  m_AnchorMax: {x: 0.94896334, y: 0.64274323}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -295,12 +295,12 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 15
+  m_fontSize: 17
   m_fontSizeBase: 15
   m_fontWeight: 400
   m_enableAutoSizing: 1
-  m_fontSizeMin: 12
-  m_fontSizeMax: 15
+  m_fontSizeMin: 13
+  m_fontSizeMax: 17
   m_fontStyle: 0
   m_HorizontalAlignment: 1
   m_VerticalAlignment: 256
@@ -372,8 +372,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7459302325581859165}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.25, y: 0.48239732}
-  m_AnchorMax: {x: 0.6659091, y: 0.71248955}
+  m_AnchorMin: {x: 0.34290272, y: 0.25039873}
+  m_AnchorMax: {x: 0.58213717, y: 0.42982456}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -509,8 +509,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7459302325581859165}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.25, y: 0.48239732}
-  m_AnchorMax: {x: 0.6659091, y: 0.71248955}
+  m_AnchorMin: {x: 0.34290272, y: 0.25039873}
+  m_AnchorMax: {x: 0.58213717, y: 0.42982456}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -534,7 +534,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RawImage
-  m_Material: {fileID: 2100000, guid: 4efc6ae40d63d6e489b7cfaf3484f412, type: 2}
+  m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -581,8 +581,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7459302325581859165}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.24772727, y: 0.8658843}
-  m_AnchorMax: {x: 0.8568182, y: 0.9446773}
+  m_AnchorMin: {x: 0.34290272, y: 0.6953748}
+  m_AnchorMax: {x: 0.94896334, y: 0.7464115}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -641,15 +641,15 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 28
+  m_fontSize: 20
   m_fontSizeBase: 28
   m_fontWeight: 400
   m_enableAutoSizing: 1
-  m_fontSizeMin: 20
-  m_fontSizeMax: 28
+  m_fontSizeMin: 16
+  m_fontSizeMax: 20
   m_fontStyle: 1
   m_HorizontalAlignment: 1
-  m_VerticalAlignment: 256
+  m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_characterHorizontalScale: 1
@@ -806,8 +806,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7459302325581859165}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.08522727, y: 0.062866725}
-  m_AnchorMax: {x: 0.9397727, y: 0.18524727}
+  m_AnchorMin: {x: 0.61403507, y: 0.26236045}
+  m_AnchorMax: {x: 0.94896334, y: 0.4138756}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -943,8 +943,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7459302325581859165}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.06704546, y: 0.049455155}
-  m_AnchorMax: {x: 0.9625, y: 0.20368817}
+  m_AnchorMin: {x: 0.5980861, y: 0.24641149}
+  m_AnchorMax: {x: 0.9649123, y: 0.42982456}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -969,7 +969,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.91, g: 0.88, b: 0.79, a: 1}
+  m_Color: {r: 0.92, g: 0.96, b: 1, a: 0.92}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -997,7 +997,7 @@ GameObject:
   - component: {fileID: 4127979406541696079}
   - component: {fileID: 4671651432836643772}
   m_Layer: 0
-  m_Name: NewspaperReveal
+  m_Name: MailReveal
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1036,8 +1036,8 @@ MonoBehaviour:
   contentGroup: {fileID: 1258489021359883288}
   backdrop: {fileID: 990115017057102264}
   newspaperImage: {fileID: 4707156235232891774}
-  medium: 0
-  newspaperSprite: {fileID: -358238143, guid: 69df57a2876c647d9a8590a5f47c4468, type: 3}
+  medium: 1
+  newspaperSprite: {fileID: 21300000, guid: 0116bd2fbef09419da38ae91169dcf7f, type: 3}
   headlineText: {fileID: 2785839060496756978}
   editionText: {fileID: 8209609880249309807}
   articleText: {fileID: 3071269840717012279}
@@ -1097,8 +1097,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7459302325581859165}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.07386363, y: 0.7451802}
-  m_AnchorMax: {x: 0.9488636, y: 0.7787091}
+  m_AnchorMin: {x: 0.34290272, y: 0.6602871}
+  m_AnchorMax: {x: 0.94896334, y: 0.68740034}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -1157,15 +1157,15 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 14
+  m_fontSize: 13
   m_fontSizeBase: 14
   m_fontWeight: 400
   m_enableAutoSizing: 1
-  m_fontSizeMin: 12
-  m_fontSizeMax: 14
+  m_fontSizeMin: 11
+  m_fontSizeMax: 13
   m_fontStyle: 0
   m_HorizontalAlignment: 1
-  m_VerticalAlignment: 256
+  m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_characterHorizontalScale: 1
