@@ -3,6 +3,7 @@ using System.Collections;
 using System.Linq;
 using System.Reflection;
 using Border.Audio;
+using Border.Research;
 using Border.UI;
 using DG.Tweening;
 using NUnit.Framework;
@@ -86,6 +87,15 @@ namespace Simulation.Tests
             Advance(0.29f);
             Assert.That(Get<TMP_Text>("effectsText").maxVisibleCharacters, Is.EqualTo(4));
             Assert.That(Keys(), Is.GreaterThan(0));
+            float stampImpact = timeline.Duration() - Get<float>("stampSettleSeconds");
+            Advance(stampImpact - 0.02f - timeline.Elapsed());
+            var stamp = Get<UnityEngine.UI.Image>("stampImage");
+            Assert.That(stamp.gameObject.activeSelf, Is.True);
+            Assert.That(Get<TMP_Text>("effectsText").maxVisibleCharacters, Is.EqualTo(int.MaxValue));
+            Assert.That(Voices("stamp"), Is.Zero, "The stamp sound belongs to contact, not its approach.");
+            Advance(stampImpact + 0.01f - timeline.Elapsed());
+            Assert.That(Voices("stamp"), Is.EqualTo(1));
+            Assert.That(stamp.rectTransform.localScale.x, Is.LessThan(1f));
             timeline.Complete(true);
             Assert.That(shown, Is.EqualTo(1));
             Assert.That(impacts, Is.EqualTo(1));
@@ -93,6 +103,7 @@ namespace Simulation.Tests
             reveal.Hide();
             Get<Sequence>("sequence").Complete(true);
             Assert.That(Keys(), Is.Zero);
+            Assert.That(Voices("stamp"), Is.Zero);
             Assert.That(Voices(impactId), Is.Zero);
             Assert.That(unrelated.IsValid, Is.True, "Closing a report must preserve unrelated effects.");
         }
@@ -141,6 +152,7 @@ namespace Simulation.Tests
             Assert.That(title.textInfo.characterCount, Is.EqualTo(4));
         }
 
+        [TestCase("stamp")]
         [TestCase("woosh")]
         [TestCase("email")]
         [TestCase("hammer_collision_sound")]
@@ -155,6 +167,69 @@ namespace Simulation.Tests
             var importer = (AudioImporter)AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(entry.Clip));
             Assert.That(importer.defaultSampleSettings.preloadAudioData, Is.True);
             Assert.That(importer.defaultSampleSettings.loadType, Is.EqualTo(AudioClipLoadType.DecompressOnLoad));
+        }
+
+        [TestCase("NewspaperReveal")]
+        [TestCase("MailReveal")]
+        public void BothImpacts_ShakeCameraAndOverlay_AndDisableRestoresPose(string prefab)
+        {
+            var cameraObject = new GameObject("Report shake camera", typeof(Camera));
+            cameraObject.tag = "MainCamera";
+            Vector3 origin = new Vector3(3f, 4f, 5f);
+            cameraObject.transform.localPosition = origin;
+            try
+            {
+                CreateReveal(prefab);
+                Sequence timeline = ShowManually();
+                var screen = Get<RectTransform>("screenMotion");
+                Vector2 screenOrigin = screen.anchoredPosition;
+                Advance(0.11f);
+                Tween shake = Get<Tween>("shakeTween");
+                Assert.That(shake, Is.Not.Null);
+                shake.Goto(0.03f, true);
+                Assert.That(cameraObject.transform.localPosition, Is.Not.EqualTo(origin));
+                Assert.That(screen.anchoredPosition, Is.Not.EqualTo(screenOrigin));
+                shake.Complete();
+                Assert.That(cameraObject.transform.localPosition, Is.EqualTo(origin));
+                Assert.That(screen.anchoredPosition, Is.EqualTo(screenOrigin));
+                Advance(timeline.Duration() - Get<float>("stampSettleSeconds") + 0.01f - timeline.Elapsed());
+                shake = Get<Tween>("shakeTween");
+                Assert.That(shake, Is.Not.Null);
+                shake.Goto(0.03f, true);
+                Assert.That(screen.anchoredPosition, Is.Not.EqualTo(screenOrigin));
+                root.SetActive(false);
+                Assert.That(cameraObject.transform.localPosition, Is.EqualTo(origin));
+                Assert.That(screen.anchoredPosition, Is.EqualTo(screenOrigin));
+                Assert.That(Voices("stamp"), Is.Zero);
+                Assert.That(Get<UnityEngine.UI.Image>("stampImage").gameObject.activeSelf, Is.False);
+            }
+            finally { Object.DestroyImmediate(cameraObject); }
+        }
+
+        [TestCase(ResearchGrade.S, false, TestVisibility.Public, "success-original-pixel-512")]
+        [TestCase(ResearchGrade.B, false, TestVisibility.Private, "success-original-pixel-512")]
+        [TestCase(ResearchGrade.C, false, TestVisibility.Public, "fail-original-pixel-512")]
+        [TestCase(ResearchGrade.F, false, TestVisibility.Private, "fail-original-pixel-512")]
+        [TestCase(ResearchGrade.S, true, TestVisibility.Public, "clear-blue-pixel-512")]
+        public void Result_SelectsMatchingStampAndResetsPreviousReveal(ResearchGrade grade, bool finalWon,
+            TestVisibility visibility, string spriteName)
+        {
+            var result = new ResearchLaunchResultData(LaunchMissionId.LowAltitude, EnginePresetId.Engine01,
+                2024, 2, 800, 350, visibility, 50, 80, 70, 80, 10, 10, 42, grade, 600, 75, finalWon, false);
+            var article = LaunchNewspaperArticle.Create(result, "시험");
+            CreateReveal(article.Medium == LaunchResultMedium.Mail ? "MailReveal" : "NewspaperReveal");
+            reveal.Present(article, null, null);
+            var stamp = Get<UnityEngine.UI.Image>("stampImage");
+            Assert.That(stamp.sprite.name, Is.EqualTo(spriteName));
+            Assert.That(stamp.gameObject.activeSelf, Is.False);
+            Get<Sequence>("sequence").Complete(true);
+            Assert.That(stamp.gameObject.activeSelf, Is.True);
+            reveal.Present(article, null, null);
+            Assert.That(stamp.gameObject.activeSelf, Is.False);
+            Assert.That(Voices("stamp"), Is.Zero);
+            var effects = Get<TMP_Text>("effectsText");
+            Assert.That(effects.fontStyle.HasFlag(FontStyles.Bold), Is.True);
+            Assert.That(effects.fontSharedMaterial.GetFloat("_FaceDilate"), Is.GreaterThanOrEqualTo(0.1f));
         }
 
         private void CreateReveal(string prefab)

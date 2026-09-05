@@ -8,15 +8,23 @@ namespace Border.Research
         Mail
     }
 
+    public enum LaunchResultStamp
+    {
+        Success,
+        Fail,
+        Clear
+    }
+
     public readonly struct LaunchNewspaperArticle
     {
-        private LaunchNewspaperArticle(string heading, string edition, string body, string effects, LaunchResultMedium medium)
+        private LaunchNewspaperArticle(string heading, string edition, string body, string effects, LaunchResultMedium medium, LaunchResultStamp stamp)
         {
             Heading = heading;
             Edition = edition;
             Body = body;
             Effects = effects;
             Medium = medium;
+            Stamp = stamp;
         }
 
         public string Heading { get; }
@@ -24,6 +32,7 @@ namespace Border.Research
         public string Body { get; }
         public string Effects { get; }
         public LaunchResultMedium Medium { get; }
+        public LaunchResultStamp Stamp { get; }
 
         public static LaunchNewspaperArticle Create(ResearchLaunchResultData result, string missionName)
         {
@@ -38,7 +47,9 @@ namespace Border.Research
             string body = CreateBody(result, resolvedMissionName, succeeded, medium);
             string effects = CreateEffects(result);
 
-            return new LaunchNewspaperArticle(heading, edition, body, effects, medium);
+            LaunchResultStamp stamp = result.FinalMissionWon ? LaunchResultStamp.Clear
+                : succeeded ? LaunchResultStamp.Success : LaunchResultStamp.Fail;
+            return new LaunchNewspaperArticle(heading, edition, body, effects, medium, stamp);
         }
 
         public static LaunchResultMedium ResolveMedium(ResearchLaunchResultData result)

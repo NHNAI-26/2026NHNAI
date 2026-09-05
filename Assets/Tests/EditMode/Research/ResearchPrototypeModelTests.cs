@@ -23,13 +23,13 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void Reset_CreatesTenEnginePresetSlotsButOnlyFirstIsUnlocked()
+        public void Reset_CreatesTenEnginePresetSlotsWithNoneUnlocked()
         {
             var model = new ResearchPrototypeModel();
 
             Assert.That(ResearchPrototypeModel.GetEnginePresetConfigs().Count, Is.EqualTo(ResearchPrototypeModel.MaxEnginePresetCount));
             Assert.That(model.EnginePresets, Has.Length.EqualTo(ResearchPrototypeModel.MaxEnginePresetCount));
-            Assert.That(model.ActiveEnginePresetCount, Is.EqualTo(1));
+            Assert.That(model.ActiveEnginePresetCount, Is.Zero);
 
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
@@ -46,7 +46,7 @@ namespace Border.Research.Tests
                 Assert.That(preset.Cooling, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat));
                 Assert.That(preset.MaxOutput, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat));
                 Assert.That(preset.IgnitionReliability, Is.EqualTo(ResearchPrototypeModel.InitialEngineStat));
-                Assert.That(preset.Unlocked, Is.EqualTo(i == 0));
+                Assert.That(preset.Unlocked, Is.False);
             }
         }
 
@@ -67,7 +67,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void CreateNewEnginePreset_UnlocksNextSlotFor150WithoutTime()
+        public void CreateNewEnginePreset_UnlocksFirstSlotFor150WithoutTime()
         {
             var model = new ResearchPrototypeModel();
             int funds = model.Funds;
@@ -76,9 +76,9 @@ namespace Border.Research.Tests
             ResearchActionResult result = model.CreateNewEnginePreset(out EnginePresetId presetId);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(presetId, Is.EqualTo(EnginePresetId.Engine02));
-            Assert.That(model.ActiveEnginePresetCount, Is.EqualTo(2));
-            Assert.That(model.IsEnginePresetUnlocked(EnginePresetId.Engine02), Is.True);
+            Assert.That(presetId, Is.EqualTo(EnginePresetId.Engine01));
+            Assert.That(model.ActiveEnginePresetCount, Is.EqualTo(1));
+            Assert.That(model.IsEnginePresetUnlocked(EnginePresetId.Engine01), Is.True);
             Assert.That(model.Funds, Is.EqualTo(funds - ResearchPrototypeModel.NewEnginePresetCost));
             Assert.That(model.RemainingTurns, Is.EqualTo(remainingTurns));
         }
@@ -118,7 +118,7 @@ namespace Border.Research.Tests
         {
             var model = new ResearchPrototypeModel();
 
-            for (int i = 1; i < ResearchPrototypeModel.MaxEnginePresetCount; i++)
+            for (int i = 0; i < ResearchPrototypeModel.MaxEnginePresetCount; i++)
             {
                 Assert.That(model.CreateNewEnginePreset(out _), Is.EqualTo(ResearchActionResult.Success));
             }
@@ -207,17 +207,23 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void TryEnterDesign_EngineCompletionZero_EntersDesignAndConsumesLaunchCost()
+        public void TryEnterDesign_RequiresCreatedEngineThenAllowsCompletionZero()
         {
             var model = new ResearchPrototypeModel();
             int funds = model.Funds;
+
+            Assert.That(model.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, out _),
+                Is.EqualTo(ResearchActionResult.EnginePresetLocked));
+            Assert.That(model.Funds, Is.EqualTo(funds));
+            Assert.That(model.CreateNewEnginePreset(out EnginePresetId presetId), Is.EqualTo(ResearchActionResult.Success));
+            Assert.That(presetId, Is.EqualTo(EnginePresetId.Engine01));
 
             ResearchActionResult result = model.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, out ResearchDesignEntryData data);
 
             Assert.That(result, Is.EqualTo(ResearchActionResult.Success));
             Assert.That(data.SelectedEngineCompletion, Is.EqualTo(0));
             Assert.That(data.LaunchCostPaid, Is.True);
-            Assert.That(model.Funds, Is.EqualTo(funds - data.LaunchCost));
+            Assert.That(model.Funds, Is.EqualTo(funds - ResearchPrototypeModel.NewEnginePresetCost - data.LaunchCost));
         }
 
         [Test]
@@ -452,7 +458,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void MiniGameFuel_UsesPrintedTicksAndSkyBluePassBand()
+        public void MiniGameFuel_PeaksAtRightmostWhiteLineOfSkyBluePassBand()
         {
             float start = ResearchMiniGameController.FuelPassStart;
             float end = ResearchMiniGameController.FuelPassEnd;
@@ -461,8 +467,8 @@ namespace Border.Research.Tests
             Assert.That(ResearchMiniGameController.GetFuelNeedleAngle(start), Is.EqualTo(-39.4f).Within(0.001f));
             Assert.That(ResearchMiniGameController.GetFuelNeedleAngle(end), Is.EqualTo(-62.7f).Within(0.001f));
             Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(start, 0f), Is.EqualTo(80));
-            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(end, 0f), Is.EqualTo(80));
-            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore((start + end) * 0.5f, 0f), Is.EqualTo(100));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore((start + end) * 0.5f, 0f), Is.EqualTo(90));
+            Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(end, 0f), Is.EqualTo(100));
             Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(start - 0.001f, 0f), Is.LessThan(50));
             Assert.That(ResearchMiniGameController.CalculateFuelAttemptScore(end + 0.001f, 0f), Is.LessThan(50));
         }
@@ -532,7 +538,7 @@ namespace Border.Research.Tests
                 cooling.InitializeForTests(EnginePresetId.Engine01, EngineStatId.Cooling, false, 79, _ => { });
                 ignition.InitializeForTests(EnginePresetId.Engine01, EngineStatId.IgnitionReliability, false, 80, _ => { });
 
-                Assert.That(fuelA.GetFuelTargetForTests(), Is.InRange(ResearchMiniGameController.FuelPassStart, ResearchMiniGameController.FuelPassEnd));
+                Assert.That(fuelA.GetFuelTargetForTests(), Is.EqualTo(ResearchMiniGameController.FuelPassEnd));
                 Assert.That(fuelA.GetFuelDurationForTests(), Is.InRange(1.8f, 4.2f));
                 Assert.That(fuelA.GetFuelDurationForTests(), Is.EqualTo(fuelB.GetFuelDurationForTests()));
                 Assert.That(fuelA.GetFuelDurationForTests(), Is.Not.EqualTo(fuelC.GetFuelDurationForTests()));
@@ -1253,7 +1259,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void OperationUI_InitialRender_ShowsFirstEngineWithoutExtraMissionDetails()
+        public void OperationUI_InitialRender_HidesAllEnginesAndDisablesDesign()
         {
             var host = new GameObject("Research UI Test Host");
 
@@ -1262,10 +1268,11 @@ namespace Border.Research.Tests
                 ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
                 controller.InitializeForTests();
 
-                Assert.That(FindButton(host.transform, "EngineCard_Engine01").interactable, Is.True);
-                Assert.That(FindButton(host.transform, "EngineCard_Engine01").gameObject.activeSelf, Is.True);
+                Assert.That(controller.Model.ActiveEnginePresetCount, Is.Zero);
+                Assert.That(FindButton(host.transform, "EngineCard_Engine01").gameObject.activeSelf, Is.False);
                 Assert.That(FindButton(host.transform, "EngineCard_Engine10").gameObject.activeSelf, Is.False);
                 Assert.That(FindButton(host.transform, "CreateEnginePresetButton").interactable, Is.True);
+                Assert.That(FindButton(host.transform, "EnterDesignButton").interactable, Is.False);
                 foreach (string name in new[] { "SelectedMissionText", "SelectedRequirementText", "RiskText", "StatInsightText" })
                     Assert.That(FindTransform(host.transform, name), Is.Null, name);
             }
@@ -1276,7 +1283,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void OperationUI_CreateEnginePresetButton_RevealsNextPreset()
+        public void OperationUI_CreateEnginePresetButton_RevealsFirstPresetAndEnablesDesign()
         {
             var host = new GameObject("Research UI Test Host");
 
@@ -1287,9 +1294,10 @@ namespace Border.Research.Tests
 
                 FindButton(host.transform, "CreateEnginePresetButton").onClick.Invoke();
 
-                Assert.That(controller.Model.ActiveEnginePresetCount, Is.EqualTo(2));
-                Assert.That(FindButton(host.transform, "EngineCard_Engine02").gameObject.activeSelf, Is.True);
-                Assert.That(controller.SelectedEnginePreset, Is.EqualTo(EnginePresetId.Engine02));
+                Assert.That(controller.Model.ActiveEnginePresetCount, Is.EqualTo(1));
+                Assert.That(FindButton(host.transform, "EngineCard_Engine01").gameObject.activeSelf, Is.True);
+                Assert.That(controller.SelectedEnginePreset, Is.EqualTo(EnginePresetId.Engine01));
+                Assert.That(FindButton(host.transform, "EnterDesignButton").interactable, Is.True);
             }
             finally
             {

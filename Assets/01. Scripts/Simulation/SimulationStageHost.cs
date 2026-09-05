@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using Border.Research;
+using Border.Audio;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -296,10 +297,11 @@ namespace Simulation
         {
             // 대기 중에도 복귀 버튼이 살아 있으면 CloseDesignStage 가 두 번째 언로드를 띄운다.
             busy = true;
+            if (!succeeded) SoundManager.Instance?.PlayBgm("failBGM", 0.25f);
             var presentation = succeeded && mission != null
                 ? mission.GetComponentInChildren<MissionSuccessPresentation>() : null;
             Camera camera = FindSceneCamera(SceneManager.GetSceneByName(SimulationSceneName));
-            if (presentation != null && presentation.Begin(camera))
+            if (presentation != null && presentation.Begin(camera, mission.CompletionVelocity))
             {
                 try
                 {

@@ -1200,10 +1200,18 @@ namespace Border.Research
         private void ShowEnginePreview()
         {
             ResolveEnginePreview();
-            if (enginePreview != null)
+            if (enginePreview == null)
             {
-                enginePreview.ShowHologram(selectedEnginePreset, GetSelectedEngineArchetype());
+                return;
             }
+
+            if (model == null || model.ActiveEnginePresetCount == 0)
+            {
+                enginePreview.Hide();
+                return;
+            }
+
+            enginePreview.ShowHologram(selectedEnginePreset, GetSelectedEngineArchetype());
         }
 
         private void HideEnginePreview()

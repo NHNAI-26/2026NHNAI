@@ -164,6 +164,8 @@ namespace Simulation.Tests
         public void ReachingObjective_CompletesSuccessfullyOnceWithoutExplosion()
         {
             _rocket.Launch();
+            Vector3 velocity = new Vector3(4f, 25f, -2f);
+            _body.linearVelocity = velocity;
             _object.transform.position = Vector3.up * 100f;
             Invoke(_controller, "FixedUpdate");
             Invoke(_controller, "FixedUpdate");
@@ -172,6 +174,7 @@ namespace Simulation.Tests
 
             Assert.That(_results, Is.EqualTo(new[] { true }));
             Assert.That(_rocket.FlightStopped, Is.True);
+            Assert.That(_controller.CompletionVelocity, Is.EqualTo(velocity));
             Assert.That(_explosions, Is.Zero);
             Assert.That(_controller.CanSelfDestruct, Is.False);
         }
@@ -182,7 +185,7 @@ namespace Simulation.Tests
             ReinitializeController(LaunchMissionId.TargetZone);
 
             Assert.That(_controller.UsesTargetBox, Is.True);
-            Assert.That(_controller.TargetZoneCenter, Is.EqualTo(new Vector3(0f, 260f, 100f)));
+            Assert.That(_controller.TargetZoneCenter, Is.EqualTo(new Vector3(0f, 260f, 130f)));
             Assert.That(_controller.TargetBoxBounds.size, Is.EqualTo(Vector3.one * 168f));
             LaunchTargetZoneGuide guide = _object.GetComponent<LaunchTargetZoneGuide>();
             Assert.That(guide, Is.Not.Null);
@@ -225,7 +228,7 @@ namespace Simulation.Tests
             collider.size = new Vector3(4f, 4f, 4f);
 
             _rocket.Launch();
-            _object.transform.position = new Vector3(0f, 198f, 100f);
+            _object.transform.position = new Vector3(0f, 198f, 130f);
             Physics.SyncTransforms();
             Invoke(_controller, "FixedUpdate");
 
@@ -241,7 +244,7 @@ namespace Simulation.Tests
             _object.AddComponent<BoxCollider>().size = Vector3.one;
 
             _rocket.Launch();
-            _object.transform.position = new Vector3(0f, 170f, 100f);
+            _object.transform.position = new Vector3(0f, 170f, 130f);
             Physics.SyncTransforms();
             Invoke(_controller, "FixedUpdate");
 
@@ -256,12 +259,27 @@ namespace Simulation.Tests
             _object.AddComponent<BoxCollider>().size = Vector3.one;
 
             _rocket.Launch();
-            _object.transform.position = new Vector3(83f, 343f, 183f);
+            _object.transform.position = new Vector3(83f, 343f, 213f);
             Physics.SyncTransforms();
             Invoke(_controller, "FixedUpdate");
 
             Assert.That(_controller.IsInTargetBox, Is.True);
             Assert.That(_results, Is.EqualTo(new[] { true }));
+        }
+
+        [Test]
+        public void TargetBoxMission_StraightAscentStaysOutsideZone()
+        {
+            ReinitializeController(LaunchMissionId.TargetZone);
+            _object.AddComponent<BoxCollider>().size = Vector3.one;
+
+            _rocket.Launch();
+            _object.transform.position = new Vector3(0f, 260f, 0f);
+            Physics.SyncTransforms();
+            Invoke(_controller, "FixedUpdate");
+
+            Assert.That(_controller.IsInTargetBox, Is.False);
+            Assert.That(_results, Is.Empty);
         }
 
         [Test]

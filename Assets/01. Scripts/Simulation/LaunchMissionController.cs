@@ -49,6 +49,7 @@ namespace Simulation
         /// <summary>미션이 끝났는지, 끝났다면 성공인지. <see cref="Status"/> 문자열을 파싱하지 않기 위한 것이다.</summary>
         public bool Finished { get; private set; }
         public bool Succeeded { get; private set; }
+        public Vector3 CompletionVelocity { get; private set; }
 
         /// <summary>관제 화면 스테퍼가 읽는 진행 단계. 발사 전에는 0 이다.</summary>
         public int Stage => evaluator != null ? evaluator.StageIndex : 0;
@@ -77,6 +78,9 @@ namespace Simulation
                 SplashdownFailureSeconds = splashdownFailureSeconds,
                 NoLiftoffTimeout = noLiftoffTimeout
             };
+            rocket.SetBurnDurationLimit(mission == LaunchMissionId.LowPowerZoneHold
+                ? rules.MaxBurnSeconds
+                : float.PositiveInfinity);
             evaluator = new LaunchMissionEvaluator(mission, rules);
             Objective = LaunchMissionEvaluator.GetObjectiveDescription(mission, rules);
             completed = onCompleted;
@@ -112,7 +116,8 @@ namespace Simulation
             var outcome = evaluator.Step(Time.fixedDeltaTime, Altitude, distance, Speed,
                 Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds, enableAutomaticFailure,
                 rocket.IsGrounded, rocket.Splashed, body.angularVelocity.magnitude * Mathf.Rad2Deg, inTargetZone);
-            Status = $"고도 {Altitude:0.0}m / 속력 {Speed:0.0}m/s\n거리 {distance:0.0}m / 체류 {evaluator.HoldSeconds:0.0}s / 총 연소 {rocket.TotalBurnSeconds:0.0}s";
+            string cutoff = rocket.EnginesCutOffByBurnLimit ? " / 엔진 자동 차단" : string.Empty;
+            Status = $"고도 {Altitude:0.0}m / 속력 {Speed:0.0}m/s\n거리 {distance:0.0}m / 체류 {evaluator.HoldSeconds:0.0}s / 총 연소 {rocket.TotalBurnSeconds:0.0}s{cutoff}";
             if (outcome != LaunchMissionOutcome.Running) Finish(outcome == LaunchMissionOutcome.Succeeded);
         }
 
@@ -171,6 +176,7 @@ namespace Simulation
             Succeeded = success;
             if (targetGuide != null) targetGuide.Dispose();
             GetComponent<LaunchPhotoCapture>()?.CaptureOutcome();
+            CompletionVelocity = body.linearVelocity;
             rocket.StopFlight();
             Status = success ? "미션 성공" : evaluator.FailureReason;
             completed?.Invoke(success);

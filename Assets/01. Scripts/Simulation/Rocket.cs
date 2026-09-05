@@ -73,6 +73,7 @@ namespace Simulation
         private Vector3 _liftVelocity;
         private float _liftElapsed;
         private float _physicsBlendElapsed;
+        private float _burnDurationLimit = float.PositiveInfinity;
 
         public bool LiftAssistActive => _liftPhase != LiftPhase.None;
 
@@ -82,6 +83,19 @@ namespace Simulation
         public event System.Action LiftoffStarted;
         public bool FlightStopped { get; private set; }
         public float TotalBurnSeconds { get; private set; }
+        public bool EnginesCutOffByBurnLimit { get; private set; }
+
+        /// <summary>
+        /// 엔진 수와 무관한 실제 연소 시간 제한. 한계에 닿으면 엔진만 끄고 로켓은 관성 비행을 계속한다.
+        /// </summary>
+        public void SetBurnDurationLimit(float seconds)
+        {
+            if (float.IsNaN(seconds) || seconds < 0f)
+                throw new System.ArgumentOutOfRangeException(nameof(seconds));
+
+            _burnDurationLimit = seconds;
+            EnginesCutOffByBurnLimit = false;
+        }
 
         /// <summary>
         /// 발사대에 붙들려 있는 중인지. 홀드는 <b>연출</b>이라 힘도 연료도 발열도 쓰지 않는다 —
@@ -184,6 +198,7 @@ namespace Simulation
             Launched = true;
             _groundContacts.Clear();
             Overheated = false;
+            EnginesCutOffByBurnLimit = false;
             _sinceLaunch = 0f;
             _holdElapsed = 0f;
             HoldProgress = 0f;
@@ -440,6 +455,7 @@ namespace Simulation
             _body.angularDamping = initialAngularDamping;
             Launched = FlightStopped = Overheated = Splashed = Holding = false;
             TotalBurnSeconds = 0f;
+            EnginesCutOffByBurnLimit = false;
             ThrustFraction = 0f;
             HoldProgress = 0f;
             SetWobble(0f);
@@ -474,12 +490,27 @@ namespace Simulation
             float ramp = RampFactor(_sinceLaunch, ignitionRampSeconds);
             float applied = 0f;
             bool hasUpwardEngine = false;
+            bool anyEngineBurned = false;
+            float burnDelta = Time.fixedDeltaTime;
+
+            if (!float.IsPositiveInfinity(_burnDurationLimit))
+            {
+                float remainingBurnTime = _burnDurationLimit - TotalBurnSeconds;
+                if (remainingBurnTime <= 0f)
+                {
+                    CutOffEnginesAtBurnLimit();
+                    ApplyLiftAssist(Time.fixedDeltaTime, physicsBlend, false);
+                    return;
+                }
+
+                burnDelta = Mathf.Min(burnDelta, remainingBurnTime);
+            }
 
             for (int i = 0; i < _engines.Count; i++)
             {
                 RocketPart engine = _engines[i];
-                bool burned = engine.Tick(Time.fixedDeltaTime, ramp);
-                if (burned) TotalBurnSeconds += Time.fixedDeltaTime;
+                bool burned = engine.Tick(burnDelta, ramp);
+                anyEngineBurned |= burned;
 
                 if (engine.Overheated)
                 {
@@ -495,7 +526,7 @@ namespace Simulation
 
                 // 무게중심이 아니라 엔진 위치에 힘을 건다. 비대칭 배치가 그대로 토크가 된다.
                 // 방향은 로켓이 아니라 엔진 자신의 up — 설계 단계에서 회전시킨 자세가 곧 추력 방향이다.
-                float output = engine.OutputAt(ramp);
+                float output = engine.OutputAt(ramp) * (burnDelta / Time.fixedDeltaTime);
                 if (!_body.isKinematic)
                     _body.AddForceAtPosition(engine.transform.up * (output * physicsBlend), engine.transform.position);
                 applied += output;
@@ -510,8 +541,28 @@ namespace Simulation
                     : $"Fuel out: {engine.name}, all engines dry", this);
             }
 
+            if (anyEngineBurned)
+                TotalBurnSeconds = Mathf.Min(TotalBurnSeconds + burnDelta, _burnDurationLimit);
+            if (!float.IsPositiveInfinity(_burnDurationLimit)
+                && TotalBurnSeconds >= _burnDurationLimit)
+            {
+                CutOffEnginesAtBurnLimit();
+                hasUpwardEngine = false;
+            }
+
             ApplyLiftAssist(Time.fixedDeltaTime, physicsBlend, hasUpwardEngine);
-            ThrustFraction = _maxThrust > 0f ? applied / _maxThrust : 0f;
+            ThrustFraction = !EnginesCutOffByBurnLimit && _maxThrust > 0f ? applied / _maxThrust : 0f;
+        }
+
+        private void CutOffEnginesAtBurnLimit()
+        {
+            if (EnginesCutOffByBurnLimit) return;
+
+            EnginesCutOffByBurnLimit = true;
+            _liveEngines = 0;
+            foreach (RocketPart engine in _engines) engine.Shutdown();
+            ThrustFraction = 0f;
+            Log.D($"Burn duration limit reached at {TotalBurnSeconds:0.##} s; engines cut off", this);
         }
     }
 }

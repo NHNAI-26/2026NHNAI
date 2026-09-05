@@ -14,14 +14,13 @@ namespace Simulation
     public sealed class LaunchMissionRules
     {
         public float LowAltitude { get; set; } = 100f;
-        public float HighAltitude { get; set; } = 300f;
+        public float HighAltitude { get; set; } = 250f;
         public float TargetAltitude { get; set; } = 200f;
         public float TargetHorizontalMin { get; set; } = 80f;
         public float TargetHorizontalMax { get; set; } = 120f;
-        public Vector3 TargetBoxCenterOffset { get; set; } = new(0f, 260f, 100f);
+        public Vector3 TargetBoxCenterOffset { get; set; } = new(0f, 260f, 130f);
         public Vector3 TargetBoxSize { get; set; } = Vector3.one * 168f;
         public float RequiredHoldSeconds { get; set; } = 3f;
-        public float MaxAttitudeError { get; set; } = 30f;
         public float MaxHoldSpeed { get; set; } = 50f;
         public float MaxBurnSeconds { get; set; } = 8f;
         public float FailureSpeed { get; set; } = 1f;
@@ -44,7 +43,6 @@ namespace Simulation
             RequirePositive(copy.TargetBoxSize.y, nameof(TargetBoxSize));
             RequirePositive(copy.TargetBoxSize.z, nameof(TargetBoxSize));
             RequireNonnegative(copy.RequiredHoldSeconds, nameof(RequiredHoldSeconds));
-            RequireNonnegative(copy.MaxAttitudeError, nameof(MaxAttitudeError));
             RequireNonnegative(copy.MaxHoldSpeed, nameof(MaxHoldSpeed));
             RequireNonnegative(copy.MaxBurnSeconds, nameof(MaxBurnSeconds));
             RequireNonnegative(copy.FailureSpeed, nameof(FailureSpeed));
@@ -150,9 +148,7 @@ namespace Simulation
                 && horizontalDistance <= _rules.TargetHorizontalMax;
             bool holdMission = _missionId == LaunchMissionId.ZoneHold
                 || _missionId == LaunchMissionId.LowPowerZoneHold;
-            bool holding = holdMission && inZone && attitudeError <= _rules.MaxAttitudeError
-                && speed <= _rules.MaxHoldSpeed
-                && (_missionId != LaunchMissionId.LowPowerZoneHold || totalBurnSeconds <= _rules.MaxBurnSeconds);
+            bool holding = holdMission && inZone && speed <= _rules.MaxHoldSpeed;
             HoldSeconds = holding ? HoldSeconds + deltaTime : 0f;
             bool settled = evaluateFailure && !holding && !hasSplashed && isGrounded
                 && speed <= _rules.FailureSpeed && angularSpeed <= _rules.MaxSettledAngularSpeed;
@@ -233,11 +229,11 @@ namespace Simulation
                 case LaunchMissionId.HighAltitude:
                     return $"고도 {r.HighAltitude:0.##} m 도달";
                 case LaunchMissionId.TargetZone:
-                    return $"목표 구역 진입 ({r.TargetBoxSize.x:0.##} × {r.TargetBoxSize.y:0.##} × {r.TargetBoxSize.z:0.##} m)";
+                    return "표시된 목표 구역에 진입";
                 default:
-                    string hold = $"목표 구역 안에서 자세 오차 {r.MaxAttitudeError:0.##}° 이하, 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
+                    string hold = $"목표 구역 안에서 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
                     return missionId == LaunchMissionId.LowPowerZoneHold
-                        ? hold + $" (전체 엔진 누적 연소 시간 {r.MaxBurnSeconds:0.##}초 이하)" : hold;
+                        ? hold + $" (엔진 연소 {r.MaxBurnSeconds:0.##}초 후 자동 차단)" : hold;
             }
         }
 

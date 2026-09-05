@@ -9,7 +9,7 @@ namespace Simulation
 {
     /// <summary>
     /// 엔딩을 6개 미션 클리어 없이 바로 보기 위한 에디터 전용 단축키. 해피엔딩 <b>F8</b>, 배드엔딩 <b>F9</b>.
-    /// <see cref="LaunchMissionDebugTester"/> 와 같은 방식으로 설치된다.
+    /// <c>RuntimeInitializeOnLoadMethod</c> 로 스스로 설치되므로 씬에 아무것도 놓지 않아도 된다.
     ///
     /// 해피엔딩이 실제와 다른 점은 둘이다 — 확인 대기 중인 발사 결과가 없으면 최종 미션 성공 결과를
     /// 지어내 신문을 띄우고, 발사대가 필요하므로 `SimulationTest` 씬이 없으면 직접 additive 로 올린다.

@@ -42,11 +42,28 @@ namespace Border.UI
         [SerializeField, Min(0f)] private float articleCharacterSeconds = 0.012f;
         [SerializeField, Min(0f)] private float resultLineSeconds = 0.3f;
         [SerializeField, Min(0f)] private float sectionPauseSeconds = 0.15f;
+        [Header("Result Stamp")]
+        [SerializeField] private UnityEngine.UI.Image stampImage;
+        [SerializeField] private Sprite successStamp;
+        [SerializeField] private Sprite failStamp;
+        [SerializeField] private Sprite clearStamp;
+        [SerializeField, Min(0f)] private float stampPauseSeconds = 0.2f;
+        [SerializeField, Min(0.01f)] private float stampDropSeconds = 0.16f;
+        [SerializeField, Min(0.01f)] private float stampSettleSeconds = 0.25f;
+        [Header("Impact Shake")]
+        [SerializeField] private RectTransform screenMotion;
+        [SerializeField, Min(0f)] private float arrivalShakePixels = 4f;
+        [SerializeField, Min(0f)] private float stampShakePixels = 9f;
         [SerializeField] private UnityEvent onImpact = new UnityEvent();
         [SerializeField] private UnityEvent onShown = new UnityEvent();
         [SerializeField] private UnityEvent onHidden = new UnityEvent();
 
         private Sequence sequence;
+        private Tween shakeTween;
+        private Transform shakingCamera;
+        private Vector3 cameraRestPosition;
+        private Vector2 screenRestPosition;
+        private SoundHandle stampSound;
         private Vector2 restPosition;
         private Vector3 restScale;
         private Quaternion restRotation;
@@ -160,6 +177,7 @@ namespace Border.UI
             {
                 flySound.Stop();
                 impactSound = PlaySfx(medium == LaunchResultMedium.Mail ? "email" : "hammer_collision_sound");
+                ShakeImpact(arrivalShakePixels);
                 onImpact.Invoke();
             });
             sequence.Append(DOTween.To(() => paper.localScale, value => paper.localScale = value,
@@ -177,6 +195,7 @@ namespace Border.UI
             AppendTypewriter(articleText, articleCharacterSeconds);
             sequence.AppendInterval(Mathf.Max(0f, sectionPauseSeconds));
             AppendResultLines();
+            AppendStamp();
             sequence.OnComplete(() =>
             {
                 sequence = null;
@@ -233,6 +252,12 @@ namespace Border.UI
             sequence?.Kill();
             sequence = null;
             StopRevealSounds();
+            StopShake();
+            if (stampImage != null)
+            {
+                stampImage.gameObject.SetActive(false);
+                stampImage.rectTransform.localScale = Vector3.one;
+            }
             HideArticle();
             if (!CachePose()) return;
             RestorePose();
@@ -291,6 +316,61 @@ namespace Border.UI
             sequence.AppendCallback(() => effectsText.maxVisibleCharacters = int.MaxValue);
         }
 
+        private void AppendStamp()
+        {
+            if (stampImage == null || stampImage.sprite == null) return;
+            RectTransform stamp = stampImage.rectTransform;
+            sequence.AppendInterval(stampPauseSeconds);
+            sequence.AppendCallback(() =>
+            {
+                stampImage.gameObject.SetActive(true);
+                stamp.localScale = Vector3.one * 2.4f;
+                stampImage.color = new Color(1f, 1f, 1f, 0f);
+            });
+            sequence.Append(stamp.DOScale(0.9f, stampDropSeconds).SetEase(Ease.InCubic));
+            sequence.Join(DOTween.To(() => stampImage.color.a,
+                alpha => stampImage.color = new Color(1f, 1f, 1f, alpha), 1f, stampDropSeconds * 0.7f));
+            sequence.AppendCallback(() =>
+            {
+                stampSound = PlaySfx("stamp");
+                ShakeImpact(stampShakePixels);
+            });
+            sequence.Append(stamp.DOScale(1f, stampSettleSeconds).SetEase(Ease.OutBack));
+        }
+
+        private void ShakeImpact(float pixels)
+        {
+            StopShake();
+            if (pixels <= 0f) return;
+            if (screenMotion != null) screenRestPosition = screenMotion.anchoredPosition;
+            Camera camera = Camera.main;
+            shakingCamera = camera != null ? camera.transform : null;
+            if (shakingCamera != null) cameraRestPosition = shakingCamera.localPosition;
+            float elapsed = 0f;
+            const float duration = 0.22f;
+            // Overlay UI does not move with the world camera, so apply the same impact to its wrapper.
+            shakeTween = DOTween.To(() => elapsed, value =>
+            {
+                elapsed = value;
+                float decay = 1f - value / duration;
+                Vector2 offset = new Vector2(Mathf.Sin(value * 137f), Mathf.Cos(value * 173f))
+                    * (pixels * decay * decay);
+                if (screenMotion != null) screenMotion.anchoredPosition = screenRestPosition + offset;
+                if (shakingCamera != null)
+                    shakingCamera.localPosition = cameraRestPosition + new Vector3(offset.x, offset.y, 0f) * 0.004f;
+            }, duration, duration).SetEase(Ease.Linear).SetUpdate(true).OnComplete(StopShake);
+        }
+
+        private void StopShake()
+        {
+            if (shakeTween == null) return;
+            shakeTween.Kill();
+            shakeTween = null;
+            if (screenMotion != null) screenMotion.anchoredPosition = screenRestPosition;
+            if (shakingCamera != null) shakingCamera.localPosition = cameraRestPosition;
+            shakingCamera = null;
+        }
+
         private void RevealCharacters(TMP_Text text, int visible)
         {
             int previous = text.maxVisibleCharacters;
@@ -320,6 +400,7 @@ namespace Border.UI
         {
             flySound.Stop();
             impactSound.Stop();
+            stampSound.Stop();
             foreach (SoundHandle sound in typingSounds) sound.Stop();
             typingSounds.Clear();
             typingSoundIndex = 0;
@@ -328,6 +409,9 @@ namespace Border.UI
 
         private void ApplyArticle(LaunchNewspaperArticle article, Texture photo)
         {
+            if (stampImage != null)
+                stampImage.sprite = article.Stamp == LaunchResultStamp.Clear ? clearStamp
+                    : article.Stamp == LaunchResultStamp.Success ? successStamp : failStamp;
             if (headlineText != null)
             {
                 headlineText.text = article.Medium == LaunchResultMedium.Mail
