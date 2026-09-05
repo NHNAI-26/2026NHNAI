@@ -8,7 +8,7 @@
 | --- | --- |
 | Interview state | `explicitly-finished` |
 | Working language | 한국어(인터뷰), 영어(정본) |
-| Current revision | 5 |
+| Current revision | 6 |
 | Last updated | 2026-09-06 (KST) |
 | Project or workspace root | `C:\myGame\2026NHNAI` |
 | Base path | `docs/specs/happy-ending-cinematic-spec.md` (영어 정본) |
@@ -67,7 +67,7 @@
 
 | Excluded item | Source IDs | Status | Why excluded or deferred |
 | --- | --- | --- | --- |
-| 새드엔딩 연출 | UD-002 | active | 사용자가 "해피엔딩 연출부터"라고 범위를 명시 |
+| 새드엔딩 연출 | UD-002 | lifted | 이후 별도로 구현. `docs/sad-ending-cinematic.md` 참고 |
 | 승패 판정 규칙 변경 | UD-001 | active | 현재 분기(B 이상 승리 / 2026 Q4 소진 패배)를 그대로 둔다 |
 | 엔딩 크레딧, 스탭롤 | 없음 | active | 요청에 없음. 필요해지면 별도 계획 |
 | 세이브/로드, 엔딩 갤러리 | 없음 | active | 요청에 없음 |
@@ -245,7 +245,68 @@
 | R-016 | deviated | Timeline 을 쓰지 않는다. 무대를 런타임에 세우므로 Timeline 이 바인딩할 대상이 없다. B3~B5 는 코루틴 코드다. Timeline 으로 바꾸려면 발사대·달·카메라를 먼저 프리팹으로 만들어야 하고, 그건 에디터 작업이다 |
 | R-004, R-006 | partial | 발사대·지면·달은 프리미티브 자리표시자다. 밤은 조명 세기와 색으로만 만든다. 룩 교체는 에디터 몫 |
 | R-003 | partial | 대사는 `HappyEndingSequence` 의 직렬화 필드다. 런타임 생성 컴포넌트라 인스펙터로 열리지 않으므로, 지금은 문안 수정에 코드 편집이 필요하다 |
-| R-013 | done | `HappyEndingDebugTester` 가 F8 과 메뉴로 강제 재생한다. 확인 대기 중인 발사 결과가 없으면 신문 비트만 건너뛴다 — 결과를 위조하지 않는다 |
+| R-013 | done | `HappyEndingDebugTester` 가 F8 과 메뉴로 강제 재생한다. 확인 대기 중인 결과가 없으면 최종 미션 성공 결과를 지어내 신문까지 띄운다 |
+
+## 1차 피드백 수정 (revision 6)
+
+F8 첫 재생에서 나온 문제 다섯을 고쳤다. 전부 `HappyEndingSequence.cs` 와 `HappyEndingDebugTester.cs` 안에서 끝났고 씬·프리팹·에셋은 건드리지 않았다.
+
+| 증상 | 원인 | 수정 |
+| --- | --- | --- |
+| 대사에 타이핑 효과 없음 | `ShowLine` 이 알파 페이드만 했다 | `TypeText` 추가. `maxVisibleCharacters` 를 올리는 프롤로그 기법. B2 대사만 타이핑, B1 날짜 카드는 페이드 유지. **타건음은 넣지 않는다**(사용자 결정) |
+| 야간 발사가 너무 어두움 | ambient `(0.02,0.03,0.06)`, moonlight 0.35, Spot intensity 40 | ambient `(0.08,0.09,0.12)`, moonlight 0.8, Spot `intensity 6 / range 60 / spotAngle 70`. URP 는 Physical Light Units 를 쓰지 않아 Spot intensity 는 임의 단위이고 1~10 이 정상 범위다 |
+| 우주가 새까맘 | **조명이 전부 `pad` 자식이라 `pad.SetActive(false)` 와 함께 광원이 0개가 됐다** | 조명을 `Pad Rig` / `Space Rig` 로 분리해 `stage` 직속에 두고 컷에서 교체. 우주 리그는 Directional 키 + fill 이라 로켓 위치와 무관하게 먹는다 |
+| 3D 구간에 UI 가 뜸 | 연구 화면이 Screen Space Overlay 라 카메라를 꺼도 그려진다 | `BuildStage` 에서 연구 화면 루트를 끄고 신문 비트에서 되살린다 |
+| 배기 이펙트 없음 | 로켓 파티클은 전부 `playOnAwake: 0` 이고 평소엔 `RocketPart` 가 켠다 | 새 이펙트를 만들지 않는다. 보존한 로켓의 기존 `Flame`/`Smoke_Single` 을 그대로 켜고, 달 컷에서 순간이동하므로 `Clear` 후 다시 `Play` 해 잔상을 지운다 |
+| 신문이 안 나옴 | 디버그용 "미확인 결과 없으면 건너뛰기" 가드 | 가드 제거. 신문 호출에 명시적 콜백을 넘기고, 디버그 테스터가 최종 미션 성공 결과를 지어낸다 |
+
+곁들여 고친 것 둘:
+
+- **별밭** — 우주 리그에 코드로 만든 고정 별 파티클 하나. 새 에셋 없음.
+- **클론 머티리얼** — `PreserveRocket` 이 복제본 렌더러의 머티리얼을 사본으로 갈아 끼운다. 원본 `RocketPart` 가 파괴되며 공유 인스턴스를 해제해도 복제본이 깨지지 않는다.
+
+## 3차 피드백 수정 (revision 8)
+
+발사 장면이 인게임과 다르게 보인다는 지적. 원인은 하나였다 — **`Rocket` 컴포넌트를 재우고 있었다.**
+
+인게임 발사의 그림은 전부 `Rocket` 이 만든다. 화염 세기는 `FixedUpdate` 의 `engine.Tick(dt, ramp)`,
+홀드 중 배기는 `TickHold` 의 `HoldExhaust(HoldProgress)`, 몸통 흔들림은 `SetWobble`, 리프트 연기는
+`RocketLiftSmoke` 가 보는 `Launched && LiftAssistActive`, 사운드는 `RocketAudio` 가 구독하는
+`LaunchStarted`/`LiftoffStarted` 다. 결정적으로 **엔진 점화(`RocketPart.Prepare`)는 `Rocket.Launch()`
+안에서만 일어난다** — 그걸 건너뛰면 `SetFlame` 이 아예 불을 안 붙인다. 밖에서 파티클을 `Play()` 해
+봐야 세기 없는 불만 나온다.
+
+| 항목 | 수정 |
+| --- | --- |
+| 비행 이펙트 | `Suspend(rocket)` 제거. `rocket.Launch()` 를 정상적으로 부른다. 파티클을 밖에서 켜던 `PlayParticles`/`ResetParticles` 삭제 — 이제 `RocketPart` 가 제대로 켠다 |
+| 정해진 경로 | 새 컴포넌트 `HappyEndingFlight`. 매 `FixedUpdate`·`LateUpdate` 에서 `isKinematic = true` 를 재강제하고(이륙 2.5초 뒤 `ReleaseLift()` 가 스스로 푸는 것을 되돌린다) 위치를 경로로 덮어쓴다. 앞 2.5초는 인게임 보조 상승과 같은 식이라 그림이 겹치고, 그 뒤 등가속으로 이어 붙인다 |
+| 기울기 | 이륙 후 3.5초가 지난 뒤에만 최대 12도. 그 전에 눕히면 `hasUpwardEngine` 이 false 가 되어 리프트 연기가 끊기고 kinematic 이 풀린다 |
+| 사운드 | `RocketAudio` 를 재우지 않는다. SparkStart → RocketLaunch/RocketLoop, BGM `Launch` 가 인게임과 똑같이 나온다 |
+| 달 텍스처 | `Assets/05. Arts/Texture/Noise/Craters/Craters_03-512x512.png` 를 `Assets/05. Arts/Texture/Resources/` 로 이동해 `Resources.Load` 로 읽는다. 아무도 참조하지 않던 파일이다. Unlit → **Lit** 으로 바꿔 키 라이트가 명암 경계를 만든다 |
+| 밤하늘 | `SkyBlend.shader` 에 `_MidColor` + `_MidBlend` 추가. **`_MidBlend` 기본값 0 이라 켜지 않으면 기존 2색 lerp 와 완전히 동일** — 인게임 하늘은 안 변한다. 엔딩만 1 로 켜서 지평선 핑크 (0.72,0.26,0.45) → 중간 보라 (0.42,0.20,0.52) → 천정 남색 (0.07,0.08,0.26). `_AtmosphereThickness 3`, `_SpaceBlend` 0.35 → 0.12 (파란 성운이 핑크를 먹어서) |
+
+`SkyEnvironmentTests` 가 못 박는 것은 셰이더 이름과 기존 다섯 프로퍼티뿐이라 프로퍼티 추가는 안전하다.
+
+알려진 천장(`ponytail:` 주석): 엔진이 실제로 연료를 태우고 발열한다. 발사 비트가 길어지면 연료 소진으로
+불이 꺼지거나 과열로 로켓이 스스로 폭발한다. `launchSeconds` 를 10초 안쪽으로 유지해야 한다.
+
+## 2차 피드백 수정 (revision 7)
+
+1차 수정을 재생해 본 뒤 나온 요청 셋을 반영했다. **UD-005(로켓 복제 보존)는 폐기됐다** — 시뮬레이션 씬을 살려 두면 복제할 이유가 없다.
+
+| 요청·증상 | 원인 | 수정 |
+| --- | --- | --- |
+| `Can't remove Rocket because LaunchMissionController depends on it` | `Destroy` 는 프레임 끝까지 지연되므로 `Rigidbody` 를 지울 때 `Rocket` 이 아직 살아 있고 `[RequireComponent]` 사슬에 걸린다 | 복제 자체를 없앴다. 씬의 로켓을 그대로 쓰고 `Rocket` 컴포넌트만 재운다(`enabled = false` + `isKinematic`). `RocketPart` 는 건드리지 않는다 — 끄면 `OnDisable` 이 화염을 꺼 버린다 |
+| 진짜 발사대에서 발사할 것 | 프리미티브 원기둥 무대를 멀리 세우고 있었다 | `SimulationTest` 씬을 3D 구간 동안 살려 두고 그 발사대에서 올린다. `MissionSuccessPresentation` 이 낙하산 연출에서 쓰는 `Suspend` 방식 그대로 카메라·캔버스·`RocketBuilder`·`RocketDesignUI`·`SkyEnvironment` 를 재운 뒤 우리 카메라를 얹는다 |
+| 하늘만 밤으로 | `SkyEnvironment` 가 매 프레임 하늘·태양·안개를 덮어쓴다 | 재우면 `OnDisable` 이 없어 마지막 값이 굳는다. 그 뒤 `RenderSettings.skybox` 에 `_Exposure 0.25`, `_SkyTint`, `_HorizonColor`, `_SpaceBlend 0.35` 를 직접 넣는다. 값은 기존 `ResearchLabNightSky.mat` 기준. **별은 `_SpaceCube` 성운 큐브맵에서 공짜로 나온다** — 1차의 코드 생성 별밭은 삭제 |
+| 우주선이 카메라에 훨씬 가까이 | 거리 배수가 `1.6 → 9` 였다 | `0.8 → 3.5` 로 좁혔다. 달 컷에서 `_SpaceBlend` 를 1 로 올려 배경을 성운으로 채운다 |
+| 텍스트만 스킵 | 클릭 하나가 `skipRequested` 를 세워 연출 전체를 날렸다 | `advanceRequested` 로 좁혔다. 타이핑 중 클릭은 그 줄을 즉시 드러내고, 다 나온 뒤 클릭은 다음 줄로. 3D 구간과 신문은 클릭을 보지 않는다 |
+
+부수 효과: 지면이 대낮으로 남던 문제도 같이 잡힌다. 씬 앰비언트가 Skybox 모드인데 기본 스카이박스에서 구워진 값에 고정돼 있고 아무도 갱신하지 않아서, `ambientMode = Flat` + 어두운 `ambientLight` 를 직접 넣어야 한다.
+
+디버그 F8 은 `SimulationTest` 씬이 없으면 직접 additive 로 올린다. 연구 화면에서 눌러도 진짜 발사대가 나온다.
+
+미확정: 상승을 코드로 올릴지 물리로 날릴지는 코드 상승으로 진행했다. 근거는 씬 기본 로켓에 엔진이 없어 추력이 0 이고(디버그 경로에서 로켓이 꿈쩍하지 않는다), 실제 최종 미션 로켓은 목표 구역을 노리게 기울어져 있다는 것. 사용자 확인 대기.
 | RK-005 | corrected | 과대평가였다. `ResearchCompletionFlowTests` 는 `SimulationStageHost` 를 지나가지 않고, 문제의 테스트는 최종 승리가 아니라 데드라인 패배 경로다. 기존 테스트 수정 없음 |
 | RK-007 | mitigated | 타이틀 복귀는 `SceneManager.LoadScene("00_Title")` 한 줄. 세션 초기화는 기존 `TitleMenu.NewGame` 에 맡기고 중복 호출하지 않는다 |
 
@@ -266,7 +327,7 @@
 | RK-005 | risk | UD-004 로 최종 승리 경로에서 결과 신문 호출이 빠지면서 `ResearchCompletionFlowTests` 가 깨짐. 특히 `Operation_FinalLaunchShowsResultThenFinalFailureReportBeforeEndingWithoutDuplicateRewards` 는 신문 표시를 전제로 한다 | 높음 / 높음 | 구현 착수 전에 해당 테스트가 검증하는 것(중복 보상 없음, 확인 후 엔딩 진입)을 새 경로 기준으로 다시 표현한다. 보상 정산은 신문 UI 가 아니라 `FinishLaunch` 에서 이미 끝나므로 판정 자체는 영향 없음 | SF-009, UD-004, R-011, R-014 | open |
 | RK-006 | dependency | 대사 문안·통신음·엔딩 BGM 등 콘텐츠 에셋 | 중간 / 중간 | UD-008 로 분량 확정(3~4줄). 사운드 없어도 타이밍은 데이터대로 진행(SF-004 방식) | UD-008 | open |
 | RK-007 | risk | 본편에서 타이틀로 돌아가는 경로가 없어 신규 구현이며, `ResearchFlowSession` 이 `DontDestroyOnLoad` 라 진행 상태가 다음 새 게임으로 샐 수 있음 | 중간 / 높음 | `TitleMenu.NewGame()` 이 이미 `PrepareNewGame()` 을 호출하므로 초기화는 그쪽에 맡기고 중복 호출하지 않는다. R-018 로 검증 | UD-007, SF-012, R-018 | open |
-| RK-008 | conflict | 해피엔딩은 타이틀로, 새드엔딩은 기존 기록 패널로 끝나 두 엔딩의 종결 방식이 달라진다 | 중간 / 낮음 | 의도된 비대칭으로 기록. 새드엔딩 연출을 만들 때 다시 판단한다 | UD-002, UD-007, SF-002 | open |
+| RK-008 | conflict | 해피엔딩은 타이틀로, 새드엔딩은 기존 기록 패널로 끝나 두 엔딩의 종결 방식이 달라진다 | 중간 / 낮음 | 해소됨: 배드엔딩 시네마틱도 타이틀로 복귀하며, 런타임 실패 경로에서는 기록 패널로 가지 않는다. `docs/sad-ending-cinematic.md` 참고 | UD-002, UD-007, SF-002 | closed |
 
 ## Open, Skipped, and Deferred Items
 

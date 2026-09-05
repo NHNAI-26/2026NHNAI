@@ -16,17 +16,29 @@ namespace Simulation
     /// 일곱 비트다 — 날짜 카드 → 전화 대사 → 야간 발사 → 달 컷 → 달 항행 → 결과 신문 → 페이드 후 타이틀.
     /// 근거와 결정 이력은 <c>docs/specs/happy-ending-cinematic-spec.md</c>.
     ///
-    /// 앞뒤 비트는 프롤로그와 같은 문법이다(검은 화면 + 페이드 텍스트 + 클릭 스킵).
-    /// 무대는 전부 런타임에 세운다 — 씬이나 프리팹을 건드리지 않으므로 `01_Main` 이 더러워지지 않는다.
-    /// 그 대가로 발사대·달은 프리미티브 자리표시자다. 룩은 에디터에서 교체할 몫이다.
+    /// 앞뒤 비트는 프롤로그와 같은 문법이다(검은 화면 + 타이핑 텍스트).
+    /// 3D 구간은 <b>`SimulationTest` 씬을 그대로 쓴다</b> — 진짜 발사대에서 진짜 로켓을 올린다.
+    /// 그 씬은 <see cref="RocketBuilder"/>·<see cref="RocketDesignUI"/>·<see cref="SkyEnvironment"/> 가
+    /// 매 프레임 카메라와 하늘을 덮어쓰므로, <see cref="MissionSuccessPresentation"/> 이 낙하산 연출에서
+    /// 쓰는 것과 같은 방식으로 전부 재운 뒤 우리 카메라를 얹는다.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class HappyEndingSequence : MonoBehaviour, IPointerClickHandler
     {
         public const string TitleSceneName = "00_Title";
 
-        /// <summary>무대를 세울 자리. `01_Main` 의 연구실과 겹치지 않게 멀리 잡는다.</summary>
-        private static readonly Vector3 StageOrigin = new(0f, -20000f, 0f);
+        /// <summary>`Assets/05. Arts/Texture/Resources` 로 옮겨 둔 크레이터 노이즈 맵.</summary>
+        private const string MoonTextureName = "Craters_03-512x512";
+
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private static readonly int MetallicId = Shader.PropertyToID("_Metallic");
+
+        /// <summary>
+        /// `SimulationTest` 씬의 로켓 저작 위치. 발사대(`RocketBase`)가 (0.16, −1, 0.74) 에 있고
+        /// 로켓은 그 위 (0.22, 3.61, 0) 에서 시작한다. 재발사는 이 자리로 되돌린 뒤 올린다.
+        /// </summary>
+        private static readonly Vector3 RocketPadPosition = new(0.22f, 3.61f, 0f);
 
         private static readonly string[] DefaultPhoneLines =
         {
@@ -41,73 +53,56 @@ namespace Simulation
 
         [Header("타이밍 (총 40~60초 예산)")]
         [SerializeField, Min(0f)] private float lineFadeSeconds = 0.9f;
+        [SerializeField, Min(0f)] private float typeSecondsPerChar = 0.06f;
         [SerializeField, Min(0f)] private float dateHoldSeconds = 2.2f;
         [SerializeField, Min(0f)] private float lineHoldSeconds = 2f;
         [SerializeField, Min(0f)] private float revealSeconds = 1.5f;
-        [SerializeField, Min(0f)] private float padHoldSeconds = 1.5f;
-        [SerializeField, Min(0f)] private float launchSeconds = 6f;
+        // 로켓 자신의 클램프 홀드(2.5초)까지 포함한 발사 비트 전체 길이.
+        [SerializeField, Min(0f)] private float launchSeconds = 10f;
         [SerializeField, Min(0f)] private float moonHoldSeconds = 1f;
         [SerializeField, Min(0f)] private float transitSeconds = 10f;
         [SerializeField, Min(0f)] private float finalFadeSeconds = 1.2f;
 
+        // 발사 구간의 소리는 RocketAudio 가 인게임과 똑같이 낸다 — 여기서 따로 재생하지 않는다.
         [Header("사운드 (비우면 무음으로 진행한다)")]
         [SerializeField] private string phoneSfxId = string.Empty;
-        [SerializeField] private string launchSfxId = string.Empty;
 
         private ResearchOperationUIController research;
+        private ResearchResultReportController report;
         private ResearchLaunchResultData result;
         private SimulationCrtScreen crt;
 
         private CanvasGroup overlay;
         private TMP_Text lineText;
-        private GameObject stage;
         private Camera stageCamera;
-        private GameObject rocket;
-        private Transform pad;
         private Transform moon;
-        private readonly List<Camera> silencedCameras = new();
+        private Rocket rocket;
+        private HappyEndingFlight flight;
+
+        private readonly List<Behaviour> suspended = new();
+        private bool researchWasActive;
 
         private Coroutine routine;
-        private bool skipRequested;
+        private bool advanceRequested;
         private bool newspaperDismissed;
         private bool leaving;
 
+        private Material skyMaterial;
+        private Light sun;
+        private Color sunColorBackup;
+        private float sunIntensityBackup;
         private Color ambientBackup;
         private UnityEngine.Rendering.AmbientMode ambientModeBackup;
         private bool fogBackup;
-        private bool ambientStored;
-
-        /// <summary>
-        /// 발사에 쓰인 실제 로켓의 시각 계층만 복제해 둔다. 시뮬레이션 씬을 내리기 <b>전에</b> 불러야 한다 —
-        /// 파트 배치는 어디에도 직렬화되지 않아서 씬과 함께 사라진다.
-        /// </summary>
-        public static GameObject PreserveRocket(Rocket source)
-        {
-            if (source == null) return null;
-
-            GameObject clone = Instantiate(source.gameObject);
-            clone.name = "Happy Ending Rocket";
-            clone.transform.SetParent(null, true);
-
-            // 물리와 게임 로직을 전부 떼어 낸다. 남기면 엔딩 도중 로켓이 스스로 떨어지거나 폭발한다.
-            foreach (MonoBehaviour behaviour in clone.GetComponentsInChildren<MonoBehaviour>(true)) Destroy(behaviour);
-            foreach (Rigidbody body in clone.GetComponentsInChildren<Rigidbody>(true)) Destroy(body);
-            foreach (Collider collider in clone.GetComponentsInChildren<Collider>(true)) Destroy(collider);
-            foreach (AudioSource audio in clone.GetComponentsInChildren<AudioSource>(true)) Destroy(audio);
-
-            clone.SetActive(false);
-            DontDestroyOnLoad(clone);
-            return clone;
-        }
+        private Color fogColorBackup;
+        private bool environmentStored;
 
         public static HappyEndingSequence Play(
-            GameObject preservedRocket,
             ResearchOperationUIController research,
             ResearchLaunchResultData result,
             SimulationCrtScreen crt)
         {
             var host = new GameObject("Happy Ending").AddComponent<HappyEndingSequence>();
-            host.rocket = preservedRocket;
             host.research = research;
             host.result = result;
             host.crt = crt;
@@ -115,12 +110,20 @@ namespace Simulation
             return host;
         }
 
-        /// <summary>배경 Image 의 클릭이 부모인 이 컴포넌트까지 버블링돼 들어온다.</summary>
-        public void OnPointerClick(PointerEventData eventData) => skipRequested = true;
+        /// <summary>
+        /// 배경 Image 의 클릭이 부모인 이 컴포넌트까지 버블링돼 들어온다.
+        /// 대사 구간에서만 소비된다 — 3D 구간과 신문은 이 클릭으로 넘어가지 않는다.
+        /// </summary>
+        public void OnPointerClick(PointerEventData eventData) => advanceRequested = true;
 
         private IEnumerator PlayRoutine()
         {
             BuildOverlay();
+
+            // 이미 떠 있던 신문은 우리 것이 아니다. 결과 보고서는 연구 화면과 <b>별도 루트</b>라
+            // 연구 화면을 꺼도 살아남아 3D 구간을 덮는다. 여기서 먼저 닫는다.
+            report = FindFirstObjectByType<ResearchResultReportController>(FindObjectsInactive.Include);
+            if (report != null) report.Hide();
 
             // 시뮬레이션을 덮고 있던 CRT 커튼을 걷는다. 그 밑에 이미 우리 검은 오버레이가 서 있어서
             // 화면은 검은 채로 이어진다. 걷지 않으면 커튼이 sortingOrder 최대값으로 엔딩을 통째로 가린다.
@@ -128,24 +131,24 @@ namespace Simulation
 
             if (Application.isPlaying) SoundManager.Instance?.StopBgm();
 
-            // B1 — 날짜 카드
-            yield return ShowLine(dateCard, dateHoldSeconds, string.Empty);
+            // B1 — 날짜 카드. 프롤로그의 `2017.12` 와 짝이라 타이핑 없이 페이드로 뜬다.
+            yield return ShowLine(dateCard, dateHoldSeconds, string.Empty, typewriter: false);
 
-            // B2 — 전화 대사
+            // B2 — 전화 대사. 한 글자씩 찍고, 클릭은 이 구간에서만 먹는다.
             if (phoneLines != null)
             {
                 foreach (string line in phoneLines)
                 {
-                    if (skipRequested) break;
                     if (string.IsNullOrWhiteSpace(line)) continue;
-                    yield return ShowLine(line, lineHoldSeconds, phoneSfxId);
+                    yield return ShowLine(line, lineHoldSeconds, phoneSfxId, typewriter: true);
                 }
             }
 
-            if (!skipRequested)
-            {
-                yield return StageRoutine();
-            }
+            // B3~B5 — 발사대, 달 컷, 달 항행
+            yield return StageRoutine();
+
+            // 3D 가 끝났으니 시뮬레이션 씬을 내린다. 신문은 그 위에 뜬다.
+            yield return UnloadSimulationScene();
 
             // B6 — 결과 신문. 기존 UI 를 그대로 쓴다.
             yield return NewspaperRoutine();
@@ -155,96 +158,320 @@ namespace Simulation
             LeaveToTitle();
         }
 
-        /// <summary>B3~B5. 무대를 세우고 발사 → 달 컷 → 달 항행을 돌린 뒤 무대를 걷는다.</summary>
+        // ── 3D 구간 ─────────────────────────────────────────────────────────────
+
+        /// <summary>B3~B5. `SimulationTest` 씬을 재운 뒤 그 발사대에서 다시 올린다.</summary>
         private IEnumerator StageRoutine()
         {
-            BuildStage();
-            if (stageCamera == null)
+            Scene simulation = SceneManager.GetSceneByName(SimulationStageHost.SimulationSceneName);
+            if (!simulation.isLoaded)
             {
-                // 무대를 못 세웠으면 3D 구간만 버리고 신문으로 넘어간다. 검은 화면에 갇히지 않는 쪽이 먼저다.
-                Log.W("[HappyEnding] 무대를 세우지 못해 3D 구간을 건너뛴다.", this);
+                // 발사대가 없으면 3D 구간만 버리고 신문으로 넘어간다. 검은 화면에 갇히지 않는 쪽이 먼저다.
+                Log.W("[HappyEnding] 시뮬레이션 씬이 없어 3D 구간을 건너뛴다.", this);
                 yield break;
             }
 
-            float rocketHeight = Mathf.Max(1f, VisualBounds(rocket).size.y);
-            float viewDistance = Mathf.Max(18f, rocketHeight * 2.4f);
+            SuspendScene(simulation);
+            BuildStageCamera();
+            StoreEnvironment();
+            ApplyNightSky();
+            PrepareRocket();
 
-            // B3 — 야간 발사
-            Vector3 padTop = pad.position + Vector3.up * 0.5f;
-            SeatOnPad(padTop);
-            stageCamera.transform.SetPositionAndRotation(
-                padTop + new Vector3(viewDistance * 0.55f, rocketHeight * 0.6f, -viewDistance),
-                Quaternion.identity);
-            stageCamera.transform.LookAt(padTop + Vector3.up * rocketHeight * 0.5f);
+            float height = Mathf.Max(1f, VisualBounds(rocket != null ? rocket.gameObject : null).size.y);
+            Vector3 padTop = rocket != null ? rocket.transform.position : RocketPadPosition;
+
+            // B3 — 야간 발사. 발사대를 옆에서 올려다보는 자리.
+            float distance = Mathf.Max(14f, height * 2.2f);
+            stageCamera.transform.position = padTop + new Vector3(distance * 0.6f, height * 0.4f, -distance);
+            stageCamera.transform.LookAt(padTop + Vector3.up * (height * 0.5f));
 
             yield return FadeOverlay(0f, revealSeconds);
-            yield return WaitOrSkip(padHoldSeconds);
 
-            PlaySfx(launchSfxId);
-            PlayParticles();
-
-            // 정지 상태에서 가속하는 등가속 상승. 6초면 화면을 벗어날 만큼 올라간다.
-            float acceleration = rocketHeight * 4f;
-            for (float elapsed = 0f; elapsed < launchSeconds && !skipRequested; elapsed += Time.unscaledDeltaTime)
+            // 인게임과 똑같은 발사 절차를 그대로 탄다. 홀드 2.5초 동안 배기가 서서히 세지고 몸통이
+            // 꿀렁이며 SparkStart 가 울리고, 이륙과 함께 리프트 연기와 엔진음이 붙는다.
+            // 궤적만 HappyEndingFlight 가 가로챈다.
+            if (rocket != null)
             {
-                float rise = 0.5f * acceleration * elapsed * elapsed;
-                rocket.transform.position = padTop + Vector3.up * (rise + rocketHeight * 0.5f);
-                stageCamera.transform.LookAt(rocket.transform.position);
+                flight = HappyEndingFlight.Attach(rocket, -stageCamera.transform.forward);
+                rocket.Launch();
+            }
+
+            // ponytail: 엔진이 실제로 연료를 태우고 발열한다. 이 구간이 길어지면 연료 소진으로 불이
+            // 꺼지거나 과열로 Rocket 이 스스로 폭발한다. 10초 안쪽으로 유지할 것.
+            for (float elapsed = 0f; elapsed < launchSeconds; elapsed += Time.deltaTime)
+            {
+                if (rocket != null) stageCamera.transform.LookAt(rocket.transform.position);
                 yield return null;
             }
 
-            if (skipRequested) yield break;
-
             // B4 — 달 컷. 카메라를 옮겨 붙이는 컷 전환이라 블렌드하지 않는다.
-            pad.gameObject.SetActive(false);
-            Vector3 spaceOrigin = StageOrigin + new Vector3(0f, 0f, 4000f);
+            yield return MoonCut(height);
+        }
+
+        private IEnumerator MoonCut(float rocketHeight)
+        {
+            // 씬 지오메트리(바다·발사대)가 한 점도 안 보이도록 충분히 위로 올라간다.
+            Vector3 spaceOrigin = new(0f, 60000f, 0f);
             stageCamera.transform.SetPositionAndRotation(spaceOrigin, Quaternion.identity);
-            moon.gameObject.SetActive(true);
-            moon.position = spaceOrigin + new Vector3(-60f, 30f, 900f);
+
+            // 우주에서는 스카이박스를 성운 큐브맵 쪽으로 완전히 넘긴다 — 별이 여기서 나온다.
+            // 지면이 꺼져 아래 반구가 통째로 지평선색이 되므로, 핑크 바닥을 성운이 덮게 한다.
+            if (skyMaterial != null)
+            {
+                skyMaterial.SetFloat("_SpaceBlend", 1f);
+                skyMaterial.SetFloat("_SpaceExposure", 1.6f);
+                skyMaterial.SetFloat("_MidBlend", 0f);
+            }
+            RenderSettings.fog = false;
+
+            moon = BuildMoon();
+            moon.position = spaceOrigin + new Vector3(-90f, 45f, 1200f);
 
             Vector3 toMoon = (moon.position - spaceOrigin).normalized;
-            rocket.transform.rotation = Quaternion.FromToRotation(Vector3.up, toMoon);
+            EnsureSpaceLight(toMoon);
 
-            // 시작은 우하단 프레임 밖, 끝은 화면 가운데 위쪽 — 로켓이 달 쪽으로 멀어지며 뒷모습이 드러난다.
+            if (rocket != null)
+            {
+                // 여기서부터는 경로를 직접 쥔다. 발사 구간의 상승 스크립트는 역할이 끝났다.
+                if (flight != null) Destroy(flight);
+                flight = null;
+                rocket.transform.rotation = Quaternion.FromToRotation(Vector3.up, toMoon);
+                ClearParticleTrails();
+            }
+
+            // 우주선이 카메라에 훨씬 가깝다. 시작은 우하단에서 화면을 크게 물고 들어오고,
+            // 끝나도 여전히 가까운 채로 달 쪽으로 멀어진다.
             Vector3 near = spaceOrigin
-                + stageCamera.transform.forward * (rocketHeight * 1.6f)
-                + stageCamera.transform.right * (rocketHeight * 0.9f)
-                + stageCamera.transform.up * (-rocketHeight * 1.1f);
+                + stageCamera.transform.forward * (rocketHeight * 0.8f)
+                + stageCamera.transform.right * (rocketHeight * 0.55f)
+                + stageCamera.transform.up * (-rocketHeight * 0.75f);
             Vector3 far = spaceOrigin
-                + stageCamera.transform.forward * (rocketHeight * 9f)
-                + stageCamera.transform.right * (rocketHeight * 0.2f)
-                + stageCamera.transform.up * (-rocketHeight * 0.15f);
+                + stageCamera.transform.forward * (rocketHeight * 3.5f)
+                + stageCamera.transform.right * (rocketHeight * 0.1f)
+                + stageCamera.transform.up * (-rocketHeight * 0.1f);
 
-            rocket.transform.position = near;
-            yield return WaitOrSkip(moonHoldSeconds);
+            if (rocket != null) rocket.transform.position = near;
+            yield return Wait(moonHoldSeconds);
 
             // B5 — 달 항행
-            for (float elapsed = 0f; elapsed < transitSeconds && !skipRequested; elapsed += Time.unscaledDeltaTime)
+            for (float elapsed = 0f; elapsed < transitSeconds; elapsed += Time.unscaledDeltaTime)
             {
                 float t = Mathf.SmoothStep(0f, 1f, elapsed / transitSeconds);
-                rocket.transform.position = Vector3.Lerp(near, far, t);
+                if (rocket != null) rocket.transform.position = Vector3.Lerp(near, far, t);
                 yield return null;
             }
 
             yield return FadeOverlay(1f, revealSeconds);
         }
 
+        /// <summary>
+        /// 카메라·캔버스·빌더·하늘을 전부 재운다. 전부 매 프레임 덮어쓰는 것들이라 한 번 세팅으로는
+        /// 못 이긴다. <see cref="MissionSuccessPresentation"/> 이 같은 씬에서 쓰는 방식 그대로다.
+        /// </summary>
+        private void SuspendScene(Scene simulation)
+        {
+            foreach (GameObject root in simulation.GetRootGameObjects())
+            {
+                foreach (Camera camera in root.GetComponentsInChildren<Camera>(true)) Suspend(camera);
+                foreach (Canvas canvas in root.GetComponentsInChildren<Canvas>(true)) Suspend(canvas);
+                foreach (RocketBuilder builder in root.GetComponentsInChildren<RocketBuilder>(true)) Suspend(builder);
+                foreach (RocketDesignUI ui in root.GetComponentsInChildren<RocketDesignUI>(true)) Suspend(ui);
+                foreach (SkyEnvironment sky in root.GetComponentsInChildren<SkyEnvironment>(true)) Suspend(sky);
+                foreach (LaunchMissionController mission in root.GetComponentsInChildren<LaunchMissionController>(true)) Suspend(mission);
+                foreach (LaunchPhotoCapture photo in root.GetComponentsInChildren<LaunchPhotoCapture>(true)) Suspend(photo);
+            }
+
+            // 연구 화면은 Screen Space Overlay 라 카메라를 꺼도 그려진다. 루트째로 꺼야 한다.
+            if (research != null && research.gameObject.activeSelf)
+            {
+                researchWasActive = true;
+                research.gameObject.SetActive(false);
+            }
+
+            // 01_Main 쪽 카메라도 재운다.
+            foreach (Camera camera in Camera.allCameras) Suspend(camera);
+        }
+
+        private void Suspend(Behaviour behaviour)
+        {
+            if (behaviour == null || !behaviour.enabled || behaviour == stageCamera) return;
+            suspended.Add(behaviour);
+            behaviour.enabled = false;
+        }
+
+        private void BuildStageCamera()
+        {
+            // Untagged 로 둔다. MainCamera 를 달면 `Camera.main` 이 이쪽으로 풀려 설계 조작
+            // 좌표계가 어긋난다(RocketBuilder 의 같은 이유 주석 참고).
+            stageCamera = new GameObject("Happy Ending Camera", typeof(Camera)).GetComponent<Camera>();
+            stageCamera.clearFlags = CameraClearFlags.Skybox; // 밤하늘을 그대로 보여준다
+            stageCamera.depth = 100f;
+            stageCamera.fieldOfView = 55f;
+            stageCamera.nearClipPlane = 0.1f;
+            stageCamera.farClipPlane = 30000f;
+        }
+
+        /// <summary>
+        /// <see cref="SkyEnvironment"/> 는 <c>OnDisable</c> 이 없고 <c>Unbind</c> 는 <c>OnDestroy</c> 에서만
+        /// 돈다. 재우면 마지막 값이 그대로 굳으므로, 그 뒤에 직접 넣은 값을 아무도 덮어쓰지 않는다.
+        /// 값은 프로젝트에 이미 있는 밤 프리셋 `ResearchLabNightSky.mat` 을 좌표로 삼았다.
+        /// </summary>
+        private void ApplyNightSky()
+        {
+            skyMaterial = RenderSettings.skybox;
+            if (skyMaterial != null)
+            {
+                // 지평선 핑크 → 중간 보라 → 천정 남색. 중간색은 셰이더의 선택 경로라 _MidBlend 를
+                // 켜야 나온다.
+                skyMaterial.SetColor("_HorizonColor", new Color(0.95f, 0.78f, 0.63f).linear);
+                skyMaterial.SetColor("_MidColor", new Color(0.56f, 0.53f, 0.75f).linear);
+                skyMaterial.SetColor("_SkyTint", new Color(0.14f, 0.14f, 0.31f).linear);
+                skyMaterial.SetFloat("_MidBlend", 1f);
+                // 발사대 카메라는 거의 수평이라 화면에 들어오는 dir.y 가 0~0.3 뿐이다. 두께를 키우면
+                // 그 좁은 띠가 통째로 지평선색이 되어 하늘이 한 색으로 뭉갠다. 1 보다 낮춰서
+                // 그라디언트를 지평선 쪽으로 압축해야 보라와 남색이 화면 안으로 들어온다.
+                skyMaterial.SetFloat("_AtmosphereThickness", 1f);
+                skyMaterial.SetFloat("_Exposure", 0.85f);
+                // 큐브맵이 파란 성운이라 많이 섞으면 핑크를 먹는다. 별만 남을 만큼만 섞는다.
+                skyMaterial.SetFloat("_SpaceBlend", 0.15f);
+                skyMaterial.SetFloat("_SpaceExposure", 2.2f);
+            }
+
+            if (sun != null)
+            {
+                // 해가 막 넘어간 박명. 완전한 달빛 청색보다 살짝 따뜻하게 둬야 지평선 복숭아빛과 붙는다.
+                sun.color = new Color(0.78f, 0.72f, 0.86f);
+                sun.intensity = 0.2f;
+            }
+
+            // 씬 앰비언트는 Skybox 모드인데 기본 스카이박스에서 구워진 값에 고정돼 있고 아무도
+            // 갱신하지 않는다. 이걸 안 바꾸면 하늘만 밤이고 지면은 대낮이다.
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.12f, 0.11f, 0.16f);
+            // 지평선색과 맞춘다. 안 맞추면 먼 수면만 딴 색 안개로 남는다.
+            RenderSettings.fogColor = new Color(0.50f, 0.38f, 0.38f);
+        }
+
+        private void PrepareRocket()
+        {
+            rocket = FindFirstObjectByType<Rocket>();
+            if (rocket == null)
+            {
+                Log.W("[HappyEnding] 로켓을 찾지 못했다. 발사 없이 카메라만 돈다.", this);
+                return;
+            }
+
+            // 델리게이트가 false 를 돌려주면 Launch 가 무시된다.
+            rocket.AuthorizeLaunch = null;
+            rocket.StopFlight();
+            rocket.ResetFlight(RocketPadPosition, Quaternion.identity);
+
+            // Rocket 도 RocketPart 도 재우지 않는다. 화염·흔들림·리프트 연기·사운드가 전부 이쪽에서
+            // 나오고, 특히 엔진 점화는 Rocket.Launch() 안의 Prepare 에서만 일어난다.
+            // 물리는 HappyEndingFlight 가 매 스텝 kinematic 으로 묶어 막는다.
+        }
+
+        private void EnsureSpaceLight(Vector3 towardMoon)
+        {
+            // 발사대 조명(씬의 태양)은 저 아래에 있어 우주까지 오지 않는다. 여기 키 하나로 달과
+            // 로켓을 같이 비춘다.
+            //
+            // 빛이 나아가는 방향은 Light 의 forward 다. 달 반대쪽(-towardMoon)을 보게 하면 빛이
+            // 달 뒤통수를 때려 우리가 보는 앞면이 통째로 그림자가 된다. 달 쪽(+towardMoon)을 보되
+            // 옆으로 35도 틀어, 앞면을 비추면서 명암 경계가 남게 한다.
+            var key = new GameObject("Happy Ending Moon Key", typeof(Light)).GetComponent<Light>();
+            key.transform.SetParent(stageCamera.transform, false);
+            key.type = LightType.Directional;
+            key.color = new Color(0.95f, 0.96f, 1f);
+            key.intensity = 1.6f;
+            key.transform.rotation = Quaternion.LookRotation(
+                Quaternion.AngleAxis(35f, Vector3.up) * towardMoon);
+        }
+
+        /// <summary>
+        /// 표면은 프로젝트에 이미 있던 크레이터 노이즈 맵을 쓴다(`05. Arts/Texture/Noise/Craters`
+        /// 에서 Resources 로 옮겨 둔 것). Lit 이라 <see cref="EnsureSpaceLight"/> 의 키 라이트가
+        /// 명암 경계를 만들어 평면 원이 아니라 구체로 보인다.
+        /// </summary>
+        private Transform BuildMoon()
+        {
+            GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            sphere.name = "Happy Ending Moon";
+            sphere.transform.localScale = Vector3.one * 420f;
+            Destroy(sphere.GetComponent<Collider>());
+
+            var surface = Resources.Load<Texture2D>(MoonTextureName);
+            Shader shader = Shader.Find(surface != null
+                ? "Universal Render Pipeline/Lit"
+                : "Universal Render Pipeline/Unlit");
+            if (shader == null) return sphere.transform;
+
+            var material = new Material(shader) { color = new Color(0.82f, 0.80f, 0.76f) };
+            if (surface != null)
+            {
+                material.SetTexture(BaseMapId, surface);
+                material.SetFloat(SmoothnessId, 0.05f);
+                material.SetFloat(MetallicId, 0f);
+            }
+            else
+            {
+                Log.W($"[HappyEnding] 달 표면 텍스처 '{MoonTextureName}' 를 찾지 못해 단색으로 그린다.", this);
+            }
+
+            sphere.GetComponent<Renderer>().sharedMaterial = material;
+            return sphere.transform;
+        }
+
+        /// <summary>
+        /// 컷 전환에서 로켓을 순간이동시키므로 잔상만 지운다. 재생 상태는 건드리지 않는다 —
+        /// 화염을 켜고 끄는 것은 <see cref="RocketPart"/> 의 몫이고, 여기서 손대면 인게임과 어긋난다.
+        /// </summary>
+        private void ClearParticleTrails()
+        {
+            if (rocket == null) return;
+            foreach (ParticleSystem particles in rocket.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                particles.Clear(true);
+            }
+        }
+
+        private IEnumerator UnloadSimulationScene()
+        {
+            Scene simulation = SceneManager.GetSceneByName(SimulationStageHost.SimulationSceneName);
+            if (simulation.isLoaded) yield return SceneManager.UnloadSceneAsync(simulation);
+
+            // 씬과 함께 사라진 것들은 리스트에서 조용히 빠진다(널 검사로 거른다).
+            TearDownStage();
+        }
+
+        private void TearDownStage()
+        {
+            if (flight != null) Destroy(flight);
+            flight = null;
+            if (moon != null) Destroy(moon.gameObject);
+            moon = null;
+            if (stageCamera != null) Destroy(stageCamera.gameObject);
+            stageCamera = null;
+            rocket = null;
+
+            foreach (Behaviour behaviour in suspended)
+            {
+                if (behaviour != null) behaviour.enabled = true;
+            }
+            suspended.Clear();
+
+            RestoreEnvironment();
+        }
+
+        // ── 신문과 종료 ─────────────────────────────────────────────────────────
+
         private IEnumerator NewspaperRoutine()
         {
-            yield return FadeOverlay(1f, skipRequested ? 0.35f : 0f);
-            TearDownStage();
+            yield return FadeOverlay(1f, 0f);
 
             if (research == null)
             {
-                // 신문을 띄울 곳이 없다. 연출만 버리고 타이틀로 나간다.
                 Log.W("[HappyEnding] 연구 화면이 없어 결과 신문을 건너뛴다.", this);
-                yield break;
-            }
-
-            if (!ResearchFlowSession.GetOrCreate().HasUnacknowledgedLaunchResult)
-            {
-                // 확인 대기 중인 결과가 없으면 띄울 기사도 없다. 디버그 재생이 이 길로 온다.
-                Log.W("[HappyEnding] 확인 대기 중인 발사 결과가 없어 신문 비트를 건너뛴다.", this);
                 yield break;
             }
 
@@ -253,17 +480,26 @@ namespace Simulation
             // 모두 모이는 ShowEndingScreen 한 곳을 가로챈다. 그러지 않으면 기존 MISSION COMPLETE
             // 패널이 엔딩을 가로채고 타이틀로 나가지 못한다.
             research.SetEndingOverride(() => newspaperDismissed = true);
-            if (research.gameObject.activeSelf)
-            {
-                research.ShowLaunchResultOverlay(result, null);
-            }
-            else
-            {
-                // OnEnable 의 Refresh 가 미확인 결과를 보고 스스로 신문을 띄운다.
-                research.gameObject.SetActive(true);
-            }
+
+            if (!research.gameObject.activeSelf) research.gameObject.SetActive(true);
+            researchWasActive = false;
+
+            // 루트를 켜면 OnEnable 의 Refresh 가 미확인 결과를 보고 스스로 신문을 연다. 그건 <b>이전
+            // 발사</b>의 기사다. 닫지 않으면 ShowResultReport 가 "이미 떠 있음" 으로 조기 반환해서
+            // 성공 기사로 바뀌지도, 등장 애니메이션이 다시 돌지도 않는다.
+            if (report != null) report.Hide();
+
+            // 이제 우리 결과로 연다. Initialize 가 기사를 다시 만들고 글자 등장 연출을 처음부터 돌린다.
+            research.ShowLaunchResultOverlay(result, () => newspaperDismissed = true);
 
             yield return null;
+
+            // 신문이 끝내 안 열렸으면 기다리지 않는다. 여기서 멈추면 플레이어가 빠져나갈 길이 없다.
+            if (report != null && !report.gameObject.activeSelf)
+            {
+                Log.W("[HappyEnding] 결과 신문이 열리지 않아 신문 비트를 건너뛴다.", this);
+                yield break;
+            }
 
             // 신문을 덮지 않도록 오버레이를 걷고, 클릭도 신문으로 흘려보낸다.
             overlay.blocksRaycasts = false;
@@ -279,17 +515,13 @@ namespace Simulation
             if (leaving) return;
             leaving = true;
             routine = null;
-
-            // 보존한 로켓은 타이틀로 넘어가지 않는다 — DontDestroyOnLoad 라 명시적으로 지워야 한다.
-            if (rocket != null) Destroy(rocket);
-            rocket = null;
             RestoreEnvironment();
 
             // 세션 초기화는 하지 않는다. TitleMenu.NewGame 이 PrepareNewGame 으로 이미 처리한다.
             SceneManager.LoadScene(TitleSceneName);
         }
 
-        // ── 오버레이 ────────────────────────────────────────────────────────────
+        // ── 오버레이와 텍스트 ───────────────────────────────────────────────────
 
         private void BuildOverlay()
         {
@@ -306,7 +538,7 @@ namespace Simulation
 
             var backdrop = new GameObject("Backdrop", typeof(Image)).GetComponent<Image>();
             backdrop.color = Color.black;
-            backdrop.raycastTarget = true; // 알파 0 이어도 클릭을 받는다 — 스킵이 3D 구간에서도 살아 있어야 한다.
+            backdrop.raycastTarget = true; // 알파 0 이어도 클릭을 받는다
             Stretch((RectTransform)backdrop.transform, canvasObject.transform);
 
             lineText = new GameObject("Line", typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
@@ -327,26 +559,66 @@ namespace Simulation
             rect.offsetMax = Vector2.zero;
         }
 
-        private IEnumerator ShowLine(string line, float hold, string sfxId)
+        private IEnumerator ShowLine(string line, float hold, string sfxId, bool typewriter)
         {
             if (string.IsNullOrEmpty(line)) yield break;
 
+            advanceRequested = false; // 이전 줄에서 남은 클릭이 이 줄을 넘기지 않게 한다
             lineText.text = line;
             PlaySfx(sfxId);
-            yield return FadeText(0f, 1f, lineFadeSeconds);
-            yield return WaitOrSkip(hold);
+
+            if (typewriter)
+            {
+                lineText.alpha = 1f;
+                yield return TypeText(line);
+            }
+            else
+            {
+                lineText.maxVisibleCharacters = int.MaxValue;
+                yield return FadeText(0f, 1f, lineFadeSeconds);
+            }
+
+            yield return WaitOrAdvance(hold);
             yield return FadeText(1f, 0f, lineFadeSeconds);
+        }
+
+        /// <summary>
+        /// 글자를 하나씩 드러낸다. 알파가 아니라 <see cref="TMP_Text.maxVisibleCharacters"/> 만 올리므로
+        /// 레이아웃이 처음부터 확정돼 줄이 늘어날 때 텍스트가 위아래로 튀지 않는다 — 프롤로그가 같은
+        /// 이유로 이 방식을 쓴다. 다만 타건음은 깔지 않는다. 해피엔딩의 전화 대사는 무음으로 간다.
+        /// </summary>
+        private IEnumerator TypeText(string line)
+        {
+            lineText.maxVisibleCharacters = 0;
+
+            if (typeSecondsPerChar > 0f)
+            {
+                // 리치 텍스트를 쓰지 않으므로 파싱된 글자 수와 문자열 길이가 같다.
+                int total = line.Length;
+                float elapsed = 0f;
+
+                while (lineText.maxVisibleCharacters < total)
+                {
+                    // 타이핑 중 클릭은 그 줄을 즉시 다 드러낸다. 뒤의 유지 시간은 그대로 남는다.
+                    if (ConsumeAdvance()) break;
+                    elapsed += Time.unscaledDeltaTime;
+                    lineText.maxVisibleCharacters = Mathf.Min(total, Mathf.FloorToInt(elapsed / typeSecondsPerChar));
+                    yield return null;
+                }
+            }
+
+            lineText.maxVisibleCharacters = int.MaxValue;
         }
 
         private IEnumerator FadeText(float from, float to, float seconds)
         {
-            for (float elapsed = 0f; elapsed < seconds && !skipRequested; elapsed += Time.unscaledDeltaTime)
+            for (float elapsed = 0f; elapsed < seconds; elapsed += Time.unscaledDeltaTime)
             {
                 lineText.alpha = Mathf.Lerp(from, to, elapsed / seconds);
                 yield return null;
             }
 
-            lineText.alpha = skipRequested ? 0f : to;
+            lineText.alpha = to;
         }
 
         private IEnumerator FadeOverlay(float to, float seconds)
@@ -361,149 +633,79 @@ namespace Simulation
             overlay.alpha = to;
         }
 
-        /// <summary>대기 중에도 스킵이 먹어야 하므로 <see cref="WaitForSecondsRealtime"/> 대신 직접 센다.</summary>
-        private IEnumerator WaitOrSkip(float seconds)
+        /// <summary>대사 구간의 유지 시간. 클릭이 들어오면 즉시 다음 줄로 넘어간다.</summary>
+        private IEnumerator WaitOrAdvance(float seconds)
         {
-            for (float elapsed = 0f; elapsed < seconds && !skipRequested; elapsed += Time.unscaledDeltaTime)
+            for (float elapsed = 0f; elapsed < seconds; elapsed += Time.unscaledDeltaTime)
+            {
+                if (ConsumeAdvance()) yield break;
+                yield return null;
+            }
+        }
+
+        /// <summary>3D 구간의 대기. 클릭을 보지 않는다 — 연출은 끝까지 재생된다.</summary>
+        private static IEnumerator Wait(float seconds)
+        {
+            for (float elapsed = 0f; elapsed < seconds; elapsed += Time.unscaledDeltaTime)
             {
                 yield return null;
             }
         }
 
-        // ── 무대 ────────────────────────────────────────────────────────────────
-
-        private void BuildStage()
+        private bool ConsumeAdvance()
         {
-            stage = new GameObject("Happy Ending Stage");
-            stage.transform.position = StageOrigin;
+            if (!advanceRequested) return false;
+            advanceRequested = false;
+            return true;
+        }
 
-            StoreEnvironment();
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.02f, 0.03f, 0.06f);
-            RenderSettings.fog = false;
+        // ── 환경 백업 ───────────────────────────────────────────────────────────
 
-            stageCamera = new GameObject("Happy Ending Camera", typeof(Camera)).GetComponent<Camera>();
-            stageCamera.transform.SetParent(stage.transform, false);
-            stageCamera.clearFlags = CameraClearFlags.SolidColor;
-            stageCamera.backgroundColor = new Color(0.01f, 0.012f, 0.02f);
-            stageCamera.depth = 100f; // 연구 화면 카메라 위에 그린다
-            stageCamera.farClipPlane = 20000f;
+        private void StoreEnvironment()
+        {
+            if (environmentStored) return;
 
-            // 01_Main 의 카메라는 잠시 꺼 둔다. 신문을 띄울 때 되돌린다 — 결과 UI 캔버스가
-            // ScreenSpaceCamera 로 걸려 있으면 카메라 없이는 아무것도 그려지지 않는다.
-            silencedCameras.Clear();
-            foreach (Camera other in Camera.allCameras)
+            sun = FindSun();
+            if (sun != null)
             {
-                if (other == stageCamera) continue;
-                other.enabled = false;
-                silencedCameras.Add(other);
+                sunColorBackup = sun.color;
+                sunIntensityBackup = sun.intensity;
             }
 
-            pad = BuildPad();
-            moon = BuildMoon();
-            moon.gameObject.SetActive(false);
-
-            if (rocket == null) rocket = BuildFallbackRocket();
-            rocket.SetActive(true);
-            rocket.transform.SetParent(stage.transform, true);
-            rocket.transform.rotation = Quaternion.identity;
+            ambientModeBackup = RenderSettings.ambientMode;
+            ambientBackup = RenderSettings.ambientLight;
+            fogBackup = RenderSettings.fog;
+            fogColorBackup = RenderSettings.fogColor;
+            environmentStored = true;
         }
 
-        private Transform BuildPad()
+        private void RestoreEnvironment()
         {
-            var root = new GameObject("Pad").transform;
-            root.SetParent(stage.transform, false);
-            root.position = StageOrigin;
+            if (!environmentStored) return;
 
-            GameObject deck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            deck.name = "Deck";
-            deck.transform.SetParent(root, false);
-            deck.transform.localScale = new Vector3(24f, 0.5f, 24f);
-            Paint(deck, new Color(0.10f, 0.11f, 0.13f));
-            Destroy(deck.GetComponent<Collider>());
-
-            GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            ground.name = "Ground";
-            ground.transform.SetParent(root, false);
-            ground.transform.localPosition = new Vector3(0f, -0.6f, 0f);
-            ground.transform.localScale = new Vector3(60f, 1f, 60f);
-            Paint(ground, new Color(0.03f, 0.035f, 0.045f));
-            Destroy(ground.GetComponent<Collider>());
-
-            // 달빛 한 장과 발사대 조명 둘. 밤이라는 것은 조명 세기로만 말한다.
-            var moonlight = new GameObject("Moonlight", typeof(Light)).GetComponent<Light>();
-            moonlight.transform.SetParent(root, false);
-            moonlight.type = LightType.Directional;
-            moonlight.color = new Color(0.55f, 0.65f, 0.95f);
-            moonlight.intensity = 0.35f;
-            moonlight.transform.rotation = Quaternion.Euler(35f, 200f, 0f);
-
-            AddFloodlight(root, new Vector3(14f, 6f, -12f));
-            AddFloodlight(root, new Vector3(-13f, 6f, -10f));
-
-            return root;
-        }
-
-        private static void AddFloodlight(Transform parent, Vector3 localPosition)
-        {
-            var light = new GameObject("Floodlight", typeof(Light)).GetComponent<Light>();
-            light.transform.SetParent(parent, false);
-            light.transform.localPosition = localPosition;
-            light.type = LightType.Spot;
-            light.color = new Color(1f, 0.93f, 0.80f);
-            light.intensity = 40f;
-            light.range = 90f;
-            light.spotAngle = 55f;
-            light.transform.LookAt(parent.position + Vector3.up * 4f);
-        }
-
-        private Transform BuildMoon()
-        {
-            GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            sphere.name = "Moon";
-            sphere.transform.SetParent(stage.transform, false);
-            sphere.transform.localScale = Vector3.one * 320f;
-            Destroy(sphere.GetComponent<Collider>());
-            Paint(sphere, new Color(0.86f, 0.86f, 0.82f), unlit: true);
-            return sphere.transform;
-        }
-
-        private GameObject BuildFallbackRocket()
-        {
-            // 보존에 실패했을 때만 쓰는 대역. 연출을 멈추는 것보다 낫다.
-            Log.W("[HappyEnding] 보존된 로켓이 없어 대역 형상으로 재생한다.", this);
-            var root = new GameObject("Fallback Rocket");
-            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            body.transform.SetParent(root.transform, false);
-            body.transform.localScale = new Vector3(1.4f, 4f, 1.4f);
-            Destroy(body.GetComponent<Collider>());
-            Paint(body, new Color(0.82f, 0.83f, 0.85f));
-            return root;
-        }
-
-        private static void Paint(GameObject target, Color color, bool unlit = false)
-        {
-            if (!target.TryGetComponent(out Renderer renderer)) return;
-
-            Shader shader = Shader.Find(unlit ? "Universal Render Pipeline/Unlit" : "Universal Render Pipeline/Lit");
-            if (shader == null) return;
-
-            var material = new Material(shader) { color = color };
-            if (!unlit)
+            if (sun != null)
             {
-                material.SetFloat("_Smoothness", 0.15f);
+                sun.color = sunColorBackup;
+                sun.intensity = sunIntensityBackup;
+            }
+            sun = null;
+
+            RenderSettings.ambientMode = ambientModeBackup;
+            RenderSettings.ambientLight = ambientBackup;
+            RenderSettings.fog = fogBackup;
+            RenderSettings.fogColor = fogColorBackup;
+            skyMaterial = null;
+            environmentStored = false;
+        }
+
+        private static Light FindSun()
+        {
+            foreach (Light light in FindObjectsByType<Light>(FindObjectsSortMode.None))
+            {
+                if (light.type == LightType.Directional && light.enabled) return light;
             }
 
-            renderer.sharedMaterial = material;
-        }
-
-        /// <summary>로켓 밑면을 발사대 위에 맞춘다. 로켓마다 크기가 달라서 바운즈로 계산한다.</summary>
-        private void SeatOnPad(Vector3 padTop)
-        {
-            rocket.transform.position = padTop;
-            Bounds bounds = VisualBounds(rocket);
-            float sink = bounds.min.y - padTop.y;
-            rocket.transform.position = padTop - Vector3.up * sink;
+            return null;
         }
 
         private static Bounds VisualBounds(GameObject target)
@@ -518,51 +720,6 @@ namespace Simulation
             return bounds;
         }
 
-        private void PlayParticles()
-        {
-            if (rocket == null) return;
-            foreach (ParticleSystem particles in rocket.GetComponentsInChildren<ParticleSystem>(true))
-            {
-                particles.Play(true);
-            }
-        }
-
-        private void TearDownStage()
-        {
-            if (rocket != null) rocket.transform.SetParent(null, true);
-            if (stage != null) Destroy(stage);
-            stage = null;
-            stageCamera = null;
-            pad = null;
-            moon = null;
-
-            foreach (Camera camera in silencedCameras)
-            {
-                if (camera != null) camera.enabled = true;
-            }
-            silencedCameras.Clear();
-
-            RestoreEnvironment();
-        }
-
-        private void StoreEnvironment()
-        {
-            if (ambientStored) return;
-            ambientModeBackup = RenderSettings.ambientMode;
-            ambientBackup = RenderSettings.ambientLight;
-            fogBackup = RenderSettings.fog;
-            ambientStored = true;
-        }
-
-        private void RestoreEnvironment()
-        {
-            if (!ambientStored) return;
-            RenderSettings.ambientMode = ambientModeBackup;
-            RenderSettings.ambientLight = ambientBackup;
-            RenderSettings.fog = fogBackup;
-            ambientStored = false;
-        }
-
         private static void PlaySfx(string id)
         {
             if (!Application.isPlaying || string.IsNullOrEmpty(id)) return;
@@ -574,8 +731,12 @@ namespace Simulation
             if (routine != null) StopCoroutine(routine);
             routine = null;
             TearDownStage();
-            if (rocket != null) Destroy(rocket);
-            rocket = null;
+
+            if (researchWasActive && research != null)
+            {
+                researchWasActive = false;
+                research.gameObject.SetActive(true);
+            }
         }
     }
 }

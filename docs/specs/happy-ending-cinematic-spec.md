@@ -8,7 +8,7 @@
 | --- | --- |
 | Interview state | `explicitly-finished` |
 | Working language | Korean (interview), English (authoritative source) |
-| Current revision | 5 |
+| Current revision | 6 |
 | Last updated | 2026-09-06 (KST) |
 | Project or workspace root | `C:\myGame\2026NHNAI` |
 | Base path | `docs/specs/happy-ending-cinematic-spec.md` (this file, authoritative) |
@@ -67,7 +67,7 @@ This plan decides the scope, beat structure, trigger point, data ownership and i
 
 | Excluded item | Source IDs | Status | Why excluded or deferred |
 | --- | --- | --- | --- |
-| Sad-ending presentation | UD-002 | active | The user scoped the request as "the happy ending first" |
+| Sad-ending presentation | UD-002 | lifted | Built afterwards; see `docs/sad-ending-cinematic.md` |
 | Changes to win/lose rules | UD-001 | active | Keep the current branch (grade B or better wins / running out at 2026 Q4 loses) |
 | Credits, staff roll | none | active | Not requested. A separate plan if it becomes needed |
 | Save/load, ending gallery | none | active | Not requested |
@@ -245,7 +245,68 @@ The code landed. Only the departures are written here; everything else is alread
 | R-016 | deviated | No Timeline. The stage is built at runtime, so a Timeline has nothing to bind to. B3~B5 are coroutine code. Moving to Timeline first requires the pad, moon and cameras to exist as a prefab, which is Editor work |
 | R-004, R-006 | partial | Pad, ground and moon are primitive placeholders; "night" is expressed only through light intensity and colour. Look development is Editor work |
 | R-003 | partial | The lines are serialized fields on `HappyEndingSequence`. The component is created at runtime, so no inspector exposes it, and changing the copy currently means editing code |
-| R-013 | done | `HappyEndingDebugTester` forces playback from F8 or the menu. With no unacknowledged launch result it skips only the newspaper beat rather than fabricating a result |
+| R-013 | done | `HappyEndingDebugTester` forces playback from F8 or the menu. With no unacknowledged launch result it fabricates a final-mission success so the newspaper beat still plays |
+
+## First feedback pass (revision 6)
+
+Five problems surfaced on the first F8 playback. All fixes stayed inside `HappyEndingSequence.cs` and `HappyEndingDebugTester.cs`; no scene, prefab or asset was touched.
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| No typewriter on the dialogue | `ShowLine` only faded alpha | Added `TypeText`, raising `maxVisibleCharacters` the way the prologue does. Typewriter on the B2 lines only; the B1 date card keeps its fade. **No key clicks** (user decision) |
+| Night launch far too dark | ambient `(0.02,0.03,0.06)`, moonlight 0.35, spot intensity 40 | ambient `(0.08,0.09,0.12)`, moonlight 0.8, spot `intensity 6 / range 60 / spotAngle 70`. URP has no Physical Light Units, so spot intensity is an arbitrary unit where 1~10 is the normal range |
+| Space shot pitch black | **Every light was a child of `pad`, so `pad.SetActive(false)` left zero light sources** | Split lighting into `Pad Rig` / `Space Rig` directly under `stage` and swap them at the cut. The space rig is a directional key plus fill, so it works wherever the rocket is |
+| UI visible during the 3D beats | The research screen is a Screen Space Overlay canvas and draws even with its camera disabled | `BuildStage` disables the research root and the newspaper beat restores it |
+| No exhaust effect | Rocket particles are all `playOnAwake: 0`; normally `RocketPart` starts them | No new effect. The preserved rocket's own `Flame`/`Smoke_Single` are started, and re-`Clear`ed then re-`Play`ed at the moon cut so the teleport leaves no streak |
+| No newspaper | The debug-only "skip when no unacknowledged result" guard | Guard removed, an explicit callback is passed to the newspaper call, and the debug tester fabricates a final-mission success |
+
+Two fixes came along for the ride:
+
+- **Starfield** — one code-built static star particle system on the space rig. No new asset.
+- **Clone materials** — `PreserveRocket` now swaps the clone's renderer materials for copies, so the original `RocketPart` releasing its shared instances on destruction cannot break the clone.
+
+## Third feedback pass (revision 8)
+
+The launch looked nothing like the in-game one. There was a single cause: **the `Rocket` component was being suspended.**
+
+Everything that draws an in-game launch comes from `Rocket`. Flame strength is `engine.Tick(dt, ramp)` in
+`FixedUpdate`, hold-phase exhaust is `HoldExhaust(HoldProgress)` in `TickHold`, the body wobble is `SetWobble`,
+the lift smoke is `RocketLiftSmoke` watching `Launched && LiftAssistActive`, and the audio is `RocketAudio`
+subscribed to `LaunchStarted`/`LiftoffStarted`. Decisively, **engine ignition (`RocketPart.Prepare`) only
+happens inside `Rocket.Launch()`** — skip it and `SetFlame` never lights anything. Playing the particles from
+outside just produces a flame with no ramp.
+
+| Item | Change |
+| --- | --- |
+| Flight effects | `Suspend(rocket)` removed; `rocket.Launch()` is called normally. The external `PlayParticles`/`ResetParticles` are deleted — `RocketPart` drives them properly now |
+| Authored path | New `HappyEndingFlight` component. It re-forces `isKinematic = true` in both `FixedUpdate` and `LateUpdate` (undoing `ReleaseLift()`, which frees the body 2.5 s after liftoff) and writes the position. The first 2.5 s uses the same formula as the in-game assisted lift so the picture overlaps, then continues at constant acceleration |
+| Lean | Only after 3.5 s from liftoff, up to 12°. Tilting earlier makes `hasUpwardEngine` false, which cuts the lift smoke and releases the kinematic pin |
+| Audio | `RocketAudio` is left alone. SparkStart → RocketLaunch/RocketLoop and the `Launch` BGM play exactly as in game |
+| Moon texture | `Assets/05. Arts/Texture/Noise/Craters/Craters_03-512x512.png` moved to `Assets/05. Arts/Texture/Resources/` and loaded with `Resources.Load`. Nothing referenced it. The material changed from Unlit to **Lit** so the key light gives a terminator |
+| Night sky | `SkyBlend.shader` gains `_MidColor` and `_MidBlend`. **`_MidBlend` defaults to 0, so unless it is switched on the result is identical to the old two-colour lerp** — the in-game sky is untouched. The ending sets it to 1 for horizon pink (0.72,0.26,0.45) → mid purple (0.42,0.20,0.52) → zenith navy (0.07,0.08,0.26), with `_AtmosphereThickness 3` and `_SpaceBlend` dropped from 0.35 to 0.12 because the blue nebula was eating the pink |
+
+`SkyEnvironmentTests` only pins the shader name and the five existing properties, so adding properties is safe.
+
+Known ceiling (marked with a `ponytail:` comment): the engines really burn fuel and heat up. If the launch beat
+runs long, the flame dies on fuel exhaustion or the rocket explodes from overheating. Keep `launchSeconds` under 10.
+
+## Second feedback pass (revision 7)
+
+Three requests came out of replaying the first pass. **UD-005 (preserving a rocket clone) is retired** — keeping the simulation scene alive removes any reason to clone.
+
+| Request / symptom | Cause | Fix |
+| --- | --- | --- |
+| `Can't remove Rocket because LaunchMissionController depends on it` | `Destroy` is deferred to end of frame, so `Rocket` was still alive when the `Rigidbody` destroy ran, tripping the `[RequireComponent]` chain | The clone is gone entirely. The scene's own rocket is used and only the `Rocket` component is suspended (`enabled = false` plus `isKinematic`). `RocketPart` is left alone — disabling it would fire `OnDisable` and kill the flame |
+| Launch from the real pad | A primitive cylinder stage was being built far away | The `SimulationTest` scene stays loaded for the 3D beats and the launch happens on its pad. Cameras, canvases, `RocketBuilder`, `RocketDesignUI` and `SkyEnvironment` are suspended exactly the way `MissionSuccessPresentation` does for the parachute, then our camera goes on top |
+| Night sky only | `SkyEnvironment` overwrites sky, sun and fog every frame | It has no `OnDisable`, so suspending it freezes the last values. After that we write `_Exposure 0.25`, `_SkyTint`, `_HorizonColor` and `_SpaceBlend 0.35` straight onto `RenderSettings.skybox`, using the existing `ResearchLabNightSky.mat` as the reference. **Stars come free from the `_SpaceCube` nebula** — the code-built starfield from pass one is deleted |
+| Spacecraft much closer to camera | The distance multipliers ran `1.6 → 9` | Narrowed to `0.8 → 3.5`. The moon cut also pushes `_SpaceBlend` to 1 so the nebula fills the background |
+| Skip text only | One click set `skipRequested` and threw away the whole cinematic | Narrowed to `advanceRequested`: a click while typing reveals that line, a click after it advances to the next. The 3D beats and the newspaper ignore clicks entirely |
+
+Side effect: the ground no longer stays daylight-bright. Scene ambient is in Skybox mode but frozen at what was baked from the default skybox and nothing refreshes it, so `ambientMode = Flat` plus a dark `ambientLight` has to be written directly.
+
+The F8 debug path loads `SimulationTest` additively when it is missing, so pressing it from the research screen still gets the real pad.
+
+Open: the ascent is driven by code rather than physics. The reasons are that the scene's default rocket has no engines, so thrust is zero and it would not move on the debug path, and the real final-mission rocket is tuned to lean toward its target zone. Awaiting user confirmation.
 | RK-005 | corrected | Overstated. `ResearchCompletionFlowTests` never traverses `SimulationStageHost`, and the test in question exercises the deadline-loss path, not a final win. No existing test needed changing |
 | RK-007 | mitigated | The title return is a single `SceneManager.LoadScene("00_Title")`. Session reset is left to the existing `TitleMenu.NewGame`, with no duplicate call |
 
@@ -266,7 +327,7 @@ verification belongs to the user and has not happened yet.
 | RK-005 | risk | Dropping the result-newspaper call on the winning path breaks `ResearchCompletionFlowTests`, in particular `Operation_FinalLaunchShowsResultThenFinalFailureReportBeforeEndingWithoutDuplicateRewards`, which assumes the newspaper is shown | high / high | Before implementing, re-express what that test guards (no duplicate rewards, ending entered after acknowledgement) in terms of the new path. Reward settlement already completes in `FinishLaunch`, not in the newspaper UI, so the judgement itself is unaffected | SF-009, UD-004, R-011, R-014 | open |
 | RK-006 | dependency | Content assets: dialogue copy, comms tone, ending BGM | medium / medium | UD-008 fixes the volume at 3~4 lines. Timing runs off data even with no sound, as in the prologue (SF-004) | UD-008 | open |
 | RK-007 | risk | There is no existing path back to the title, so it is new code, and `ResearchFlowSession` is `DontDestroyOnLoad`, so progress can leak into the next new game | medium / high | `TitleMenu.NewGame()` already calls `PrepareNewGame()`, so leave initialization to it and do not duplicate the call. Verified by R-018 | UD-007, SF-012, R-018 | open |
-| RK-008 | conflict | The happy ending returns to the title while the sad ending keeps the record panel, so the two endings terminate differently | medium / low | Recorded as intentional asymmetry. Revisit when the sad ending is built | UD-002, UD-007, SF-002 | open |
+| RK-008 | conflict | The happy ending returns to the title while the sad ending keeps the record panel, so the two endings terminate differently | medium / low | Resolved: the sad-ending cinematic now also returns to the title, and the record panel is no longer reached on the runtime failure path. See `docs/sad-ending-cinematic.md` | UD-002, UD-007, SF-002 | closed |
 
 ## Open, Skipped, and Deferred Items
 

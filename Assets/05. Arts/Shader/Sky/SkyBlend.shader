@@ -12,6 +12,12 @@ Shader "Sky/AtmosphereNebulaBlend"
         [NoScaleOffset] _SpaceCube("Space Cubemap", Cube) = "black" {}
         _SpaceBlend("Space Blend", Range(0, 1)) = 0
         _SpaceExposure("Space Exposure", Range(0, 8)) = 1
+
+        // 지평선과 천정 사이에 색을 하나 더 끼우는 선택 경로. _MidBlend 기본값이 0 이라
+        // 켜지 않으면 아래 프래그먼트는 기존 2색 lerp 와 비트 단위로 같다 — 인게임 하늘은
+        // 하나도 변하지 않는다. 해피엔딩의 핑크~보라~남색 밤하늘만 이것을 1 로 켠다.
+        _MidColor("Mid Color", Color) = (0.5, 0.5, 0.5, 1)
+        _MidBlend("Mid Color Blend", Range(0, 1)) = 0
     }
 
     SubShader
@@ -41,6 +47,8 @@ Shader "Sky/AtmosphereNebulaBlend"
                 half _AtmosphereThickness;
                 half _SpaceBlend;
                 half _SpaceExposure;
+                half4 _MidColor;
+                half _MidBlend;
             CBUFFER_END
 
             struct Attributes
@@ -73,7 +81,14 @@ Shader "Sky/AtmosphereNebulaBlend"
                 // 안개색이 지평선색과 지면색을 겸하므로 별도 지면색 프로퍼티가 필요 없다.
                 // max 가드 덕에 지수가 0 이 될 수 없어 pow(0, 0) 의 NaN 도 나오지 않는다.
                 float t = pow(saturate(dir.y), max(_AtmosphereThickness, 0.001) * 0.5);
-                half3 atmosphere = lerp(_HorizonColor.rgb, _SkyTint.rgb, t) * _Exposure;
+
+                // 2색은 지금까지의 하늘, 3색은 중간색을 t=0.5 에 끼운 하늘. _MidBlend 가 0 이면
+                // 두 번째 항이 통째로 무시되므로 기존 결과가 그대로 나온다.
+                half3 twoTone = lerp(_HorizonColor.rgb, _SkyTint.rgb, t);
+                half3 threeTone = t < 0.5
+                    ? lerp(_HorizonColor.rgb, _MidColor.rgb, t * 2.0)
+                    : lerp(_MidColor.rgb, _SkyTint.rgb, (t - 0.5) * 2.0);
+                half3 atmosphere = lerp(twoTone, threeTone, _MidBlend) * _Exposure;
 
                 half3 space = SAMPLE_TEXTURECUBE(_SpaceCube, sampler_SpaceCube, dir).rgb * _SpaceExposure;
                 return half4(lerp(atmosphere, space, _SpaceBlend), 1.0);

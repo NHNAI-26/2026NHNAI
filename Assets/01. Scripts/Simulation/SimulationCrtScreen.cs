@@ -18,8 +18,8 @@ namespace Simulation
     /// RenderTexture 가 화면과 같은 크기라 <see cref="Camera.pixelRect"/> 는 그대로다 —
     /// <see cref="RocketBuilder"/> 의 집기·기즈모 좌표계는 손대지 않아도 된다(docs/rocket-simulation.md).
     /// 진입 연출은 모니터를 손으로 들어 올리는 모양이다: 바닥에 누워 있던 베젤 메시가 아래 모서리를
-    /// 축으로 세워져 화면을 채우고, 그 다음 브라운관이 켜지고, 마지막에 베젤이 확대되어 화면 밖으로
-    /// 밀려난다.
+    /// 축으로 세워져 화면을 채우고, 그 다음 확대되어 화면 밖으로 완전히 밀려난 뒤, 마지막에 브라운관이
+    /// 풀스크린으로 켜진다.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class SimulationCrtScreen : MonoBehaviour
@@ -45,7 +45,8 @@ namespace Simulation
         private const float FrameFieldOfView = 40f;
 
         // 확대가 끝났을 때 베젤이 화면 밖으로 완전히 밀려나는 배율. 메시의 구멍/바깥 비율에 달린
-        // 아트 값이라 눈으로 맞춘다 — 베젤이 아직 보이면 올린다.
+        // 아트 값이라 눈으로 맞춘다 — 베젤이 아직 보이면 올린다. 확대 직후 바로 점등이 시작하므로
+        // 테두리가 한 조각이라도 남으면 점등 첫 프레임에 그대로 잡힌다.
         private const float ZoomScale = 1.8f;
 
         // CRT 카메라는 씬에서 멀리 떨어뜨린다. Screen Space - Camera 캔버스는 월드 지오메트리라
@@ -164,8 +165,9 @@ namespace Simulation
 
         /// <summary>
         /// 모니터를 손으로 들어 올리는 순서: 바닥에 누워 있던 베젤이 아래 모서리를 축으로 세워져
-        /// (오버슛 후 안착) 화면을 채우고,
-        /// 그 뚫린 가운데에서 브라운관이 켜지고, 마지막에 베젤이 확대되어 화면 밖으로 밀려난다.
+        /// (오버슛 후 안착) 화면을 채우고, 그다음 확대되어 화면 밖으로 완전히 사라진 뒤,
+        /// 마지막에 브라운관이 풀스크린으로 켜진다. 점등이 맨 뒤인 이유는 브라운관이 켜지는 그림이
+        /// 베젤에 가려지지 않고 화면 전체로 보여야 해서다.
         /// 세 단계를 겹치지 않는 이유는 순서 자체가 연출이라서다 — 겹치면 페이드처럼 읽힌다.
         /// </summary>
         public IEnumerator PowerOnRoutine()
@@ -177,8 +179,8 @@ namespace Simulation
             SetCurtainAlpha(0f);
 
             yield return TweenFrameAngle(LiftDegrees, 0f, RiseSeconds, Back);
-            yield return TweenPower(1f, 0f, PowerOnSeconds);
             yield return TweenFrameScale(1f, ZoomScale, ZoomSeconds);
+            yield return TweenPower(1f, 0f, PowerOnSeconds);
 
             curtain.gameObject.SetActive(false);
             SetCurtainAlpha(1f);
@@ -188,7 +190,8 @@ namespace Simulation
         }
 
         /// <summary>
-        /// 진입의 정확한 역순: 베젤이 축소되어 돌아오고, 브라운관이 꺼지고, 베젤이 아래로 내려간다.
+        /// 진입의 정확한 역순: 브라운관이 먼저 꺼지고, 검은 화면 위로 베젤이 축소되어 돌아오고,
+        /// 마지막에 베젤이 아래로 내려간다.
         /// 내리는 동작에는 오버슛을 쓰지 않는다 — 들어 올릴 때만 손맛이 있어야 한다.
         /// </summary>
         public IEnumerator PowerOffRoutine()
@@ -202,8 +205,8 @@ namespace Simulation
                 if (frameCamera != null) frameCamera.gameObject.SetActive(true);
                 if (designUI != null) designUI.enabled = false;
 
-                yield return TweenFrameScale(ZoomScale, 1f, ZoomSeconds);
                 yield return TweenPower(0f, 1f, PowerOffSeconds);
+                yield return TweenFrameScale(ZoomScale, 1f, ZoomSeconds);
                 yield return TweenFrameAngle(0f, LiftDegrees, RiseSeconds, SmoothStep);
 
                 // 여기서부터 화면은 검다. 덮개를 다시 검게 만들어 씬 교체를 가린다 —
