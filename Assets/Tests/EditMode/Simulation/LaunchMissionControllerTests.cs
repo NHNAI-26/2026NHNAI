@@ -203,7 +203,7 @@ namespace Simulation.Tests
             Assert.That(guide.TargetMaterial.GetColor("_BaseColor").a, Is.LessThan(0.5f));
             Transform targetRoot = GetField<Transform>(guide, "targetRoot");
             Assert.That(targetRoot.GetComponent<MeshFilter>().sharedMesh.name, Is.EqualTo("Cube"));
-            Assert.That(targetRoot.localScale, Is.EqualTo(Vector3.one * 480f));
+            Assert.That(targetRoot.localScale, Is.EqualTo(Vector3.one * 240f));
             Assert.That(guide.ArrowMaterial.renderQueue, Is.EqualTo((int)UnityEngine.Rendering.RenderQueue.Geometry));
             Assert.That(guide.ArrowMaterial.color.a, Is.EqualTo(1f));
             Assert.That(guide.ArrowMesh.bounds.size.z, Is.LessThan(1.3f));

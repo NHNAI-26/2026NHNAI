@@ -35,7 +35,7 @@ namespace Simulation
         private const string HologramKeyword = "_HOLOGRAM_ON";
         private const string TransparentKeyword = "_SURFACE_TYPE_TRANSPARENT";
         private const string UnlitKeyword = "_UNLIT_ON";
-        private const float TargetVisualScaleMultiplier = 4f;
+        private const float TargetVisualScaleMultiplier = 2f;
 
         private readonly Color idleColor = new(1f, 0.86f, 0.22f, 0.28f);
         private readonly Color activeColor = new(1f, 1f, 0.38f, 0.52f);
