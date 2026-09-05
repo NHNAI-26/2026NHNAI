@@ -37,6 +37,8 @@ namespace Simulation
         private const float ViewportLeft = DockWidth;
         private const float StripHeight = 32f;
         private const float StageDotSize = 18f;
+        private const float CellGap = 4f;      // 상단 바 칸 사이 간격
+        private const float InfoRowHeight = 34f; // 발사 정보 한 줄
 
         // 하단 바 오른쪽 끝 복귀 버튼과 발사·자폭 버튼의 가로 폭. 미션 텍스트의 오른쪽 여백도 여기서 나온다.
         private const float ExitButtonWidth = 96f;
@@ -86,6 +88,9 @@ namespace Simulation
         private Canvas canvas;
         private RectTransform canvasRect;
         private RectTransform presetPanel;
+        private RectTransform flightInfoPanel;
+        private TMP_Text[] flightInfoValues;
+        private string launchGradeLabel;
         private RectTransform statBox;
         private TMP_Text statText;
         private RectTransform partTools;
@@ -157,6 +162,7 @@ namespace Simulation
             {
                 UpdateViewportRect();
                 UpdateTopBar();
+                UpdateFlightInfo();
                 UpdateStageStrip();
             }
 
@@ -218,6 +224,7 @@ namespace Simulation
             stageHost = FindFirstObjectByType<SimulationStageHost>();
 
             BuildTopBar(canvasTransform);
+            BuildFlightInfoPanel(canvasTransform);
 
             // 카메라 뷰포트의 유일한 원천. 정규화 상수를 따로 두면 CanvasScaler 가 늘어나는 비율에서
             // 좌측 패널과 어긋난다 — 매 프레임 이 사각형을 읽어 카메라에 먹인다.
@@ -240,25 +247,45 @@ namespace Simulation
             partTools.SetAsLastSibling();
         }
 
-        /// <summary>제목·날짜·잔여 자금 세 칸. 값은 <see cref="UpdateTopBar"/> 가 매 프레임 채운다.</summary>
+        /// <summary>
+        /// 제목·날짜·잔여 자금 세 칸. 값은 <see cref="UpdateTopBar"/> 가 매 프레임 채운다.
+        /// 바 자체는 Graphic 이 없는 껍데기고 칸마다 패널을 따로 깐다 — 한 장 위에 글자만 셋 얹으면
+        /// 어디부터 어디까지가 한 항목인지 안 읽힌다. 바는 뷰포트 위쪽 바깥이라 Image 를 빼도 3D 입력과 무관하다.
+        /// </summary>
         private void BuildTopBar(RectTransform canvasTransform)
         {
-            RectTransform bar = CreateArtPanel("TopBar", canvasTransform, PanelSprite);
+            RectTransform bar = CreateGroup("TopBar", canvasTransform);
             bar.anchorMin = new Vector2(0f, 1f);
             bar.anchorMax = Vector2.one;
             bar.pivot = new Vector2(0.5f, 1f);
             bar.offsetMin = new Vector2(0f, -BarHeight);
             bar.offsetMax = Vector2.zero;
 
-            Dock(CreateText("Title", bar, 20, FontStyles.Bold, "ARTEMIS CONTROL"), 0f, 0.32f);
+            TMP_Text title = CreateText("Title", DockCell("TitleCell", bar, 0f, 0.32f), 20, FontStyles.Bold, "ARTEMIS CONTROL");
+            title.raycastTarget = false;
+            Fill((RectTransform)title.transform, 10f);
 
-            dateText = CreateText("Date", bar, 16, FontStyles.Bold, string.Empty);
+            dateText = CreateText("Date", DockCell("DateCell", bar, 0.32f, 0.62f), 16, FontStyles.Bold, string.Empty);
             dateText.alignment = TextAlignmentOptions.Center;
-            Dock(dateText, 0.32f, 0.62f);
+            dateText.raycastTarget = false;
+            Fill((RectTransform)dateText.transform, 10f);
 
-            fundsText = CreateText("Funds", bar, 16, FontStyles.Bold, string.Empty);
+            fundsText = CreateText("Funds", DockCell("FundsCell", bar, 0.62f, 1f), 16, FontStyles.Bold, string.Empty);
             fundsText.alignment = TextAlignmentOptions.Right;
-            Dock(fundsText, 0.62f, 1f);
+            fundsText.raycastTarget = false;
+            Fill((RectTransform)fundsText.transform, 10f);
+        }
+
+        /// <summary>상단 바의 한 칸. 칸 사이 <see cref="CellGap"/> 만큼 벌려 패널 경계가 보이게 한다.</summary>
+        private static RectTransform DockCell(string name, RectTransform bar, float min, float max)
+        {
+            RectTransform cell = CreateArtPanel(name, bar, PanelSprite);
+            cell.GetComponent<Image>().raycastTarget = false;
+            cell.anchorMin = new Vector2(min, 0f);
+            cell.anchorMax = new Vector2(max, 1f);
+            cell.offsetMin = new Vector2(min > 0f ? CellGap : 0f, 0f);
+            cell.offsetMax = new Vector2(max < 1f ? -CellGap : 0f, 0f);
+            return cell;
         }
 
         /// <summary>현재 미션 문구와 발사·자폭·복귀 버튼. 발사 버튼과 자폭 버튼은 같은 자리를 교대로 쓴다.</summary>
@@ -403,16 +430,6 @@ namespace Simulation
         }
 
         /// <summary>상단 바 안에서 가로 구간(0~1)을 잡아 앉힌다.</summary>
-        private static void Dock(TMP_Text label, float min, float max)
-        {
-            label.raycastTarget = false;
-            var rect = (RectTransform)label.transform;
-            rect.anchorMin = new Vector2(min, 0f);
-            rect.anchorMax = new Vector2(max, 1f);
-            rect.offsetMin = new Vector2(12f, 8f);
-            rect.offsetMax = new Vector2(-12f, -8f);
-        }
-
         private void BuildPresetPanel(RectTransform canvasTransform)
         {
             if (presetPanel != null)
@@ -476,6 +493,71 @@ namespace Simulation
                 CreateText("Empty", presetPanel, 13, FontStyles.Normal,
                     "프리셋이 없다.\nRocketBuilder 의 Preset Library 에\nEnginePresetLibrarySO 를 연결하라.");
             }
+        }
+
+        /// <summary>
+        /// 발사 뒤 좌측 도크를 넘겨받는 비행 정보 패널. 프리셋 패널과 같은 자리·같은 폭이라
+        /// 발사 순간 뷰포트 폭이 흔들리지 않는다. 프리셋 목록을 부수고 다시 짓는 대신 둘을 번갈아 켠다.
+        /// </summary>
+        private void BuildFlightInfoPanel(RectTransform canvasTransform)
+        {
+            flightInfoPanel = CreateArtPanel("FlightInfoPanel", canvasTransform, PanelSprite);
+            flightInfoPanel.SetAsFirstSibling();
+            flightInfoPanel.anchorMin = new Vector2(0f, 0f);
+            flightInfoPanel.anchorMax = new Vector2(0f, 1f);
+            flightInfoPanel.pivot = new Vector2(0f, 0.5f);
+            flightInfoPanel.offsetMin = new Vector2(0f, BarHeight);
+            flightInfoPanel.offsetMax = new Vector2(DockWidth, -BarHeight);
+
+            var layout = flightInfoPanel.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(12, 12, 12, 12);
+            layout.spacing = 6f;
+            layout.childForceExpandHeight = false;
+            layout.childControlHeight = true;
+            layout.childControlWidth = true;
+
+            CreateText("Title", flightInfoPanel, 18, FontStyles.Bold, "발사 정보");
+
+            string[] labels = { "미션", "최고 고도", "최대 거리", "총 연소", "체류", "남은 연료", "결과" };
+            flightInfoValues = new TMP_Text[labels.Length];
+            for (int i = 0; i < labels.Length; i++)
+            {
+                flightInfoValues[i] = CreateInfoRow(labels[i]);
+            }
+
+            flightInfoPanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>라벨과 값을 좌우로 나눠 담은 한 줄. 값 텍스트만 돌려준다 — 갱신은 그쪽만 한다.</summary>
+        private TMP_Text CreateInfoRow(string label)
+        {
+            RectTransform row = CreateArtPanel($"Row_{label}", flightInfoPanel, CardSprite);
+            row.GetComponent<Image>().raycastTarget = false;
+            // 가로 레이아웃 그룹은 자식의 flexibleHeight 를 부모에게 그대로 올린다 — 0 으로 눌러 두지 않으면
+            // 줄이 패널 높이를 나눠 먹어 카드 일곱 장이 늘어난다.
+            LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+            rowLayout.minHeight = InfoRowHeight;
+            rowLayout.flexibleHeight = 0f;
+
+            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 0, 0);
+            layout.spacing = 4f;
+            layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+
+            TMP_Text caption = CreateText("Label", row, 12, FontStyles.Bold, label);
+            caption.raycastTarget = false;
+            caption.textWrappingMode = TextWrappingModes.NoWrap;
+            caption.color = StagePendingColor;
+            caption.gameObject.AddComponent<LayoutElement>().preferredWidth = 64f;
+
+            TMP_Text value = CreateText("Value", row, 13, FontStyles.Bold, string.Empty);
+            value.raycastTarget = false;
+            value.alignment = TextAlignmentOptions.Right;
+            value.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            return value;
         }
 
         private void BuildStatBox(RectTransform canvasTransform)
@@ -558,6 +640,8 @@ namespace Simulation
             // 발사 뒤에는 설계 조작이 전부 막힌다(RocketBuilder) — 눌러도 아무 일 없는 UI 를 남기지 않는다.
             bool launched = rocket != null && rocket.Launched;
             presetPanel.gameObject.SetActive(!launched);
+            // 관제 모드가 아니면 정보 패널이 없다 — 예전처럼 도크가 비고 뷰가 넘겨받는다.
+            if (flightInfoPanel != null) flightInfoPanel.gameObject.SetActive(launched);
 
             bool hasSelection = !launched && builder.Selected != null;
             partTools.gameObject.SetActive(hasSelection);
@@ -578,9 +662,11 @@ namespace Simulation
         /// </summary>
         private void UpdateViewportRect()
         {
-            // 발사 뒤에는 좌측 프리셋 패널이 사라진다(RefreshTools) — 빈 칸을 남기지 않고 뷰가 넘겨받는다.
             // 발사 여부를 다시 판단하지 않고 패널이 실제로 켜져 있는지를 본다 — 두 조건이 어긋나면 패널과 뷰가 겹친다.
-            float left = presetPanel.gameObject.activeSelf ? ViewportLeft : 0f;
+            // 관제 모드에서는 프리셋 패널과 발사 정보 패널이 같은 도크를 번갈아 쓰므로 폭이 그대로 유지된다.
+            bool dockOccupied = presetPanel.gameObject.activeSelf
+                || (flightInfoPanel != null && flightInfoPanel.gameObject.activeSelf);
+            float left = dockOccupied ? ViewportLeft : 0f;
             if (!Mathf.Approximately(viewport.offsetMin.x, left))
             {
                 viewport.offsetMin = new Vector2(left, viewport.offsetMin.y);
@@ -645,6 +731,47 @@ namespace Simulation
                 : stageHost != null && !string.IsNullOrEmpty(stageHost.LaunchMessage)
                     ? stageHost.LaunchMessage
                     : mission != null ? mission.Objective : string.Empty;
+        }
+
+        /// <summary>
+        /// 연구 쪽이 확정한 등급을 받아 결과 줄에 붙인다. 등급은 발사가 끝나야 계산되므로
+        /// (<see cref="SimulationStageHost"/>) 패널이 스스로 알아낼 방법이 없다.
+        /// </summary>
+        internal void ShowLaunchResult(ResearchGrade grade)
+        {
+            launchGradeLabel = grade.ToString();
+        }
+
+        /// <summary>
+        /// 좌측 발사 정보 패널을 매 프레임 채운다. 고도·거리는 최대치라 하강해도 줄지 않는다.
+        /// <see cref="UpdateTopBar"/> 가 이미 이 프레임의 <see cref="placedParts"/> 를 채웠으므로 다시 수집하지 않는다.
+        /// </summary>
+        private void UpdateFlightInfo()
+        {
+            if (flightInfoPanel == null || !flightInfoPanel.gameObject.activeSelf) return;
+
+            float fuel = 0f;
+            for (int i = 0; i < placedParts.Count; i++) fuel += placedParts[i].Remaining;
+
+            string objective = mission != null ? mission.Objective : string.Empty;
+            int lineBreak = objective.IndexOf('\n');
+            if (lineBreak >= 0) objective = objective[..lineBreak];
+
+            string result = mission == null ? "-"
+                : !mission.Finished ? "비행 중"
+                : mission.Succeeded ? "성공" : "실패";
+            if (mission != null && mission.Finished && !string.IsNullOrEmpty(launchGradeLabel))
+            {
+                result += $" · 등급 {launchGradeLabel}";
+            }
+
+            flightInfoValues[0].text = objective;
+            flightInfoValues[1].text = $"{(mission != null ? mission.MaxAltitude : 0f):0.0} m";
+            flightInfoValues[2].text = $"{(mission != null ? mission.MaxDistance : 0f):0.0} m";
+            flightInfoValues[3].text = $"{(rocket != null ? rocket.TotalBurnSeconds : 0f):0.0} s";
+            flightInfoValues[4].text = $"{(mission != null ? mission.HoldSeconds : 0f):0.0} s";
+            flightInfoValues[5].text = $"{fuel:0.0} kg";
+            flightInfoValues[6].text = result;
         }
 
         /// <summary>

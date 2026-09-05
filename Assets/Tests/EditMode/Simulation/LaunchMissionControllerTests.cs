@@ -140,6 +140,24 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void MaxTelemetry_KeepsPeakAfterDescending()
+        {
+            _rocket.Launch();
+            _body.linearVelocity = Vector3.up * 10f;
+            _object.transform.position = new Vector3(30f, 50f, 40f); // 고도 50, 수평 거리 50
+            Invoke(_controller, "FixedUpdate");
+            Assert.That(_controller.MaxAltitude, Is.EqualTo(50f).Within(0.01f));
+            Assert.That(_controller.MaxDistance, Is.EqualTo(50f).Within(0.01f));
+
+            _object.transform.position = new Vector3(3f, 10f, 4f); // 고도 10, 수평 거리 5
+            Invoke(_controller, "FixedUpdate");
+
+            Assert.That(_controller.MaxAltitude, Is.EqualTo(50f).Within(0.01f));
+            Assert.That(_controller.MaxDistance, Is.EqualTo(50f).Within(0.01f));
+            Assert.That(_results, Is.Empty);
+        }
+
+        [Test]
         public void ReachingObjective_CompletesSuccessfullyOnceWithoutExplosion()
         {
             _rocket.Launch();

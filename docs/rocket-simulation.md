@@ -558,8 +558,9 @@ Unity `Simulation.EditModeTests` 96개와 `Simulation.PlayModeTests` 5개 통과
 뜬다(122 kg, 순힘 +3 N). 상수로 박으면 안 되는 이유다. 실패한 구성이 "실패로 읽히되 좌절스럽지 않은"
 지점은 `angularDamping`과 이 계수에서 같이 잡는다.
 
-남은 연료는 Console 로그로만 본다(`Log.D`: 발사 시 엔진 수, 엔진별 소진, 전 엔진 소진). 화면 게이지는
-넣지 않았다 — 발사 버튼 하나를 위해 Canvas를 끌어오지 않은 것과 같은 이유다.
+남은 연료는 발사 뒤 좌측 발사 정보 패널이 `Σ RocketPart.Remaining` 을 kg 수치로 보여 준다(아래 "관제 패널
+배치"). 게이지 그래픽은 여전히 없다 — 눈금을 그리는 대신 숫자 한 줄로 끝냈다. 소진 시점의 세부(발사 시
+엔진 수, 엔진별 소진, 전 엔진 소진)는 지금도 Console 로그(`Log.D`)에만 있다.
 
 ## 불꽃
 
@@ -1140,21 +1141,48 @@ UI 로 판정해 3D 입력이 죽는다. 같은 이유로 전체 화면 배경 �
 나온다 — 같은 숫자를 여러 곳에 흩으면 CanvasScaler 가 늘어나는 비율에서 서로 어긋난다.
 
 ```
-TopBar      가로 전체, 높이 64   ARTEMIS CONTROL │ 연/분기·남은 분기 │ 잔여 자금
-PresetPanel 좌측 폭 200, 두 바 사이
-Viewport    200 .. 오른쪽 끝, 스테퍼 위 .. 상단 바 아래   (LaunchPip 이 그 안 우하단)
-StageStrip  Viewport 와 같은 가로, 높이 32                점화 ─ 이륙 ─ 상승 ─ 목표 구역 ─ 체류
-BottomBar   가로 전체, 높이 64   현재 미션 문구 │ [연구 화면] [발사 / 자폭]
+TopBar          가로 전체, 높이 64   [ARTEMIS CONTROL] [연/분기·남은 분기] [잔여 자금]  ← 칸마다 패널
+PresetPanel     좌측 폭 200, 두 바 사이                    발사 전
+FlightInfoPanel 좌측 폭 200, PresetPanel 과 같은 자리       발사 후
+Viewport        200 .. 오른쪽 끝, 스테퍼 위 .. 상단 바 아래   (LaunchPip 이 그 안 우하단)
+StageStrip      Viewport 와 같은 가로, 높이 32              점화 ─ 이륙 ─ 상승 ─ 목표 구역 ─ 체류
+BottomBar       가로 전체, 높이 64   현재 미션 문구 │ [연구 화면] [발사 / 자폭]
 ```
+
+**상단 바는 칸마다 패널을 따로 깐다.** `TopBar` 자체는 Graphic 이 없는 껍데기고 `TitleCell`/`DateCell`/
+`FundsCell` 세 개가 각자 패널 스프라이트를 쓴다(`CellGap` 4 만큼 벌린다). 패널 한 장 위에 글자만 셋 얹으면
+어디부터 어디까지가 한 항목인지 읽히지 않는다. 바가 뷰포트 위쪽 바깥이라 Image 를 빼도 3D 입력과 무관하다.
 
 **패널은 화면 가장자리와 서로에게 딱 붙인다.** 여백을 두면 그 틈이 `Camera.rect` 밖이 되는데, 그 바깥을
 지우는 것은 `01_Main` 의 클리어 전용 카메라 하나뿐이다(아래 문단) — `SimulationTest` 를 단독 재생하면
 그 카메라가 없어 틈으로 이전 프레임 픽셀이 그대로 남는다. 붙여 두면 두 경로 모두에서 같은 그림이 나온다.
 `StageStrip` 이 자기 배경 패널을 갖는 것도 같은 이유다 — 뷰포트 밖에 있는 띠라서 배경이 없으면 비친다.
 
-발사 뒤에는 좌측 프리셋 패널이 사라지므로(`RefreshTools`) `Viewport` 와 `StageStrip` 의 왼쪽 끝이 0 으로
-내려가 그 자리를 넘겨받는다. 판단 기준은 `rocket.Launched` 가 아니라 **패널이 실제로 켜져 있는지**다 —
-두 조건이 한 프레임이라도 어긋나면 패널과 3D 뷰가 겹친다.
+발사 뒤에는 좌측 도크의 내용이 프리셋 목록에서 **발사 정보로 바뀐다**(`RefreshTools` 가 둘을 번갈아 켠다).
+엔진을 꺼내 붙이던 자리가 그대로 비행 판독대가 되므로 눈이 옮겨갈 곳이 없고, 도크 폭이 유지되어 발사
+순간 3D 뷰가 넓어졌다 좁아지는 흔들림도 없다. 판단 기준은 `rocket.Launched` 가 아니라 **패널이 실제로
+켜져 있는지**다 — 두 조건이 한 프레임이라도 어긋나면 패널과 3D 뷰가 겹친다. `missionControl` 이 아닌
+단독 재생에서는 `FlightInfoPanel` 을 아예 만들지 않으므로 예전처럼 도크가 비고 뷰가 넘겨받는다.
+
+### 발사 정보 패널
+
+`미션 / 최고 고도 / 최대 거리 / 총 연소 / 체류 / 남은 연료 / 결과` 일곱 줄. 각 줄은 프리셋 카드와 같은
+카드 스프라이트에 라벨과 값을 좌우로 나눠 담는다.
+
+고도와 거리는 **최대치**다. `LaunchMissionController` 가 이미 매 `FixedUpdate` 계산하던 값을
+`MaxAltitude`/`MaxDistance` 로 누적한다 — 현재 고도를 그대로 보여주면 하강할 때 같이 줄어들어 "얼마나
+올라갔나"를 못 읽는다. 미션이 끝나면 `FixedUpdate` 가 더 돌지 않으므로 마지막 값이 저절로 동결된다.
+총 연소는 `Rocket.TotalBurnSeconds`, 체류는 `LaunchMissionEvaluator.HoldSeconds` 로 원래 누적되던 값을
+읽기만 한다. 남은 연료는 `UpdateTopBar` 가 이 프레임에 이미 채운 `placedParts` 를 재사용해 합산한다 —
+같은 프레임에 두 번 수집하지 않는다.
+
+등급은 패널이 알 수 없다. 발사가 끝나야 `ResearchPrototypeModel` 이 정하므로
+`SimulationStageHost.CompleteLaunch` 가 `ShowLaunchResult(result.Grade)` 로 건네준다.
+
+**끝나도 바로 닫지 않는다.** `CompleteLaunch` 가 곧장 `UnloadRoutine` 을 돌리면 최종 수치와 성공·등급이
+한 프레임 스치고 사라진다. `HoldThenUnload` 가 `launchResultHoldSeconds`(기본 3초) 동안 화면을 세워 둔
+뒤 정리한다. 대기 시작과 동시에 `busy` 를 세우는 이유는 그 사이 복귀 버튼의 `CloseDesignStage` 가 두 번째
+언로드를 띄우는 것을 막기 위해서다.
 
 **껍데기는 프로젝트 기본 UI 아트를 쓴다.** `Assets/05. Arts/UI/Resources/engine_ui_01.psd` 의 일곱 조각
 중 `_0`(패널), `_4`(작은 상자), `_5`(버튼), `_6`(목록 카드)이고, 연구 화면(`ResearchUiArtApplicator`)과

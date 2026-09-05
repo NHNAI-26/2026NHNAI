@@ -31,6 +31,20 @@ namespace Simulation
         public string Status { get; private set; } = "발사 대기";
         public float Altitude => Mathf.Max(0f, transform.position.y - origin.y);
 
+        /// <summary>
+        /// 발사 정보 패널이 읽는 비행 최대치. FixedUpdate 가 종료 뒤에는 돌지 않으므로 마지막 값이 그대로 남는다 —
+        /// 현재 고도를 그대로 보여주면 하강할 때 같이 줄어들어 "얼마나 올라갔나"를 못 읽는다.
+        /// </summary>
+        public float MaxAltitude { get; private set; }
+        public float MaxDistance { get; private set; }
+
+        /// <summary>목표 구역 체류 시간. 판정은 평가기가 하고 화면은 여기서만 읽는다.</summary>
+        public float HoldSeconds => evaluator != null ? evaluator.HoldSeconds : 0f;
+
+        /// <summary>미션이 끝났는지, 끝났다면 성공인지. <see cref="Status"/> 문자열을 파싱하지 않기 위한 것이다.</summary>
+        public bool Finished { get; private set; }
+        public bool Succeeded { get; private set; }
+
         /// <summary>관제 화면 스테퍼가 읽는 진행 단계. 발사 전에는 0 이다.</summary>
         public int Stage => evaluator != null ? evaluator.StageIndex : 0;
 
@@ -63,6 +77,8 @@ namespace Simulation
             if (evaluator == null || !rocket.Launched || returning || IsExploding) return;
             Vector3 offset = transform.position - origin;
             float distance = new Vector2(offset.x, offset.z).magnitude;
+            MaxAltitude = Mathf.Max(MaxAltitude, Altitude);
+            MaxDistance = Mathf.Max(MaxDistance, distance);
             var outcome = evaluator.Step(Time.fixedDeltaTime, Altitude, distance, Speed,
                 Vector3.Angle(transform.up, Vector3.up), rocket.TotalBurnSeconds, enableAutomaticFailure,
                 rocket.IsGrounded, rocket.Splashed, body.angularVelocity.magnitude * Mathf.Rad2Deg);
@@ -97,6 +113,8 @@ namespace Simulation
         {
             if (returning) return;
             returning = true;
+            Finished = true;
+            Succeeded = success;
             rocket.StopFlight();
             Status = success ? "미션 성공" : evaluator.FailureReason;
             completed?.Invoke(success);

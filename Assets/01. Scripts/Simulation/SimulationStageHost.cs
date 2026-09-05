@@ -26,6 +26,8 @@ namespace Simulation
         // URP 는 카메라를 (int)depth 로 정렬한다(UniversalRenderPipelineCore). 소수점은 0 과 같은 값이 된다.
         private const float SimulationCameraDepth = 10f;
 
+        [SerializeField, Min(0f)] private float launchResultHoldSeconds = 3f;
+
         private ResearchOperationUIController research;
         private Camera mainCamera;
         private int mainCameraCullingMask;
@@ -203,10 +205,24 @@ namespace Simulation
         private void CompleteLaunch(bool succeeded)
         {
             var session = ResearchFlowSession.GetOrCreate();
-            if (session.CompleteActiveLaunch(succeeded, mission != null ? mission.Status : null, out _) != ResearchActionResult.Success) return;
+            if (session.CompleteActiveLaunch(succeeded, mission != null ? mission.Status : null, out ResearchLaunchResultData result) != ResearchActionResult.Success) return;
             // Physical missions return directly to research; keep the result available in its status panel.
             session.AcknowledgeLaunchResult();
-            StartCoroutine(UnloadRoutine());
+            // 등급은 여기서만 확정된다 — 발사 정보 패널이 스스로 알 수 없으므로 건네준다.
+            if (designUI != null) designUI.ShowLaunchResult(result.Grade);
+            StartCoroutine(HoldThenUnload());
+        }
+
+        /// <summary>
+        /// 최종 수치를 읽을 시간을 준 뒤 정리한다. 곧바로 언로드하면 발사 정보 패널의 마지막 값과
+        /// 성공·등급이 한 프레임 스치고 사라진다.
+        /// </summary>
+        private IEnumerator HoldThenUnload()
+        {
+            // 대기 중에도 복귀 버튼이 살아 있으면 CloseDesignStage 가 두 번째 언로드를 띄운다.
+            busy = true;
+            yield return new WaitForSecondsRealtime(launchResultHoldSeconds);
+            yield return UnloadRoutine();
         }
 
         private static Camera FindSceneCamera(Scene scene)
