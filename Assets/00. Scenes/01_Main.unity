@@ -1533,6 +1533,30 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 900903410019580316, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
       propertyPath: m_AnchorMax.y
       value: 0
@@ -1578,30 +1602,6 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 997772507029326459, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
-      propertyPath: m_AnchoredPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
-      propertyPath: m_AnchorMax.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
-      propertyPath: m_AnchorMin.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
-      propertyPath: m_SizeDelta.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
-      propertyPath: m_SizeDelta.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
-      propertyPath: m_AnchoredPosition.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 855735321949582699, guid: 6908c07e0978aa04e8f84fab3aae4fea, type: 3}
       propertyPath: m_AnchoredPosition.y
       value: 0
       objectReference: {fileID: 0}
@@ -2635,7 +2635,7 @@ MonoBehaviour:
   previewRoot: {fileID: 468880324}
   visualLibrary: {fileID: 11400000, guid: 7c39d02e38b92ac4986e91f97e108c20, type: 2}
   defaultPreviewPrefab: {fileID: 8120476766356243560, guid: 4081259fa88ad44268a26a6a2450db0e, type: 3}
-  hologramMaterial: {fileID: 0}
+  hologramMaterial: {fileID: 2100000, guid: 9e980f938d7f5234288f53679f60d55b, type: 2}
   hologramFallbackShader: {fileID: 0}
   hologramColor: {r: 0.16, g: 0.9, b: 1, a: 0.72}
   hologramEmissionColor: {r: 0.35, g: 1.2, b: 1.4, a: 1}
