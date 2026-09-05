@@ -1197,7 +1197,7 @@ namespace Simulation.Tests
             var rocket = host.AddComponent<Rocket>();
             Invoke(rocket, "Awake");
             var renderer = host.AddComponent<MeshRenderer>();
-            var part = CreateEngine(Stats(200f, 0f, 2400f, 100f));
+            var part = CreateEngine(Stats(300f, 0f, 3600f, 100f));
             rocket.Attach(part, Vector3.zero);
             var mission = host.AddComponent<LaunchMissionController>();
             int completed = 0, explosions = 0;
