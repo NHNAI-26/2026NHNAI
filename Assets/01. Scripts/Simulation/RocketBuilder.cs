@@ -692,6 +692,10 @@ namespace Simulation
         private void OnDestroy()
         {
             UpdateRotationSound(false);
+
+            // 정적 레지스트리라 씬을 내려도 남는다 — 파괴된 렌더러를 물고 있지 않도록 여기서 비운다.
+            SelectionOutlineFeature.Select(null, null);
+
             // RenderTexture 는 GC 가 회수하지 않는다 — 씬을 내렸다 올릴 때마다 GPU 메모리가 샌다.
             if (_pipTexture == null) return;
 
@@ -1509,8 +1513,8 @@ namespace Simulation
             UpdateRotationSound(false);
             if (_selected == part) return;
 
-            if (_selected != null) _selected.SetOutline(false);
-            if (part != null) part.SetOutline(true);
+            // 아웃라인은 렌더러 피처가 화면 공간에서 그린다 — 부품 머티리얼은 건드리지 않는다.
+            SelectionOutlineFeature.Select(cam, part != null ? part.gameObject : null);
 
             _selected = part;
             _mode = EditMode.None;

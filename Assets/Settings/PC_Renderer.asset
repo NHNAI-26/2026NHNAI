@@ -27,7 +27,8 @@ MonoBehaviour:
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
   - {fileID: 6123456789012345678}
-  m_RendererFeatureMap: ad6b866f10d7b46c4ef3889281e3fa54
+  - {fileID: 6930195636971672908}
+  m_RendererFeatureMap: ad6b866f10d7b46c4ef3889281e3fa544c95a8cd36002d60
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
@@ -76,6 +77,20 @@ MonoBehaviour:
   passIndex: 0
   bindDepthStencilAttachment: 0
   m_Version: 1
+--- !u!114 &6930195636971672908
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f41e0de330919b744ad0e1b02528f454, type: 3}
+  m_Name: Selection Outline
+  m_EditorClassIdentifier: Simulation::Simulation.SelectionOutlineFeature
+  m_Active: 1
+  outlineMaterial: {fileID: 2100000, guid: df488c7e8bd74930a73c0200ea832bc7, type: 2}
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0
