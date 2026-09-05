@@ -2,20 +2,28 @@ using System;
 
 namespace Border.Research
 {
+    public enum LaunchResultMedium
+    {
+        Newspaper,
+        Mail
+    }
+
     public readonly struct LaunchNewspaperArticle
     {
-        private LaunchNewspaperArticle(string heading, string edition, string body, string effects)
+        private LaunchNewspaperArticle(string heading, string edition, string body, string effects, LaunchResultMedium medium)
         {
             Heading = heading;
             Edition = edition;
             Body = body;
             Effects = effects;
+            Medium = medium;
         }
 
         public string Heading { get; }
         public string Edition { get; }
         public string Body { get; }
         public string Effects { get; }
+        public LaunchResultMedium Medium { get; }
 
         public static LaunchNewspaperArticle Create(ResearchLaunchResultData result, string missionName)
         {
@@ -28,8 +36,50 @@ namespace Border.Research
             string edition = CreateEdition(result);
             string body = CreateBody(result, resolvedMissionName, succeeded);
             string effects = CreateEffects(result);
+            LaunchResultMedium medium = ResolveMedium(result);
 
-            return new LaunchNewspaperArticle(heading, edition, body, effects);
+            return new LaunchNewspaperArticle(heading, edition, body, effects, medium);
+        }
+
+        public static LaunchResultMedium ResolveMedium(ResearchLaunchResultData result)
+        {
+            if (result.Visibility == TestVisibility.FinalMission || result.FinalMissionWon)
+            {
+                return LaunchResultMedium.Newspaper;
+            }
+
+            if (result.OutcomeEvent != null && TryResolveEventMedium(result.OutcomeEvent.Id, out LaunchResultMedium eventMedium))
+            {
+                return eventMedium;
+            }
+
+            return result.Visibility == TestVisibility.Private ? LaunchResultMedium.Mail : LaunchResultMedium.Newspaper;
+        }
+
+        private static bool TryResolveEventMedium(LaunchOutcomeEventId id, out LaunchResultMedium medium)
+        {
+            switch (id)
+            {
+                case LaunchOutcomeEventId.FinalProof:
+                case LaunchOutcomeEventId.Whistleblower:
+                case LaunchOutcomeEventId.SponsorBoost:
+                case LaunchOutcomeEventId.PublicPressure:
+                case LaunchOutcomeEventId.MediaBacklash:
+                case LaunchOutcomeEventId.PadDamage:
+                    medium = LaunchResultMedium.Newspaper;
+                    return true;
+                case LaunchOutcomeEventId.CleanTelemetry:
+                case LaunchOutcomeEventId.NearMissInspection:
+                case LaunchOutcomeEventId.RecoveredPayload:
+                case LaunchOutcomeEventId.QuietLessons:
+                case LaunchOutcomeEventId.QuietBreakthrough:
+                case LaunchOutcomeEventId.UsefulFailureData:
+                    medium = LaunchResultMedium.Mail;
+                    return true;
+                default:
+                    medium = LaunchResultMedium.Newspaper;
+                    return false;
+            }
         }
 
         private static string CreateHeading(ResearchLaunchResultData result, bool succeeded)

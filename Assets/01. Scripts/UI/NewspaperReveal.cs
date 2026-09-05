@@ -18,6 +18,8 @@ namespace Border.UI
         [SerializeField] private CanvasGroup backdrop;
         [SerializeField] private Image newspaperImage;
         [SerializeField] private Sprite newspaperSprite;
+        [SerializeField] private Sprite mailSprite;
+        [SerializeField] private Sprite fallbackSprite;
         [SerializeField] private TMP_Text headlineText;
         [SerializeField] private TMP_Text editionText;
         [SerializeField] private TMP_Text articleText;
@@ -31,6 +33,11 @@ namespace Border.UI
         [SerializeField, Range(0.01f, 1f)] private float startScale = 0.06f;
         [SerializeField] private Vector2 startOffset = new Vector2(-300f, -180f);
         [SerializeField, Range(1f, 1.3f)] private float overshootScale = 1.08f;
+        [Header("Article Reveal")]
+        [SerializeField, Min(0f)] private float headlineCharacterSeconds = 0.055f;
+        [SerializeField, Min(0f)] private float articleCharacterSeconds = 0.012f;
+        [SerializeField, Min(0f)] private float resultLineSeconds = 0.3f;
+        [SerializeField, Min(0f)] private float sectionPauseSeconds = 0.15f;
         [SerializeField] private UnityEvent onImpact = new UnityEvent();
         [SerializeField] private UnityEvent onShown = new UnityEvent();
         [SerializeField] private UnityEvent onHidden = new UnityEvent();
@@ -42,6 +49,7 @@ namespace Border.UI
         private bool cached;
         private Action closeCallback;
         private bool closeCallbackArmed;
+        private Sprite activeSprite;
         public bool IsShowing => view != null && view.activeSelf;
         public bool IsAnimating => sequence != null && sequence.IsActive();
         public UnityEvent OnImpact => onImpact;
@@ -51,17 +59,20 @@ namespace Border.UI
         public void SetSprite(Sprite sprite)
         {
             newspaperSprite = sprite;
+            activeSprite = null;
             ApplySprite();
         }
 
         public void ShowSprite(Sprite sprite)
         {
-            SetSprite(sprite);
+            activeSprite = sprite;
+            ApplySprite();
             Show();
         }
 
         public void Present(LaunchNewspaperArticle article, Texture photo, Action onClosed)
         {
+            activeSprite = ResolveSprite(article.Medium);
             ApplyArticle(article, photo);
             closeCallback = onClosed;
             closeCallbackArmed = onClosed != null;
@@ -73,8 +84,15 @@ namespace Border.UI
         private void ApplySprite()
         {
             if (newspaperImage == null) return;
-            newspaperImage.sprite = newspaperSprite;
+            newspaperImage.sprite = activeSprite != null ? activeSprite : ResolveSprite(LaunchResultMedium.Newspaper);
             newspaperImage.preserveAspect = true;
+        }
+
+        private Sprite ResolveSprite(LaunchResultMedium medium)
+        {
+            if (medium == LaunchResultMedium.Mail && mailSprite != null) return mailSprite;
+            if (newspaperSprite != null) return newspaperSprite;
+            return fallbackSprite;
         }
 
         private void Awake() => ResetView();
@@ -104,6 +122,7 @@ namespace Border.UI
             ResetView();
             ApplySprite();
             view.SetActive(true);
+            Canvas.ForceUpdateCanvases();
             contentGroup.alpha = 1f;
             contentGroup.interactable = false;
             contentGroup.blocksRaycasts = true;
@@ -128,6 +147,17 @@ namespace Border.UI
                 restScale * 0.97f, settleDuration * 0.35f).SetEase(Ease.OutQuad));
             sequence.Append(DOTween.To(() => paper.localScale, value => paper.localScale = value,
                 restScale, settleDuration * 0.65f).SetEase(Ease.OutBack));
+            sequence.AppendCallback(() =>
+            {
+                RestorePose();
+                if (editionText != null) editionText.maxVisibleCharacters = int.MaxValue;
+            });
+            AppendTypewriter(headlineText, headlineCharacterSeconds);
+            sequence.AppendInterval(Mathf.Max(0f, sectionPauseSeconds));
+            sequence.AppendCallback(RevealPhoto);
+            AppendTypewriter(articleText, articleCharacterSeconds);
+            sequence.AppendInterval(Mathf.Max(0f, sectionPauseSeconds));
+            AppendResultLines();
             sequence.OnComplete(() =>
             {
                 sequence = null;
@@ -183,6 +213,7 @@ namespace Border.UI
         {
             sequence?.Kill();
             sequence = null;
+            HideArticle();
             if (!CachePose()) return;
             RestorePose();
             contentGroup.alpha = 1f;
@@ -192,12 +223,60 @@ namespace Border.UI
             view.SetActive(false);
         }
 
+        private void HideArticle()
+        {
+            if (headlineText != null) headlineText.maxVisibleCharacters = 0;
+            if (editionText != null) editionText.maxVisibleCharacters = 0;
+            if (articleText != null) articleText.maxVisibleCharacters = 0;
+            if (effectsText != null) effectsText.maxVisibleCharacters = 0;
+            if (photoImage != null) photoImage.gameObject.SetActive(false);
+            if (photoFallbackText != null) photoFallbackText.gameObject.SetActive(false);
+        }
+
+        private void RevealPhoto()
+        {
+            bool hasPhoto = photoImage != null && photoImage.texture != null;
+            if (photoImage != null) photoImage.gameObject.SetActive(hasPhoto);
+            if (photoFallbackText != null) photoFallbackText.gameObject.SetActive(!hasPhoto);
+        }
+
+        private void AppendTypewriter(TMP_Text text, float secondsPerCharacter)
+        {
+            if (text == null) return;
+            text.ForceMeshUpdate();
+            int count = text.textInfo.characterCount;
+            if (count > 0 && secondsPerCharacter > 0f)
+                sequence.Append(DOTween.To(() => text.maxVisibleCharacters,
+                    value => text.maxVisibleCharacters = value, count, count * secondsPerCharacter).SetEase(Ease.Linear));
+            sequence.AppendCallback(() => text.maxVisibleCharacters = int.MaxValue);
+        }
+
+        private void AppendResultLines()
+        {
+            if (effectsText == null) return;
+            effectsText.ForceMeshUpdate();
+            int count = effectsText.textInfo.characterCount;
+            // Reveal each result as a unit, including any visual wraps inside that result.
+            for (int i = 0; i < count; i++)
+            {
+                if (effectsText.textInfo.characterInfo[i].character != '\n' && i != count - 1) continue;
+                int end = i + 1;
+                sequence.AppendCallback(() => effectsText.maxVisibleCharacters = end);
+                sequence.AppendInterval(Mathf.Max(0f, resultLineSeconds));
+            }
+            sequence.AppendCallback(() => effectsText.maxVisibleCharacters = int.MaxValue);
+        }
+
         private void ApplyArticle(LaunchNewspaperArticle article, Texture photo)
         {
             if (headlineText != null) headlineText.text = article.Heading?.Replace(", ", ",\n");
             if (editionText != null) editionText.text = article.Edition;
             if (articleText != null) articleText.text = article.Body;
             if (effectsText != null) effectsText.text = article.Effects;
+            if (headlineText != null) headlineText.maxVisibleCharacters = int.MaxValue;
+            if (editionText != null) editionText.maxVisibleCharacters = int.MaxValue;
+            if (articleText != null) articleText.maxVisibleCharacters = int.MaxValue;
+            if (effectsText != null) effectsText.maxVisibleCharacters = int.MaxValue;
 
             if (photoImage != null)
             {

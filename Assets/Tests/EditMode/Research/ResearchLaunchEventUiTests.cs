@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Border.UI;
 using NUnit.Framework;
 using TMPro;
 using UnityEditor;
@@ -82,6 +83,44 @@ namespace Border.Research.Tests
             Assert.That(finalArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
         }
 
+        [Test]
+        public void LaunchNewspaperArticle_ResolvesDefaultAndEventMediums()
+        {
+            LaunchNewspaperArticle publicArticle = LaunchNewspaperArticle.Create(
+                CreateResult(null, visibility: TestVisibility.Public), "저고도 안정화");
+            LaunchNewspaperArticle privateArticle = LaunchNewspaperArticle.Create(
+                CreateResult(null, visibility: TestVisibility.Private), "저고도 안정화");
+            LaunchNewspaperArticle privateWhistleblower = LaunchNewspaperArticle.Create(
+                CreateResult(new LaunchOutcomeEventResult(
+                    LaunchOutcomeEventId.Whistleblower,
+                    "내부 고발자",
+                    "관계자가 비공개 실패 기록과 예산 처리에 \"비리 관계 있다\"고 주장했습니다.",
+                    "분기 연구비 -100"),
+                    visibility: TestVisibility.Private), "저고도 안정화");
+            LaunchNewspaperArticle publicCleanTelemetry = LaunchNewspaperArticle.Create(
+                CreateResult(new LaunchOutcomeEventResult(
+                    LaunchOutcomeEventId.CleanTelemetry,
+                    "그래프가 우리 편",
+                    "비행 기록이 보기 드물게 깨끗했습니다.",
+                    "연구비 +100"),
+                    visibility: TestVisibility.Public), "저고도 안정화");
+            LaunchNewspaperArticle finalArticle = LaunchNewspaperArticle.Create(
+                CreateResult(new LaunchOutcomeEventResult(
+                    LaunchOutcomeEventId.FinalProof,
+                    "최종 검증 인정",
+                    "저전력 검증을 통과했습니다.",
+                    "효율 검증 통과 · 최종 미션 성공"),
+                    missionId: LaunchMissionId.LowPowerZoneHold,
+                    visibility: TestVisibility.FinalMission,
+                    finalMissionWon: true), "저전력 구역 체류");
+
+            Assert.That(publicArticle.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
+            Assert.That(privateArticle.Medium, Is.EqualTo(LaunchResultMedium.Mail));
+            Assert.That(privateWhistleblower.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
+            Assert.That(publicCleanTelemetry.Medium, Is.EqualTo(LaunchResultMedium.Mail));
+            Assert.That(finalArticle.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
+        }
+
         [TestCaseSource(nameof(AllLaunchOutcomeEvents))]
         public void ResultReport_PopulatesNewspaperArticleAndEffects(LaunchOutcomeEventResult outcomeEvent)
         {
@@ -123,6 +162,26 @@ namespace Border.Research.Tests
             Assert.That(headline, Is.EqualTo("발사 성공 확인"));
             Assert.That(body, Does.Contain("추가 사건은 기록되지 않았다."));
             Assert.That(fallback.gameObject.activeSelf, Is.True);
+        }
+
+        [Test]
+        public void ResultReport_MissingMailSpriteFallsBackToNewspaperSprite()
+        {
+            ResearchResultReportController report = CreateReport();
+            ResearchLaunchResultData result = CreateResult(null, visibility: TestVisibility.Private);
+            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            FieldInfo mailSpriteField = typeof(NewspaperReveal).GetField("mailSprite", flags);
+            mailSpriteField.SetValue(newspaper, null);
+
+            report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
+
+            Sprite newspaperSprite = (Sprite)typeof(NewspaperReveal).GetField("newspaperSprite", flags).GetValue(newspaper);
+            Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(newspaper);
+
+            Assert.That(LaunchNewspaperArticle.Create(result, "저고도 안정화").Medium, Is.EqualTo(LaunchResultMedium.Mail));
+            Assert.That(mailSpriteField.GetValue(newspaper), Is.Null);
+            Assert.That(image.sprite, Is.SameAs(newspaperSprite));
         }
 
         [Test]
