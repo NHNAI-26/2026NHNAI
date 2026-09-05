@@ -74,7 +74,16 @@ namespace Simulation
 
         private void FixedUpdate()
         {
-            if (evaluator == null || !rocket.Launched || returning || IsExploding) return;
+            if (evaluator == null || returning || IsExploding) return;
+
+            // 클램프에 붙들려 있는 동안은 시계를 세운다 — 홀드가 이륙 타임아웃과 접지 실패 판정을
+            // 먹으면 준비 시간을 늘릴 때마다 미션 난이도가 같이 바뀐다.
+            if (!rocket.Lifted)
+            {
+                if (rocket.Holding) Status = "점화 · 클램프 유지";
+                return;
+            }
+
             Vector3 offset = transform.position - origin;
             float distance = new Vector2(offset.x, offset.z).magnitude;
             MaxAltitude = Mathf.Max(MaxAltitude, Altitude);

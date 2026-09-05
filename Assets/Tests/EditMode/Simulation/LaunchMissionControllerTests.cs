@@ -25,6 +25,8 @@ namespace Simulation.Tests
             _rocket = _object.AddComponent<Rocket>();
             // EditMode does not invoke MonoBehaviour.Awake automatically.
             Invoke(_rocket, "Awake");
+            // 이 클래스는 클램프가 풀린 뒤의 판정만 본다. 홀드 자체는 RocketSimulationTests 가 덮는다.
+            SetField(_rocket, "holdSeconds", 0f);
             _controller = _object.AddComponent<LaunchMissionController>();
             _controller.Initialize(LaunchMissionId.LowAltitude, () => true, success => _results.Add(success));
             _controller.ExplosionRequested.AddListener(() => _explosions++);

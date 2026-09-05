@@ -221,6 +221,9 @@ MonoBehaviour:
   launchSeed: 20260904
   tankMassPerFuel: 0.25
   ignitionRampSeconds: 1.2
+  holdSeconds: 2.5
+  bounceRenderer: {fileID: 2017519178}
+  bounceAmplitude: 0.25
   waterLevel: -8.9
   waterDamping: 4
   sinkDepth: 30
@@ -793,6 +796,11 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!23 &2017519178 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 3090225044714153585, guid: 28a2ca0c9638500449aeffee15117aed, type: 3}
+  m_PrefabInstance: {fileID: 864919696}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &2037640413
 PrefabInstance:
   m_ObjectHideFlags: 0

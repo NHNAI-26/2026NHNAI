@@ -439,13 +439,36 @@ UI 쪽은 `RocketDesignUI.BuildLaunchPip()`이다. 미션 컨트롤 모드에서
 발사 전에는 `isKinematic = true`로 발사대에 고정. `Launch()`가 이를 풀고, 엔진 목록을 한 번 수집하고,
 각 엔진의 연료를 만탱크로 되돌린다.
 
+### 발사는 클램프 홀드로 시작한다
+
+발사 버튼을 누른 순간 로켓이 올라가기 시작하면 "준비"가 화면에 없다. 그래서 `Launch()`는 승인·점화
+판정·질량 확정까지만 하고 **물리를 넘기지 않는다**: `holdSeconds`(기본 2.5초) 동안 로켓은 `isKinematic`
+인 채로 발사대에 붙들려 있고, 그 사이 배기가 자라고 몸통 아래쪽이 출렁이고 카메라 흔들림이 세진다.
+클램프가 풀리는 지점이 `BeginLiftoff()`다.
+
+**홀드는 연출이지 시뮬레이션이 아니다.** 홀드 동안에는 힘도 연료도 발열도 쓰지 않는다(`TickHold`가
+`RocketPart.HoldExhaust`만 부른다). 그래야 준비 시간을 늘리거나 줄여도 연료 밸런스와 미션 난이도가
+따라 움직이지 않는다 — 시뮬레이션의 t=0은 발사 버튼이 아니라 **클램프 해제**다. 같은 이유로
+`LaunchMissionController.FixedUpdate`도 `rocket.Lifted` 전에는 평가기를 돌리지 않는다. 홀드가 이륙
+타임아웃(`NoLiftoffTimeout` 10초)과 접지 실패 판정을 먹으면 안 되기 때문이다.
+
+`ThrustFraction`은 홀드 중에도 채운다 — 힘은 안 걸지만 **화면에는 점화가 보여야** 하고, 카메라 흔들림
+(`RocketBuilder.PlaceView`)이 이 값을 읽는다. 값은 `홀드 진행도 × 점화한 엔진의 추력 비율`이라
+"반만 점화한 발사는 반만 흔들린다"는 규약이 홀드 구간에도 그대로 성립한다.
+
+`holdSeconds = 0`이면 홀드 자체가 사라지고 `Launch()`가 곧바로 `BeginLiftoff()`를 부른다. 홀드 이전의
+동작이 그대로 남는 경로이고, 시뮬레이션만 보는 테스트들이 이 값을 심어 쓴다.
+
 ### 이륙은 램프로 시작한다
 
-`Launch()` 직후 첫 `FixedUpdate`에 최대 추력이 걸리면 로켓이 **튀어오른다** — 무거운 물체가 힘겹게
+클램프가 풀린 첫 `FixedUpdate`에 최대 추력이 걸리면 로켓이 **튀어오른다** — 무거운 물체가 힘겹게
 뜨는 그림이 아니라 가벼운 물체가 팝하는 그림이다. 그래서 추력을 0에서 `ignitionRampSeconds`(기본
 1.2초)에 걸쳐 `Mathf.SmoothStep`으로 올린다(`Rocket.RampFactor`). 그동안 로켓은 **발사대 데크
-콜라이더 위에 그대로 앉아 있다** — 추력 < 무게인 구성이 패드에 앉아 있는 것과 같은 상태이고,
-`isKinematic`을 붙들어 두는 별도 홀드다운은 필요 없다.
+콜라이더 위에 그대로 앉아 있다** — 추력 < 무게인 구성이 패드에 앉아 있는 것과 같은 상태다.
+
+**램프 시계는 홀드가 끝나는 순간 0부터 다시 시작한다.** 홀드 동안 램프를 미리 올려 두면 클램프가
+풀리는 프레임에 최대 추력이 그대로 걸려 결국 팝이 돌아온다. 홀드는 "준비", 램프는 "실제로 힘이
+붙는 과정"이라 두 구간이 겹치지 않는다.
 
 **램프는 힘만이 아니라 연소·발열에도 같이 걸린다**(`RocketPart.OutputAt` → `Tick(deltaTime,
 thrustScale)`). 힘만 줄이면 패드 위에서 연료를 만큼 헛되이 태우게 되는데, 배율을 같이 태우면
@@ -562,9 +585,59 @@ Unity `Simulation.EditModeTests` 96개와 `Simulation.PlayModeTests` 5개 통과
 배치"). 게이지 그래픽은 여전히 없다 — 눈금을 그리는 대신 숫자 한 줄로 끝냈다. 소진 시점의 세부(발사 시
 엔진 수, 엔진별 소진, 전 엔진 소진)는 지금도 Console 로그(`Log.D`)에만 있다.
 
-## 불꽃
+## 몸통 아래쪽 꿀렁임은 셰이더가 한다
 
-엔진 프리팹의 자식 `Flame`이 ParticleSystem 하나다. **켜고 끄는 신호는 `RocketPart.Tick`의 반환값**
+홀드 동안 로켓 하단이 부풀었다 돌아오는 것은 트랜스폼이 아니라 **`Shader/Uber/3D Object`의 정점
+변형**(`_WOBBLE_ON`, `UberApplyWobble`)이다. 이유 둘:
+
+- **로켓 트랜스폼을 흔들면 화면에서 상쇄된다.** 두 발사 뷰가 `rocket.transform.position`을 따라가므로
+  (`RocketBuilder.PlaceView`) 로켓이 움직이면 카메라가 같이 움직여 화면 한가운데 그대로 남는다.
+- **"아래쪽만"은 트랜스폼으로 표현할 수 없다.** 스케일은 메시 전체에 균일하게 걸린다. 노즈는 가만히
+  두고 엔진 쪽만 움직이는 그림은 정점 단위 가중치가 있어야 나온다.
+
+**세로 길이는 건드리지 않는다. 반지름만 부푼다.** 축 방향으로 눌렀다 펴는 squash도 만들어 봤지만
+몸통이 통째로 짧아졌다 길어지는 그림이라 "가속 준비"가 아니라 고장으로 읽혔다. 지금 식은 축에 수직인
+성분(`lateral`)만 키우고, 파형이 아래에서 위로 올라간다(`_WobbleWaves`) — 통 안에서 뭔가 surge 하는
+그림이다.
+
+**부푸는 방향은 바깥뿐이다.** 위상 함수가 `sin`이 아니라 `0.5 - 0.5·cos`라 값이 0..1에 갇힌다. 부호 있는
+파를 쓰면 주기의 절반 동안 선체가 안쪽으로 오므라들어 찌그러진 것처럼 보였다.
+
+가중치는 `_WobbleAxis` 방향의 높이가 `_WobbleHeight` 아래일 때만 붙고 제곱으로 급해진다. 축을 Vector
+프로퍼티로 노출한 것은 `_GlitchUpVector`/`_HologramObjectUpVector`/`_DissolveObjectUpVector`와 같은 이유다
+— `RocketBody` FBX는 `bakeAxisConversion: 0`이라 정점이 Z-up 원본으로 남고 루트에 X −90°가 박혀 있어
+**로컬 −Z가 아래쪽**이지만, 다른 파츠는 Y-up일 수 있다.
+
+**높이 정규화에는 `_WobbleHalfHeight`가 필요하다.** 메시가 로컬 단위로 얼마나 큰지는 셰이더가 알 수
+없다 — 이 로켓 몸통은 임포트 후 반높이가 0.005 남짓이고 프리팹 스케일 400이 그걸 되돌린다. 처음에는
+`positionOS + 0.5`로 정규화했다가 가중치가 항상 0이 나와 변형이 통째로 죽어 있었다. 지금은
+`Rocket.SetWobble`이 `Renderer.localBounds`에서 축 방향 반높이를 재서 넘긴다.
+
+**노멀은 다시 계산하지 않는다** — 기본 진폭 0.25에서 라이팅 오차가 보이지 않고, 제대로 하려면 다섯 패스
+전부에서 야코비안을 굴려야 한다. 진폭을 크게 키우게 되면 그때 손대면 된다.
+
+변형은 `UniversalForward`/`StencilOutline`/`ShadowCaster`/`DepthOnly`/`DepthNormals` 다섯 패스에 전부
+들어간다 — 하나라도 빠지면 그림자나 뎁스가 변형되지 않은 실루엣을 쓴다. `Meta`(라이트맵 베이킹)는
+제외한다. 정점을 옮긴 값은 위치 계산에만 쓰고 `output.positionOS`에는 **원본**을 넘긴다: dissolve,
+triplanar, hologram이 전부 `positionOS`를 좌표계로 쓰므로 변형값을 넣으면 텍스처가 같이 출렁인다.
+
+**변이 매니페스트에는 넣지 않았다.** `UberShaderVariantManifest`는 프리로드 화이트리스트지 전수 조합이
+아니고, `_WOBBLE_ON`은 발사 홀드 몇 초에만 켜진다. 행을 늘리면 112 행 락, `ExpectedShader`/`ExpectedPass`
+인덱스 경계, `.shadervariants`의 SHA256 상수 두 개가 전부 딸려온다.
+
+구동은 `Rocket.SetWobble` 하나뿐이다. 진동 위상과 주파수는 셰이더가 `_Time`으로 돌리므로 코드가 미는
+값은 **진폭 하나**다. 키워드는 `MaterialPropertyBlock`으로 못 켜므로(`RocketPart`의 아웃라인과 같은 제약)
+`bounceRenderer`의 머티리얼 인스턴스를 하나 들고 있다가 `OnDestroy`에서 반납한다. `bounceRenderer`가
+비어 있으면 변형만 빠지고 홀드 자체는 그대로 돈다.
+
+## 불꽃과 연기
+
+엔진 프리팹의 자식 `Flame`과 `Smoke`가 ParticleSystem 둘이다. 둘은 **같은 함수 하나**(`SetFlame` →
+`SetExhaust`)를 지난다 — 홀드·연소·셧다운 세 경로에서 켜고 끄는 규칙이 갈라지면 연기만 남거나 불꽃만
+남는 상태가 생긴다. 연기는 세기 곡선만 다르게 탄다(`sqrt`): 홀드는 진행도 0에서 시작하므로 불꽃과 같은
+곡선을 쓰면 준비 구간의 앞부분이 통째로 비어 보인다.
+
+**켜고 끄는 신호는 `RocketPart.Tick`의 반환값**
 이다 — `Rocket.FixedUpdate`가 이미 계산해서 버리던 bool이라 새 컴포넌트도, 이벤트도, 인터페이스도
 만들지 않았다. 소진 판정이 `Tick` 안에 있으므로 꺼짐 처리도 거기서 끝나고 `Rocket.cs`는 손대지 않는다.
 `flame`이 비어 있어도 동작하므로 불꽃 없는 부품도 허용된다.
@@ -573,8 +646,11 @@ Unity `Simulation.EditModeTests` 96개와 `Simulation.PlayModeTests` 5개 통과
 `Play()`/`Stop()`은 여전히 `isEmitting`으로 전이에서만 부르지만, **세기는 켜져 있는 동안 매 스텝 쓴다** —
 이륙 램프에 맞춰 `startSpeedMultiplier`와 `rateOverTimeMultiplier`가 같이 자라서, 추력이 붙는 과정이
 화면에 보이는 유일한 신호가 된다. 프리팹이 저작한 원래 배수는 첫 호출에서 한 번 캡처한다
-(`CaptureFlameDefaults`) — 이 컴포넌트에는 `Awake`가 없고 EditMode 테스트도 `Awake`를 돌리지 않아
+(`CaptureExhaustDefaults`) — 이 컴포넌트에는 `Awake`가 없고 EditMode 테스트도 `Awake`를 돌리지 않아
 지연 캡처가 두 경로를 같이 만족시킨다.
+
+홀드 구간에서는 `Tick`이 아니라 `HoldExhaust`가 이 경로를 부른다. 같은 `SetFlame`을 지나므로 세기
+규칙은 동일하고, 다른 것은 연료도 발열도 소비하지 않는다는 것뿐이다.
 
 **파티클 트랜스폼 스케일로는 하지 않는다.** 아래 로컬 스케일 문단이 기록한 루트 스케일 상쇄 문제가
 그대로 돌아오고, `FitToMesh`가 잡아 둔 노즐 바닥 위치까지 같이 흔들린다.

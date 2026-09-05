@@ -16,12 +16,27 @@ namespace Simulation
         [Tooltip("점화부터 최대 추력까지 걸리는 시간(초). 0 이면 발사 첫 프레임에 최대 추력이다.")]
         [SerializeField, Min(0f)] private float ignitionRampSeconds = 1.2f;
 
+        [Header("Launch hold")]
+        [Tooltip("발사 승인 후 발사대에 붙들려 있는 시간(초). 이 동안 힘도 연료도 쓰지 않는다 — 연출 구간이다.")]
+        [SerializeField, Min(0f)] private float holdSeconds = 2.5f;
+        [Tooltip("홀드 동안 꿀렁일 로켓 몸통 렌더러. Uber 3D Object 셰이더여야 한다. 비우면 변형하지 않는다.")]
+        [SerializeField] private Renderer bounceRenderer;
+        [Tooltip("몸통 아래쪽이 부푸는 폭. 그 높이의 반지름에 대한 비율이라 메시 크기와 무관하다.")]
+        [SerializeField, Range(0f, 0.5f)] private float bounceAmplitude = 0.25f;
+
         [Header("Splashdown")]
         [Tooltip("수면 높이(월드 y). 씬의 Ground 와 같은 값이어야 한다.")]
         [SerializeField] private float waterLevel = -6.71f;
         [SerializeField] private float waterDamping = 4f;
         [Tooltip("수면 아래 이만큼 내려가면 멈춘다.")]
         [SerializeField] private float sinkDepth = 30f;
+
+        // 키워드는 MaterialPropertyBlock 으로 못 켠다(RocketPart 의 아웃라인과 같은 이유) —
+        // 렌더러당 머티리얼 인스턴스를 하나 만들어 들고 있다가 파괴 때 반납한다.
+        private static readonly int WobbleAmplitudeId = Shader.PropertyToID("_WobbleAmplitude");
+        private static readonly int WobbleAxisId = Shader.PropertyToID("_WobbleAxis");
+        private static readonly int WobbleHalfHeightId = Shader.PropertyToID("_WobbleHalfHeight");
+        private const string WobbleKeyword = "_WOBBLE_ON";
 
         private readonly List<RocketPart> _engines = new();
         private readonly HashSet<(Collider Self, Collider Surface)> _groundContacts = new();
@@ -33,12 +48,27 @@ namespace Simulation
         private int _liveEngines;
         private float _sinceLaunch;
         private float _maxThrust;
+        private float _holdElapsed;
+        private float _ignitedFraction;
+        private Material _bounceMaterial;
 
         public bool Launched { get; private set; }
         public System.Func<bool> AuthorizeLaunch { get; set; }
         public event System.Action LaunchStarted;
         public bool FlightStopped { get; private set; }
         public float TotalBurnSeconds { get; private set; }
+
+        /// <summary>
+        /// 발사대에 붙들려 있는 중인지. 홀드는 <b>연출</b>이라 힘도 연료도 발열도 쓰지 않는다 —
+        /// 미션 시계와 연료 밸런스는 클램프가 풀리는 순간부터 돈다.
+        /// </summary>
+        public bool Holding { get; private set; }
+
+        /// <summary>클램프가 풀렸는지. 비행 판정이 읽는 게이트다.</summary>
+        public bool Lifted => Launched && !Holding;
+
+        /// <summary>홀드 진행도 0..1. 연출이 읽는 값이다.</summary>
+        public float HoldProgress { get; private set; }
 
         /// <summary>
         /// 이번 스텝에 실제로 건 추력 ÷ 전 엔진 최대 추력. 연출이 읽는 값이다(발사 카메라 흔들림).
@@ -128,10 +158,8 @@ namespace Simulation
             _groundContacts.Clear();
             Overheated = false;
             _sinceLaunch = 0f;
-            _body.isKinematic = false;
-            // 접지 속도가 90 m/s 를 넘는다. 0.02초 스텝이면 한 번에 1.8 m 이동이라
-            // Discrete 판정으로는 두께 0 인 지면 평면을 그대로 통과한다.
-            _body.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            _holdElapsed = 0f;
+            HoldProgress = 0f;
             // ponytail: engine list frozen at launch; re-collect if parts ever detach mid-flight
             GetComponentsInChildren(_engines);
 
@@ -140,11 +168,17 @@ namespace Simulation
 
             _liveEngines = 0;
             _maxThrust = 0f;
+            float ignitedThrust = 0f;
             float mass = _bodyMass;
             for (int i = 0; i < _engines.Count; i++)
             {
                 _engines[i].Prepare(_rng);
-                if (_engines[i].Ignited) _liveEngines++;
+                if (_engines[i].Ignited)
+                {
+                    _liveEngines++;
+                    ignitedThrust += _engines[i].Output;
+                }
+
                 if (_engines[i].HasStats) mass += _engines[i].Stats.FuelCapacity * tankMassPerFuel;
                 _maxThrust += _engines[i].Output; // ThrustFraction 의 분모 — 점화 실패분도 들어간다.
             }
@@ -152,9 +186,80 @@ namespace Simulation
             // 탱크가 클수록 오래 타지만 그만큼 무겁다. 점화에 실패한 엔진의 탱크도 무게는 그대로 싣고 간다.
             // 연소 중에는 줄지 않는다 — 발사 순간에 한 번 정하고 끝이다.
             _body.mass = mass;
+            _ignitedFraction = _maxThrust > 0f ? ignitedThrust / _maxThrust : 0f;
 
             Log.D($"Launch: {_liveEngines}/{_engines.Count} engine(s) ignited, {mass:0.#} kg", this);
             LaunchStarted?.Invoke();
+
+            Holding = holdSeconds > 0f;
+            if (!Holding) BeginLiftoff();
+        }
+
+        /// <summary>
+        /// 클램프 홀드 한 스텝. 배기와 흔들림만 올리고 물리는 건드리지 않는다 — 로켓은 kinematic 인 채로
+        /// 발사대에 앉아 있다. 램프 시계도 여기서는 돌지 않는다: 이륙이 시작될 때 0 부터 다시 센다.
+        /// </summary>
+        private void TickHold()
+        {
+            _holdElapsed += Time.fixedDeltaTime;
+            HoldProgress = Mathf.Clamp01(_holdElapsed / holdSeconds);
+
+            foreach (RocketPart engine in _engines) engine.HoldExhaust(HoldProgress);
+            SetWobble(bounceAmplitude * HoldProgress);
+            // 카메라 흔들림이 읽는 값(RocketBuilder.PlaceView). 힘은 안 걸지만 화면에는 점화가 보여야
+            // 하고, 반만 점화한 발사는 여기서도 반만 흔들린다.
+            ThrustFraction = HoldProgress * _ignitedFraction;
+
+            if (_holdElapsed < holdSeconds) return;
+
+            Holding = false;
+            BeginLiftoff();
+        }
+
+        /// <summary>클램프 해제. 여기서부터가 시뮬레이션이다 — 램프도 미션 시계도 이 순간이 0 이다.</summary>
+        private void BeginLiftoff()
+        {
+            SetWobble(0f);
+            _sinceLaunch = 0f;
+            _body.isKinematic = false;
+            // 접지 속도가 90 m/s 를 넘는다. 0.02초 스텝이면 한 번에 1.8 m 이동이라
+            // Discrete 판정으로는 두께 0 인 지면 평면을 그대로 통과한다.
+            _body.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        }
+
+        /// <summary>
+        /// 몸통 아래쪽 wobble 진폭. 진동 위상은 셰이더가 <c>_Time</c> 으로 돌리므로 코드가 미는 값은
+        /// 세기 하나뿐이다. 0 이면 키워드까지 꺼서 정점 변형이 아예 컴파일에서 빠진다.
+        /// </summary>
+        private void SetWobble(float amplitude)
+        {
+            if (bounceRenderer == null) return;
+
+            if (_bounceMaterial == null)
+            {
+                _bounceMaterial = bounceRenderer.material; // 여기서 인스턴스가 만들어진다
+                // 메시가 로컬 단위로 얼마나 큰지는 셰이더가 알 수 없다. 임포트 스케일이 메시마다
+                // 다르므로(이 로켓 몸통은 반높이가 0.01 남짓이다) 축 방향 반높이를 여기서 재서 넘긴다 —
+                // 그래야 진폭과 높이 비율이 메시 크기와 무관하게 0..1 로 읽힌다.
+                Vector3 axis = _bounceMaterial.GetVector(WobbleAxisId);
+                Vector3 extents = bounceRenderer.localBounds.extents;
+                _bounceMaterial.SetFloat(WobbleHalfHeightId, Mathf.Max(
+                    Mathf.Abs(Vector3.Dot(extents, axis.normalized)), 1e-4f));
+            }
+
+            _bounceMaterial.SetFloat(WobbleAmplitudeId, amplitude);
+            if (amplitude > 0f) _bounceMaterial.EnableKeyword(WobbleKeyword);
+            else _bounceMaterial.DisableKeyword(WobbleKeyword);
+        }
+
+        /// <summary>인스턴스는 우리가 만들었으니 우리가 지운다 — <c>RocketPart.ReleaseMaterials</c> 와 같다.</summary>
+        private void OnDestroy()
+        {
+            if (_bounceMaterial == null) return;
+
+            if (Application.isPlaying) Destroy(_bounceMaterial);
+            else DestroyImmediate(_bounceMaterial);
+            _bounceMaterial = null;
         }
 
         /// <summary>
@@ -181,6 +286,10 @@ namespace Simulation
         public void StopFlight()
         {
             FlightStopped = true;
+            // 홀드 중 자폭도 여기를 지난다 — 끊지 않으면 로켓이 클램프에 갇힌 채로 남는다.
+            Holding = false;
+            HoldProgress = 0f;
+            SetWobble(0f);
             ThrustFraction = 0f;
             foreach (RocketPart engine in _engines) engine.Shutdown();
             _body.isKinematic = true;
@@ -201,10 +310,14 @@ namespace Simulation
             _body.mass = _bodyMass;
             _body.linearDamping = initialLinearDamping;
             _body.angularDamping = initialAngularDamping;
-            Launched = FlightStopped = Overheated = Splashed = false;
+            Launched = FlightStopped = Overheated = Splashed = Holding = false;
             TotalBurnSeconds = 0f;
             ThrustFraction = 0f;
+            HoldProgress = 0f;
+            SetWobble(0f);
             _sinceLaunch = 0f;
+            _holdElapsed = 0f;
+            _ignitedFraction = 0f;
             _maxThrust = 0f;
             _liveEngines = 0;
             _engines.Clear();
@@ -212,6 +325,12 @@ namespace Simulation
 
         private void FixedUpdate()
         {
+            if (Holding)
+            {
+                TickHold();
+                return;
+            }
+
             if (Launched && !_body.isKinematic) TickWater();
             if (!Launched || Overheated || Splashed || FlightStopped)
             {

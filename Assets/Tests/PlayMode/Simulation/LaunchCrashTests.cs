@@ -12,6 +12,7 @@ namespace Simulation.Tests
     {
         private static readonly MethodInfo RocketTick = typeof(Rocket).GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly MethodInfo MissionTick = typeof(LaunchMissionController).GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo HoldSecondsField = typeof(Rocket).GetField("holdSeconds", BindingFlags.Instance | BindingFlags.NonPublic);
         private Scene scene;
         private PhysicsScene physics;
         private Rocket rocket;
@@ -31,6 +32,8 @@ namespace Simulation.Tests
             shape.transform.SetParent(root.transform, true);
             shape.AddComponent<BoxCollider>();
             rocket = root.AddComponent<Rocket>();
+            // 추락 판정만 보는 클래스다 — 클램프 홀드는 연출이라 여기서는 건너뛴다.
+            HoldSecondsField.SetValue(rocket, 0f);
             mission = root.AddComponent<LaunchMissionController>();
             mission.Initialize(LaunchMissionId.HighAltitude, () => true, success =>
             {
