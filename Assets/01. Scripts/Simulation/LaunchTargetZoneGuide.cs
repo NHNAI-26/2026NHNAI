@@ -35,8 +35,6 @@ namespace Simulation
         private const string HologramKeyword = "_HOLOGRAM_ON";
         private const string TransparentKeyword = "_SURFACE_TYPE_TRANSPARENT";
         private const string UnlitKeyword = "_UNLIT_ON";
-        private const float TargetVisualScaleMultiplier = 2f;
-
         private readonly Color idleColor = new(1f, 0.86f, 0.22f, 0.28f);
         private readonly Color activeColor = new(1f, 1f, 0.38f, 0.52f);
 
@@ -49,7 +47,6 @@ namespace Simulation
         private Material arrowMaterial;
         private Transform rocket;
         private Bounds targetBounds;
-        private float targetRadius;
 
         public Bounds TargetBounds => targetBounds;
         public bool IsVisible => targetRoot != null && targetRoot.gameObject.activeSelf;
@@ -57,11 +54,10 @@ namespace Simulation
         public Material ArrowMaterial => arrowMaterial;
         public Mesh ArrowMesh => arrowMesh;
 
-        public void Initialize(Transform rocketTransform, Vector3 center, float radius)
+        public void Initialize(Transform rocketTransform, Bounds bounds)
         {
             rocket = rocketTransform;
-            targetRadius = Mathf.Max(radius, 0.01f);
-            targetBounds = new Bounds(center, Vector3.one * (targetRadius * 2f));
+            targetBounds = bounds;
             CreateTargetCube();
             CreateArrow();
             Tick(false);
@@ -115,8 +111,7 @@ namespace Simulation
                 DestroyUnityObject(collider);
             }
             host.transform.SetPositionAndRotation(targetBounds.center, Quaternion.identity);
-            host.transform.localScale = Vector3.one *
-                (targetRadius * 2f * TargetVisualScaleMultiplier);
+            host.transform.localScale = targetBounds.size;
             targetRoot = host.transform;
             targetRenderer = host.GetComponent<MeshRenderer>();
             targetRenderer.shadowCastingMode = ShadowCastingMode.Off;

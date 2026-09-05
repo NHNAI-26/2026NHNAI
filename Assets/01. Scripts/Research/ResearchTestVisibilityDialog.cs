@@ -46,6 +46,7 @@ namespace Border.Research
             privateToggle.SetIsOnWithoutNotify(!finalMission);
             LaunchMissionConfig mission = model.GetConfiguredMissionConfig(missionId);
             missionText.text = $"MISSION {(int)missionId} : {mission.DisplayName}";
+            missionText.ForceMeshUpdate();
             publicDetails.text = Describe(TestVisibility.Public, finalMission);
             privateDetails.text = Describe(TestVisibility.Private, finalMission);
             TMP_Text confirmLabel = confirmButton.GetComponentInChildren<TMP_Text>(true);
