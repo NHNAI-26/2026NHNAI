@@ -13,6 +13,56 @@ namespace Simulation.Tests
     public sealed class NewspaperPresentationTests
     {
         [UnityTest]
+        public IEnumerator SplashdownStageCompletion_PreservesResultAndPhotoForNewspaper()
+        {
+            ResearchFlowSession.ResetForTests();
+            yield return null;
+            GameObject stageObject = null;
+            GameObject rocketObject = null;
+            GameObject reportObject = null;
+            try
+            {
+                var session = ResearchFlowSession.GetOrCreate();
+                session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
+                session.TryBeginPendingDesignLaunch();
+                var photo = new Texture2D(4, 3);
+                session.SetLaunchPhoto(photo, session.LaunchPhotoGeneration);
+                rocketObject = new GameObject("Splashdown result test");
+                var mission = rocketObject.AddComponent<LaunchMissionController>();
+                mission.Initialize(LaunchMissionId.LowAltitude, () => true, _ => { });
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var evaluator = (LaunchMissionEvaluator)typeof(LaunchMissionController).GetField("evaluator", flags).GetValue(mission);
+                evaluator.Step(4f, 0f, 0f, 0f, 0f, 0f, hasSplashed: true);
+                Assert.That(mission.TerminationReason, Is.EqualTo(LaunchTerminationReason.Splashdown));
+                stageObject = new GameObject("Splashdown stage test");
+                var stage = stageObject.AddComponent<SimulationStageHost>();
+                typeof(SimulationStageHost).GetField("mission", flags).SetValue(stage, mission);
+                typeof(SimulationStageHost).GetField("launchResultHoldSeconds", flags).SetValue(stage, 60f);
+                var complete = typeof(SimulationStageHost).GetMethod("CompleteLaunch", flags);
+                complete.Invoke(stage, new object[] { false });
+                yield return null;
+                Assert.That(session.HasUnacknowledgedLaunchResult, Is.True);
+                Assert.That(session.LastLaunchResult.TerminationReason, Is.EqualTo(LaunchTerminationReason.Splashdown));
+                Assert.That(session.LaunchPhoto, Is.SameAs(photo));
+                Assert.That(photo != null, Is.True);
+                int funds = session.Model.Funds;
+                complete.Invoke(stage, new object[] { false });
+                Assert.That(session.Model.Funds, Is.EqualTo(funds));
+                reportObject = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/ResearchResultReport.prefab"));
+                reportObject.GetComponent<ResearchResultReportController>().Initialize(session, session.LastLaunchResult, session.AcknowledgeLaunchResult);
+                Assert.That(reportObject.GetComponentInChildren<NewspaperReveal>(true).IsShowing, Is.True);
+            }
+            finally
+            {
+                if (reportObject != null) Object.Destroy(reportObject);
+                if (stageObject != null) Object.Destroy(stageObject);
+                if (rocketObject != null) Object.Destroy(rocketObject);
+                ResearchFlowSession.ResetForTests();
+            }
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator NewspaperClosesOnceAfterIntro_AndReleasesPhotoWithoutAnotherReward()
         {
             ResearchFlowSession.ResetForTests();

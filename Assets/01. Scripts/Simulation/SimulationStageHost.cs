@@ -213,8 +213,7 @@ namespace Simulation
             if (session.CompleteActiveLaunch(succeeded, mission != null ? mission.Status : null,
                 mission != null ? mission.TerminationReason : LaunchTerminationReason.Unknown,
                 out ResearchLaunchResultData result) != ResearchActionResult.Success) return;
-            // Physical missions return directly to research; keep the result available in its status panel.
-            session.AcknowledgeLaunchResult();
+            // Keep the result and photograph until the player dismisses its newspaper.
             // 등급은 여기서만 확정된다 — 발사 정보 패널이 스스로 알 수 없으므로 건네준다.
             if (designUI != null) designUI.ShowLaunchResult(result.Grade);
             StartCoroutine(HoldThenUnload());
