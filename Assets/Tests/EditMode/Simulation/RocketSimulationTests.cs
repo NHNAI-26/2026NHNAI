@@ -391,6 +391,30 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void TrailDotWorldSize_HoldsTheSameScreenFraction_AtEveryDistance()
+        {
+            const float Fraction = 0.015f;
+            const float Fov = 60f;
+
+            // 거리에 정비례해야 화면에서 같은 크기로 남는다. 월드 크기를 고정하면 멀어질수록 사라진다.
+            float near = RocketBuilder.TrailDotWorldSize(Fraction, 40f, Fov);
+            float far = RocketBuilder.TrailDotWorldSize(Fraction, 400f, Fov);
+            Assert.AreEqual(near * 10f, far, 1e-3f, "거리가 10배면 월드 크기도 10배여야 한다.");
+
+            // 계약 자체: 그 거리에서 화면이 담는 세로 길이 대비 비율이 항상 Fraction 이다.
+            foreach (float distance in new[] { 40f, 150f, 500f })
+            {
+                float size = RocketBuilder.TrailDotWorldSize(Fraction, distance, Fov);
+                float screenHeight = 2f * distance * Mathf.Tan(Fov * 0.5f * Mathf.Deg2Rad);
+                Assert.AreEqual(Fraction, size / screenHeight, 1e-5f, $"거리 {distance}");
+            }
+
+            // 화각이 넓어지면 같은 비율을 채우는 데 더 큰 점이 필요하다 — FOV 를 상수로 박으면 안 된다.
+            Assert.Greater(RocketBuilder.TrailDotWorldSize(Fraction, 150f, 90f),
+                RocketBuilder.TrailDotWorldSize(Fraction, 150f, 60f));
+        }
+
+        [Test]
         public void TrailCullingMask_ShowsTheTrailToExactlyOneView_AndFollowsTheSwap()
         {
             const int Layer = 8;                 // Trajectory
