@@ -139,7 +139,7 @@ namespace Border.Research.Tests
             Assert.That(result.QuarterlyFundingDelta, Is.EqualTo(77));
             CreateOperation();
             Assert.That(report.gameObject.activeSelf, Is.True);
-            Assert.That(FindText(report.gameObject, "Body").text, Does.Contain("222").And.Contain("+77"));
+            Assert.That(FindText(report.gameObject, "Effects").text, Does.Contain("222").And.Contain("+77"));
         }
 
         [TestCase(1, true, ResearchGrade.B)]
@@ -240,9 +240,8 @@ namespace Border.Research.Tests
             Invoke(operation, "ShowResultReport", result);
             Assert.That(report.gameObject.activeSelf, Is.True);
             Assert.That(ending.gameObject.activeSelf, Is.False);
-            Button close = FindButton(report.gameObject, "CloseButton");
-            close.onClick.Invoke();
-            close.onClick.Invoke();
+            Invoke(report, "Respond");
+            Invoke(report, "Respond");
             Assert.That(ending.gameObject.activeSelf, Is.True);
             Assert.That(report.gameObject.activeSelf, Is.False);
             Assert.That(operation.Model.Funds, Is.EqualTo(funds));
@@ -253,8 +252,8 @@ namespace Border.Research.Tests
             Assert.That(report.gameObject.activeSelf, Is.False);
             int callbacks = 0;
             report.Initialize(session, result, () => callbacks++);
-            close.onClick.Invoke();
-            close.onClick.Invoke();
+            Invoke(report, "Respond");
+            Invoke(report, "Respond");
             Assert.That(callbacks, Is.EqualTo(1));
             Assert.That(operation.Model.Funds, Is.EqualTo(funds));
         }

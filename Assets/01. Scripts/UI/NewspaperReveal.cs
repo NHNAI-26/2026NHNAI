@@ -1,5 +1,8 @@
+using System;
 using Border.Events;
+using Border.Research;
 using DG.Tweening;
+using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -15,6 +18,12 @@ namespace Border.UI
         [SerializeField] private CanvasGroup backdrop;
         [SerializeField] private Image newspaperImage;
         [SerializeField] private Sprite newspaperSprite;
+        [SerializeField] private TMP_Text headlineText;
+        [SerializeField] private TMP_Text editionText;
+        [SerializeField] private TMP_Text articleText;
+        [SerializeField] private TMP_Text effectsText;
+        [SerializeField] private RawImage photoImage;
+        [SerializeField] private TMP_Text photoFallbackText;
         [SerializeField] private VoidEventChannelSO showEvent;
         [SerializeField, Min(0.01f)] private float flyDuration = 0.65f;
         [SerializeField, Min(0.01f)] private float settleDuration = 0.22f;
@@ -31,6 +40,8 @@ namespace Border.UI
         private Vector3 restScale;
         private Quaternion restRotation;
         private bool cached;
+        private Action closeCallback;
+        private bool closeCallbackArmed;
         public bool IsShowing => view != null && view.activeSelf;
         public bool IsAnimating => sequence != null && sequence.IsActive();
         public UnityEvent OnImpact => onImpact;
@@ -47,6 +58,14 @@ namespace Border.UI
         {
             SetSprite(sprite);
             Show();
+        }
+
+        public void Present(LaunchNewspaperArticle article, Texture photo, Action onClosed)
+        {
+            ApplyArticle(article, photo);
+            closeCallback = onClosed;
+            closeCallbackArmed = onClosed != null;
+            ShowInternal(clearCloseCallback: false);
         }
 
         private void OnValidate() => ApplySprite();
@@ -67,16 +86,25 @@ namespace Border.UI
         private void OnDisable()
         {
             if (showEvent != null) showEvent.OnEventRaised -= Show;
+            ClearCloseCallback();
+            ClearPhoto();
             ResetView();
         }
 
         [ContextMenu("Preview Reveal (Play Mode)")]
         public void Show()
         {
+            ShowInternal(clearCloseCallback: true);
+        }
+
+        private void ShowInternal(bool clearCloseCallback)
+        {
             if (!Application.isPlaying || !isActiveAndEnabled || !CachePose()) return;
+            if (clearCloseCallback) ClearCloseCallback();
             ResetView();
             ApplySprite();
             view.SetActive(true);
+            contentGroup.alpha = 1f;
             contentGroup.interactable = false;
             contentGroup.blocksRaycasts = true;
             paper.anchoredPosition = restPosition + startOffset;
@@ -111,9 +139,26 @@ namespace Border.UI
 
         public void Hide()
         {
-            bool wasShowing = IsShowing;
-            ResetView();
-            if (wasShowing) onHidden.Invoke();
+            if (!IsShowing || IsAnimating) return;
+            sequence?.Kill();
+            sequence = DOTween.Sequence().SetUpdate(true).SetTarget(this);
+            contentGroup.interactable = false;
+            contentGroup.blocksRaycasts = false;
+            sequence.Append(DOTween.To(() => contentGroup.alpha, value => contentGroup.alpha = value,
+                0f, Mathf.Min(0.2f, settleDuration)).SetEase(Ease.OutQuad));
+            sequence.Join(DOTween.To(() => backdrop.alpha, value => backdrop.alpha = value,
+                0f, Mathf.Min(0.2f, settleDuration)).SetEase(Ease.OutQuad));
+            sequence.OnComplete(() =>
+            {
+                sequence = null;
+                bool shouldInvoke = closeCallbackArmed;
+                Action callback = closeCallback;
+                ClearCloseCallback();
+                ResetView();
+                ClearPhoto();
+                onHidden.Invoke();
+                if (shouldInvoke) callback?.Invoke();
+            });
         }
 
         private bool CachePose()
@@ -140,10 +185,50 @@ namespace Border.UI
             sequence = null;
             if (!CachePose()) return;
             RestorePose();
+            contentGroup.alpha = 1f;
             contentGroup.interactable = false;
             contentGroup.blocksRaycasts = false;
             backdrop.alpha = 0f;
             view.SetActive(false);
+        }
+
+        private void ApplyArticle(LaunchNewspaperArticle article, Texture photo)
+        {
+            if (headlineText != null) headlineText.text = article.Heading?.Replace(", ", ",\n");
+            if (editionText != null) editionText.text = article.Edition;
+            if (articleText != null) articleText.text = article.Body;
+            if (effectsText != null) effectsText.text = article.Effects;
+
+            if (photoImage != null)
+            {
+                photoImage.texture = photo;
+                photoImage.gameObject.SetActive(photo != null);
+            }
+
+            if (photoFallbackText != null)
+            {
+                photoFallbackText.gameObject.SetActive(photo == null);
+            }
+        }
+
+        private void ClearCloseCallback()
+        {
+            closeCallback = null;
+            closeCallbackArmed = false;
+        }
+
+        private void ClearPhoto()
+        {
+            if (photoImage != null)
+            {
+                photoImage.texture = null;
+                photoImage.gameObject.SetActive(false);
+            }
+
+            if (photoFallbackText != null)
+            {
+                photoFallbackText.gameObject.SetActive(true);
+            }
         }
     }
 }

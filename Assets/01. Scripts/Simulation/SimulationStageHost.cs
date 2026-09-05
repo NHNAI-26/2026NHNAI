@@ -34,6 +34,7 @@ namespace Simulation
         private bool loaded;
         private bool busy;
         private LaunchMissionController mission;
+        private LaunchPhotoCapture photoCapture;
         public string LaunchMessage { get; private set; }
 
         public static bool OpenDesignStage()
@@ -124,6 +125,8 @@ namespace Simulation
             Rocket rocket = FindFirstObjectByType<Rocket>();
             if (rocket != null)
             {
+                photoCapture = rocket.gameObject.AddComponent<LaunchPhotoCapture>();
+                photoCapture.Initialize(rocket, simulationCamera, session);
                 mission = rocket.gameObject.AddComponent<LaunchMissionController>();
                 mission.Initialize(session.HasPendingDesignEntry ? session.PendingDesignEntry.MissionId : session.Model.GetCurrentMission(),
                     () => BeginLaunch(rocket), CompleteLaunch);
@@ -137,6 +140,7 @@ namespace Simulation
         private IEnumerator UnloadRoutine()
         {
             busy = true;
+            while (photoCapture != null && photoCapture.IsCapturing) yield return null;
 
             if (designUI != null) Destroy(designUI.gameObject);
             designUI = null;
@@ -157,6 +161,7 @@ namespace Simulation
             }
             ResearchFlowSession.GetOrCreate().ClearPendingDesignEntry();
             mission = null;
+            photoCapture = null;
 
             loaded = false;
             busy = false;

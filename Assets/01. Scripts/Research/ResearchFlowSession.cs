@@ -27,6 +27,25 @@ namespace Border.Research
         public bool HasLastLaunchResult => hasLastLaunchResult;
         public bool HasUnacknowledgedLaunchResult { get; private set; }
         public bool HasActiveLaunch => Model.HasActiveLaunch;
+        public Texture2D LaunchPhoto { get; private set; }
+        public int LaunchPhotoGeneration { get; private set; }
+
+        public void SetLaunchPhoto(Texture2D photo, int generation)
+        {
+            if (generation != LaunchPhotoGeneration || (!HasActiveLaunch && !HasUnacknowledgedLaunchResult))
+            {
+                if (photo != null) DestroySessionObject(photo);
+                return;
+            }
+            ReleaseLaunchPhoto();
+            LaunchPhoto = photo;
+        }
+
+        private void ReleaseLaunchPhoto()
+        {
+            if (LaunchPhoto != null) DestroySessionObject(LaunchPhoto);
+            LaunchPhoto = null;
+        }
 
         public ResearchDesignEntryData PendingDesignEntry
         {
@@ -114,6 +133,8 @@ namespace Border.Research
             ResearchActionResult action = Model.BeginLaunch(pendingDesignEntry);
             if (action == ResearchActionResult.Success)
             {
+                ReleaseLaunchPhoto();
+                LaunchPhotoGeneration++;
                 hasLastLaunchResult = false;
                 ClearPendingDesignEntry();
             }
@@ -154,6 +175,8 @@ namespace Border.Research
             ResearchActionResult actionResult = Model.CommitLaunch(pendingDesignEntry, out result);
             if (actionResult == ResearchActionResult.Success)
             {
+                ReleaseLaunchPhoto();
+                LaunchPhotoGeneration++;
                 lastLaunchResult = result;
                 hasLastLaunchResult = true;
                 HasUnacknowledgedLaunchResult = true;
@@ -173,6 +196,7 @@ namespace Border.Research
         public void AcknowledgeLaunchResult()
         {
             HasUnacknowledgedLaunchResult = false;
+            ReleaseLaunchPhoto();
         }
 
         private void QueueOutcome(ResearchLaunchResultData result, string reason)
@@ -192,6 +216,8 @@ namespace Border.Research
 
         public void ResetResearch()
         {
+            ReleaseLaunchPhoto();
+            LaunchPhotoGeneration++;
             model = CreateModel();
             ClearPendingDesignEntry();
             lastLaunchResult = default;
@@ -211,6 +237,7 @@ namespace Border.Research
         {
             foreach (ResearchFlowSession session in FindObjectsByType<ResearchFlowSession>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
+                session.ReleaseLaunchPhoto();
                 DestroySessionObject(session.gameObject);
             }
 
@@ -232,6 +259,12 @@ namespace Border.Research
             {
                 DontDestroyOnLoad(gameObject);
             }
+        }
+
+        private void OnDestroy()
+        {
+            ReleaseLaunchPhoto();
+            if (instance == this) instance = null;
         }
 
         private static void DestroySessionObject(UnityEngine.Object target)

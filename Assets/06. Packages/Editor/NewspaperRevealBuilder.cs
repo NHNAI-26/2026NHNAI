@@ -1,4 +1,6 @@
 using Border.UI;
+using Border.Research;
+using TMPro;
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEditor.SceneManagement;
@@ -9,6 +11,116 @@ using UnityEngine.UI;
 public static class NewspaperRevealBuilder
 {
     private const string PrefabPath = "Assets/03. Prefabs/UI/NewspaperReveal.prefab";
+
+    [MenuItem("Border/UI/Apply Launch Newspaper")]
+    public static void ApplyLaunchNewspaper()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode) throw new System.InvalidOperationException("Exit Play Mode first.");
+        const string reportPath = "Assets/03. Prefabs/UI/ResearchResultReport.prefab";
+        const string spritePath = "Assets/05. Arts/UI/Newspaper/newspaper-original-transparent.png";
+        Sprite sprite = null;
+        foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(spritePath))
+            if (asset is Sprite candidate) { sprite = candidate; break; }
+        if (sprite == null) throw new System.InvalidOperationException("Newspaper sprite is not imported.");
+        GameObject reportAsset = AssetDatabase.LoadAssetAtPath<GameObject>(reportPath);
+        TMP_FontAsset font = reportAsset.GetComponentInChildren<TMP_Text>(true)?.font ?? TMP_Settings.defaultFontAsset;
+        GameObject newspaperRoot = PrefabUtility.LoadPrefabContents(PrefabPath);
+        try
+        {
+            var reveal = newspaperRoot.GetComponent<NewspaperReveal>();
+            var serialized = new SerializedObject(reveal);
+            var view = (GameObject)serialized.FindProperty("view").objectReferenceValue;
+            view.GetComponent<Canvas>().sortingOrder = 30;
+            var paper = (RectTransform)serialized.FindProperty("paper").objectReferenceValue;
+            paper.anchorMin = new Vector2(0.1f, 0.025f);
+            paper.anchorMax = new Vector2(0.9f, 0.975f);
+            paper.offsetMin = paper.offsetMax = Vector2.zero;
+            var content = (RectTransform)paper.Find("Content");
+            var fitter = content.GetComponent<AspectRatioFitter>() ?? content.gameObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            fitter.aspectRatio = sprite.rect.width / sprite.rect.height;
+            serialized.FindProperty("newspaperSprite").objectReferenceValue = sprite;
+            serialized.FindProperty("showEvent").objectReferenceValue = null;
+            TMP_Text heading = PaperText("Headline", content, font, sprite, 405, 92, 536, 94, 28, 20);
+            heading.fontStyle = FontStyles.Bold;
+            TMP_Text edition = PaperText("Edition", content, font, sprite, 252, 290, 770, 40, 14, 12);
+            TMP_Text body = PaperText("Body", content, font, sprite, 792, 362, 226, 286, 15, 12);
+            TMP_Text effects = PaperText("Effects", content, font, sprite, 262, 998, 752, 146, 15, 12);
+            var effectsBackground = EnsureRect("EffectsBackground", content);
+            PlaceOnPaper(effectsBackground, sprite, 246, 976, 788, 184);
+            var background = effectsBackground.GetComponent<Image>() ?? effectsBackground.gameObject.AddComponent<Image>();
+            background.color = new Color(0.91f, 0.88f, 0.79f, 1f);
+            background.raycastTarget = false;
+            effectsBackground.SetSiblingIndex(effects.transform.GetSiblingIndex());
+            var photoRect = EnsureRect("Photo", content);
+            PlaceOnPaper(photoRect, sprite, 407, 369, 366, 274.5f);
+            var photo = photoRect.GetComponent<RawImage>() ?? photoRect.gameObject.AddComponent<RawImage>();
+            photo.raycastTarget = false;
+            var fallback = PaperText("PhotoFallback", content, font, sprite, 407, 369, 366, 274.5f, 15, 12);
+            fallback.alignment = TextAlignmentOptions.Center;
+            fallback.text = "현장 사진 수신 실패";
+            serialized.FindProperty("headlineText").objectReferenceValue = heading;
+            serialized.FindProperty("editionText").objectReferenceValue = edition;
+            serialized.FindProperty("articleText").objectReferenceValue = body;
+            serialized.FindProperty("effectsText").objectReferenceValue = effects;
+            serialized.FindProperty("photoImage").objectReferenceValue = photo;
+            serialized.FindProperty("photoFallbackText").objectReferenceValue = fallback;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            reveal.SetSprite(sprite);
+            photo.gameObject.SetActive(false);
+            PrefabUtility.SaveAsPrefabAsset(newspaperRoot, PrefabPath);
+        }
+        finally { PrefabUtility.UnloadPrefabContents(newspaperRoot); }
+
+        GameObject report = PrefabUtility.LoadPrefabContents(reportPath);
+        try
+        {
+            // Keep the report root/GUID so all existing scene result routes remain connected.
+            for (int i = report.transform.childCount - 1; i >= 0; i--)
+                Object.DestroyImmediate(report.transform.GetChild(i).gameObject);
+            var paperInstance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath), report.transform);
+            var adapter = new SerializedObject(report.GetComponent<ResearchResultReportController>());
+            adapter.FindProperty("newspaper").objectReferenceValue = paperInstance.GetComponent<NewspaperReveal>();
+            adapter.ApplyModifiedPropertiesWithoutUndo();
+            report.SetActive(false);
+            PrefabUtility.SaveAsPrefabAsset(report, reportPath);
+        }
+        finally { PrefabUtility.UnloadPrefabContents(report); }
+        AssetDatabase.SaveAssets();
+    }
+
+    private static RectTransform EnsureRect(string name, Transform parent)
+    {
+        return parent.Find(name) as RectTransform ?? Rect(name, parent, Vector2.zero, Vector2.one);
+    }
+
+    private static void PlaceOnPaper(RectTransform rect, Sprite sprite, float x, float y, float width, float height)
+    {
+        Rect crop = sprite.rect;
+        float top = sprite.texture.height - crop.y;
+        rect.anchorMin = new Vector2((x - crop.x) / crop.width, (top - y - height) / crop.height);
+        rect.anchorMax = new Vector2((x + width - crop.x) / crop.width, (top - y) / crop.height);
+        rect.offsetMin = rect.offsetMax = Vector2.zero;
+    }
+
+    private static TMP_Text PaperText(string name, Transform parent, TMP_FontAsset font, Sprite sprite,
+        float x, float y, float width, float height, float fontSize, float minimum)
+    {
+        var rect = EnsureRect(name, parent);
+        PlaceOnPaper(rect, sprite, x, y, width, height);
+        var text = rect.GetComponent<TextMeshProUGUI>() ?? rect.gameObject.AddComponent<TextMeshProUGUI>();
+        text.font = font;
+        text.color = new Color(0.08f, 0.075f, 0.065f, 1f);
+        text.fontSize = fontSize;
+        text.enableAutoSizing = true;
+        text.fontSizeMax = fontSize;
+        text.fontSizeMin = minimum;
+        text.textWrappingMode = TextWrappingModes.Normal;
+        text.overflowMode = TextOverflowModes.Truncate;
+        text.raycastTarget = false;
+        text.richText = false;
+        return text;
+    }
 
     [MenuItem("Border/UI/Create Newspaper Reveal")]
     public static void Create()

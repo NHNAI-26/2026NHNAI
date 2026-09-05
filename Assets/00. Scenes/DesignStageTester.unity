@@ -416,7 +416,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Border.Simulation::Border.Simulation.Rocket
   launchSeed: 20260904
+  explosionPrefab: {fileID: 4424061135003163321, guid: ad9faa0d238b11d4eb85d071e2863210, type: 3}
   tankMassPerFuel: 0.25
+  ignitionRampSeconds: 1.2
   waterLevel: -8.9
   waterDamping: 4
   sinkDepth: 30
