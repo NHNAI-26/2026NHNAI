@@ -469,18 +469,18 @@ namespace Border.Research
                 {
                     if (hologramMaterial != null)
                     {
+                        // Authored hologram material: clone per renderer and keep its tuned values.
                         materials[i] = new Material(hologramMaterial);
                     }
                     else if (materials[i] != null)
                     {
                         materials[i] = CreateFallbackHologramMaterial(materials[i]);
+                        ApplyTransparentMaterialState(materials[i], color, hologramEmissionColor);
                     }
                     else
                     {
                         continue;
                     }
-
-                    ApplyTransparentMaterialState(materials[i], color, hologramEmissionColor);
                 }
 
                 renderer.materials = materials;

@@ -143,6 +143,9 @@ namespace Border.Research
         {
             if (visibilityDialog != null) visibilityDialog.Hide();
             IsPartDevelopmentOpen = false;
+            // The animator kills its sequence on disable, so the close callback never lands — clear the guard
+            // here or every later click on 부품 개발 / 그만두기 is swallowed.
+            closingPartDevelopment = false;
             if (initialized)
             {
                 KillWaitFade();
@@ -715,7 +718,7 @@ namespace Border.Research
                 ? "새로운 엔진 개발 최대 10개"
                 : $"새로운 엔진 개발 -{model.ConfiguredNewEnginePresetCost}$";
             partDevelopmentButtonText.text = $"부품 개발\n<size=15>-{model.ConfiguredEngineNormalResearchCost}$~</size>";
-            enterDesignButtonText.text = $"로켓 설계\n<size=15>-{designEntryCost}$ / 시간 0</size>";
+            enterDesignButtonText.text = $"로켓 설계\n<size=15>-{designEntryCost}$</size>";
             waitButtonText.text = $"건너뛰기\n<size=15>+{model.NextWaitFunding}$ / +1분기</size>";
 
             RefreshPendingEffects();

@@ -4,7 +4,8 @@
     "references": [
         "Border",
         "Simulation",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "Unity.Timeline"
     ],
     "includePlatforms": [
         "Editor"

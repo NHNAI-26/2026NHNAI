@@ -1,0 +1,24 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:Style src="ParachuteDebugWindow.uss" />
+    <ui:VisualElement class="parachute-root">
+        <ui:Label text="낙하산 연출 미리보기" class="title" />
+        <ui:Label text="편집 모드에서 Timeline 연출을 확인해요. 로켓 외형만 복사하며, 원본을 비우면 기본 로켓을 사용해요." class="description" />
+        <ui:VisualElement class="row">
+            <uie:ObjectField name="rocketSource" label="로켓 원본" class="source" />
+            <ui:Button name="useCurrent" text="현재 씬 로켓" />
+        </ui:VisualElement>
+        <ui:FloatField name="altitude" label="기준 고도 (m)" is-delayed="true" />
+        <ui:Slider name="duration" label="하강 시간 (초)" low-value="4" high-value="30" show-input-field="true" />
+        <ui:Image name="viewport" class="viewport" />
+        <ui:VisualElement class="row">
+            <ui:Label name="status" class="status" />
+            <ui:Label name="clock" />
+        </ui:VisualElement>
+        <ui:Slider name="time" label="재생 위치" low-value="0" high-value="10.75" class="timeline" />
+        <ui:VisualElement class="row controls">
+            <ui:Button name="restart" text="처음부터 재생" />
+            <ui:Button name="pause" text="계속 재생" />
+            <ui:Button name="finish" text="보상 대기 종료" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

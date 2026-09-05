@@ -1,0 +1,47 @@
+.parachute-window {
+    flex-grow: 1;
+}
+.parachute-root {
+    flex-grow: 1;
+    padding: 12px;
+}
+.title {
+    font-size: 18px;
+    -unity-font-style: bold;
+    margin-bottom: 6px;
+}
+.description {
+    white-space: normal;
+    color: #bcbcbc;
+    margin-bottom: 10px;
+}
+.row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.row > Button {
+    margin-left: 6px;
+    min-height: 26px;
+}
+.source {
+    flex-grow: 1;
+}
+.viewport {
+    flex-grow: 1;
+    min-height: 240px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    background-color: #1f2e45;
+}
+.status {
+    flex-grow: 1;
+    -unity-font-style: bold;
+}
+.controls > Button {
+    flex-grow: 1;
+}
+.timeline {
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
