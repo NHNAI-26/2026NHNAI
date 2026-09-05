@@ -25,6 +25,9 @@ namespace Simulation
         // 로 스폰돼 인스펙터에서 값을 넣을 사람이 없으므로 SerializeField 가 아니라 const 다.
         private const float ToolsGap = 90f;
 
+        // 상단바 오른쪽 끝 복귀 버튼의 가로 폭(캔버스 단위). 정보 텍스트의 오른쪽 여백도 이 값에서 나온다.
+        private const float ExitButtonWidth = 96f;
+
         private static readonly Color PanelColor = new(0.15f, 0.18f, 0.22f, 0.96f);
         private static readonly Color EntryColor = new(0.22f, 0.26f, 0.31f, 1f);
         private static readonly Color EntryHoverColor = new(0.30f, 0.38f, 0.46f, 1f);
@@ -172,7 +175,13 @@ namespace Simulation
             topBarText = CreateText("Info", topBar, 18, FontStyles.Bold, string.Empty);
             topBarText.alignment = TextAlignmentOptions.Left;
             topBarText.raycastTarget = false;
-            Fill((RectTransform)topBarText.transform, 12f);
+            var infoRect = (RectTransform)topBarText.transform;
+            infoRect.anchorMin = Vector2.zero;
+            infoRect.anchorMax = Vector2.one;
+            infoRect.offsetMin = new Vector2(12f, 12f);
+            infoRect.offsetMax = new Vector2(-ExitButtonWidth - 24f, -12f); // 복귀 버튼 자리를 비운다
+
+            BuildExitButton(topBar);
 
             // 카메라 뷰포트의 유일한 원천. 정규화 상수를 따로 두면 CanvasScaler 가 늘어나는 비율에서
             // 좌측 패널과 어긋난다 — 매 프레임 이 사각형을 읽어 카메라에 먹인다.
@@ -181,6 +190,29 @@ namespace Simulation
             viewport.anchorMax = Vector2.one;
             viewport.offsetMin = new Vector2(232f, 16f);
             viewport.offsetMax = new Vector2(-16f, -88f);
+        }
+
+        /// <summary>
+        /// 설계 화면에서 연구 화면으로 나가는 유일한 문. 미션 컨트롤 모드에서만 만든다 —
+        /// `SimulationTest` 를 단독 재생할 때는 돌아갈 연구 화면 자체가 없다.
+        /// </summary>
+        private static void BuildExitButton(RectTransform topBar)
+        {
+            RectTransform rect = CreatePanel("ExitButton", topBar, EntryColor);
+            rect.anchorMin = new Vector2(1f, 0.5f);
+            rect.anchorMax = new Vector2(1f, 0.5f);
+            rect.pivot = new Vector2(1f, 0.5f);
+            rect.anchoredPosition = new Vector2(-12f, 0f);
+            rect.sizeDelta = new Vector2(ExitButtonWidth, 32f);
+
+            var button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = rect.GetComponent<Image>();
+            button.onClick.AddListener(SimulationStageHost.CloseDesignStage);
+
+            TMP_Text label = CreateText("Label", rect, 15, FontStyles.Bold, "연구 화면");
+            label.alignment = TextAlignmentOptions.Center;
+            label.raycastTarget = false;
+            Fill((RectTransform)label.transform, 4f);
         }
 
         private void BuildPresetPanel(RectTransform canvasTransform)

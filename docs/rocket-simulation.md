@@ -703,19 +703,22 @@ FBX 정점 bounds 는 `0.547 × 0.541 × 1.0`, 중심 `(0, -0.001, 0)` 으로 **
 
 ## 01_Main 에 얹기: 미션 컨트롤 뷰
 
-`01_Main`의 우상단 `시뮬레이션` 버튼(`SimulationStageHost`)이 `SimulationTest` 씬을 **additive 로** 올린다.
-연구 운영 UI는 그동안 통째로 꺼지고, 화면은 가장자리 컨트롤 패널 + 가운데 3D 뷰가 된다.
+`SimulationStageHost`가 `SimulationTest` 씬을 **additive 로** 올린다. 연구 운영 UI는 그동안 통째로 꺼지고,
+화면은 가장자리 컨트롤 패널 + 가운데 3D 뷰가 된다.
 
-호스트는 씬에 배치돼 있지 않고 `[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]` 로 만들어진다. 그 훅은
-**플레이 세션당 첫 씬 하나에만** 걸리므로, 타이틀에서 시작하면 그때 활성 씬이 `00_Title` 이라 걸러지고
-뒤이어 `01_Main` 을 로드해도 다시 불리지 않았다 — 버튼이 통째로 없었다. 그래서 훅에서
-`SceneManager.sceneLoaded` 를 구독해 **로드마다** 조건을 다시 본다. 런타임 생성인 다른 하나
-(`ResearchEnginePresetRuntimeBridge`)도 같은 이유로 같은 방식이다. `ResearchOperationUIController` 는
-`01_Main` 에 실제 오브젝트로 놓여 있어 이 문제가 없고, 손대지 않았다 — 미션 컨트롤 진입 중에는 그 루트가
-꺼져 있어서 로드마다 도는 스폰을 붙이면 중복이 하나 더 생긴다.
+들고 나는 문은 둘 다 호스트 밖에 있다. **들어갈 때**는 연구 운영 화면의 `설계 진입` 버튼이
+`ResearchOperationUIController`를 거쳐 `SimulationStageHost.OpenDesignStage()`를 부르고(리플렉션 —
+`Border` 어셈블리가 `Simulation` 을 참조하지 않는다), **나올 때**는 미션 컨트롤 상단바 오른쪽 끝
+`연구 화면` 버튼이 `SimulationStageHost.CloseDesignStage()`를 부른다. 예전에는 `01_Main` 우상단에
+호스트가 직접 만든 `시뮬레이션` 토글 버튼이 두 방향을 겸했는데, 진입점이 연구 화면 쪽으로 옮겨간 뒤로는
+메인 화면에 떠 있을 이유가 없어 삭제했다. 나가는 버튼을 미션 컨트롤 안으로 옮긴 것은 필수다 —
+토글만 지우면 설계 화면이 편도가 되어 연구 화면으로 돌아올 길이 사라진다.
 
-중복 방지 검사는 `FindObjectsInactive.Include` 로 한다. 시뮬레이션 씬을 additive 로 얹을 때도 콜백이
-도는데, 기본값(활성만)으로 찾으면 잠시 꺼 둔 오브젝트를 놓친다.
+호스트는 씬에 배치돼 있지 않고 `OpenDesignStage()`가 없을 때 직접 만든다. 버튼이 있던 시절에는 버튼을
+미리 띄우려고 `[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]` + `SceneManager.sceneLoaded` 구독으로
+씬 로드마다 호스트를 스폰했지만(그 훅은 **플레이 세션당 첫 씬 하나에만** 걸려서, 타이틀에서 시작하면
+`01_Main` 에서 다시 불리지 않았다), 지금은 진입 시점에 지연 생성하면 되므로 그 장치를 걷어냈다. 런타임
+생성인 다른 하나(`ResearchEnginePresetRuntimeBridge`)는 진입 전에 준비돼 있어야 해서 그 방식 그대로다.
 이건 아직 **테스트 화면**이다 — 설계 화면(`ResearchDesignScreenController`)을 대체한 것이 아니라
 그 옆에 붙은 별도 진입점이고, 통합 형태는 `docs/specs/rocket-design-ui-spec.md` OI-006 에서 여전히 열려 있다.
 
@@ -740,6 +743,17 @@ UI 로 판정해 3D 입력이 죽는다. 같은 이유로 전체 화면 배경 �
 `RocketBuilder.LateUpdate`가 연구 화면 카메라를 로켓 주위로 돌려버린다. URP 는 카메라를 `(int)depth`로
 정렬하므로 시뮬레이션 카메라 depth 는 정수(10)로 준다.
 
+**시뮬레이션 vcam 은 Cinemachine `Channel01` 전용이다.** 태그를 떼도 vcam 쪽 충돌은 남는다:
+`CinemachineBrain`의 `ChannelMask` 기본값이 Everything 이라 브레인은 전역 vcam 큐에서 우선순위만 보고
+고르는데, `01_Main` 에는 `Research Cinemachine Camera`(Priority 20)가 루트 오브젝트로 살아 있어
+`DesignCam`(10)을 이긴다. 그래서 `RocketBuilder`가 시뮬레이션 카메라에 붙인 브레인이 설계 카메라를
+연구 랩 자세에 묶어버렸고, 우클릭 궤도 회전이 `_yaw`만 바꾼 채 화면에는 아무 일도 일어나지 않았다
+(`SimulationTest` 단독 재생에서는 연구 vcam 이 없어 재현되지 않는다). 연구 vcam 은 `Research Operation
+UI Controller` 의 자식이 아니라 별개 루트라 진입할 때 같이 꺼지지도 않는다. 우선순위 숫자를 올리는 대신
+`DesignCam`/`LaunchCam` 의 `OutputChannel` 을 `Channel01` 로 두고 이 브레인의 `ChannelMask` 만 거기에
+맞춘다 — `01_Main` 쪽 vcam 이 늘거나 우선순위가 바뀌어도 서로 보이지 않고, 발사 때
+`LaunchCam`(20)과 연구 vcam(20)이 동점이 되는 순서 의존도 함께 사라진다.
+
 `01_Main` 카메라는 뷰포트 바깥을 채우는 **클리어 전용**으로 남긴다. 끄면 사각형 바깥이 지워지지 않고,
 그대로 두면 additive 로 올라온 시뮬레이션 씬을 전체 화면으로 한 번 더 그린다 — 배경에 3D 가 비치고
 지오메트리도 두 번 그려진다. 그래서 얹는 동안 `cullingMask = 0` + `clearFlags = SolidColor` 로 바꾸고
@@ -747,7 +761,8 @@ UI 로 판정해 3D 입력이 죽는다. 같은 이유로 전체 화면 배경 �
 
 `RocketDesignUI`는 이 때문에 두 모드를 갖는다. `SimulationTest`를 직접 재생하면 예전 그대로 좌측 패널만
 뜨고, `SimulationStageHost`가 `Spawn(true)`로 띄우면 상단 정보 바(연/분기, 연구비, 설치 엔진 가격 합)와
-뷰포트가 함께 생긴다. 본편에 남기게 되면 미션 컨트롤 쪽은 같은 캔버스 위 별도 컴포넌트로 분리할 자리다.
+`연구 화면` 복귀 버튼, 뷰포트가 함께 생긴다. 복귀 버튼이 미션 컨트롤 모드에만 있는 것은 의도다 —
+단독 재생에는 돌아갈 연구 화면이 없다. 본편에 남기게 되면 미션 컨트롤 쪽은 같은 캔버스 위 별도 컴포넌트로 분리할 자리다.
 
 설치 가격 합계는 캐시하지 않고 매 프레임 다시 센다. `RocketBuilder.Changed`는 **부착 때 발생하지 않아서**
 (`EndDrag`가 `Attach`만 부른다) 이벤트로 캐시하면 낡은 값이 남는다.

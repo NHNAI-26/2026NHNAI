@@ -192,6 +192,11 @@ namespace Simulation
             // 브레인은 코드로 붙인다 — 씬 YAML diff 를 늘리지 않고, additive 로 올라왔을 때
             // 어느 카메라가 잡히든 그 카메라가 브레인을 갖는다.
             if (!cam.TryGetComponent(out _brain)) _brain = cam.gameObject.AddComponent<CinemachineBrain>();
+            // 브레인의 기본 마스크는 Everything 이라 전역 vcam 큐에서 우선순위만으로 고른다 —
+            // 01_Main 위에 additive 로 올라오면 연구 vcam(Priority 20)이 DesignCam(10)을 눌러
+            // 설계 카메라가 연구 랩 자세에 묶인다(궤도 회전이 화면에 안 나온다). 시뮬레이션 vcam 은
+            // Channel01 전용으로 두고 이 브레인만 그 채널을 본다 — 발사 시 LaunchCam 20 동점도 없어진다.
+            _brain.ChannelMask = OutputChannels.Channel01;
             // 자동 갱신은 순서가 없다 — CinemachineBrain 에는 DefaultExecutionOrder 가 없어서
             // 이 컴포넌트의 LateUpdate 와 앞뒤가 정해지지 않는다. 기즈모가 한 프레임 밀리지 않도록
             // 브레인을 직접 돌린다(LateUpdate 끝).

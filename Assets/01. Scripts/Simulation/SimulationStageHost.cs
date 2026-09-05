@@ -1,9 +1,7 @@
 using System.Collections;
 using Border.Research;
-using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 
 namespace Simulation
 {
@@ -15,6 +13,8 @@ namespace Simulation
     /// 뷰포트 방식이면 <see cref="RocketBuilder"/> 의 집기·기즈모 좌표계가 손대지 않고 그대로 맞는다.
     /// 발사 후 우하단 작은 화면은 예외로 RenderTexture 다 — 입력을 전혀 받지 않는 표시 전용이라
     /// 그 근거가 걸리지 않는다.
+    /// 들고 나는 문은 둘 다 밖에 있다: 연구 화면의 `설계 진입` 버튼이 <see cref="OpenDesignStage"/> 를,
+    /// 미션 컨트롤 상단바의 `연구 화면` 버튼이 <see cref="CloseDesignStage"/> 를 부른다.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class SimulationStageHost : MonoBehaviour
@@ -26,9 +26,6 @@ namespace Simulation
         // URP 는 카메라를 (int)depth 로 정렬한다(UniversalRenderPipelineCore). 소수점은 0 과 같은 값이 된다.
         private const float SimulationCameraDepth = 10f;
 
-        private static readonly Color ButtonColor = new(0.22f, 0.26f, 0.31f, 1f);
-
-        private TMP_Text toggleLabel;
         private ResearchOperationUIController research;
         private Camera mainCamera;
         private int mainCameraCullingMask;
@@ -36,40 +33,6 @@ namespace Simulation
         private RocketDesignUI designUI;
         private bool loaded;
         private bool busy;
-
-        /// <summary>
-        /// <see cref="RuntimeInitializeLoadType.AfterSceneLoad"/> 는 플레이 세션당 첫 씬 하나에만 걸린다.
-        /// 타이틀에서 시작하면 그때 활성 씬이 `00_Title` 이라 여기서 걸러지고, 뒤늦게 `01_Main` 을
-        /// 로드해도 다시 불리지 않아 토글 버튼이 아예 안 생겼다 — 그래서 로드마다 다시 본다.
-        /// </summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Install()
-        {
-            // 도메인 리로드를 끈 설정(Enter Play Mode Options)에서는 정적 구독이 남아 쌓인다.
-            SceneManager.sceneLoaded -= OnSceneLoaded;
-            SceneManager.sceneLoaded += OnSceneLoaded;
-            SpawnInMainScene();
-        }
-
-        private static void OnSceneLoaded(Scene scene, LoadSceneMode mode) => SpawnInMainScene();
-
-        private static void SpawnInMainScene()
-        {
-            // 시뮬레이션 씬을 additive 로 얹을 때도 이 콜백이 돈다. 비활성 오브젝트까지 찾지 않으면
-            // 잠시 꺼 둔 호스트를 놓쳐 두 번째가 생긴다.
-            if (SceneManager.GetActiveScene().name != ResearchFlowSession.MainSceneName
-                || FindFirstObjectByType<SimulationStageHost>(FindObjectsInactive.Include) != null)
-            {
-                return;
-            }
-
-            new GameObject("Simulation Stage Host").AddComponent<SimulationStageHost>();
-        }
-
-        private void Awake()
-        {
-            BuildToggle();
-        }
 
         public static bool OpenDesignStage()
         {
@@ -87,6 +50,22 @@ namespace Simulation
             return host.OpenDesignStageInternal();
         }
 
+        /// <summary>
+        /// 설계 화면을 내리고 연구 화면으로 돌아간다. 코루틴은 호스트가 돌린다 —
+        /// <see cref="UnloadRoutine"/> 이 버튼을 품은 <see cref="RocketDesignUI"/> 를 파괴하므로
+        /// 버튼 쪽에서 돌리면 첫 프레임에 끊긴다.
+        /// </summary>
+        public static void CloseDesignStage()
+        {
+            SimulationStageHost host = FindFirstObjectByType<SimulationStageHost>();
+            if (host == null || !host.loaded || host.busy)
+            {
+                return;
+            }
+
+            host.StartCoroutine(host.UnloadRoutine());
+        }
+
         private bool OpenDesignStageInternal()
         {
             if (busy)
@@ -101,68 +80,6 @@ namespace Simulation
 
             StartCoroutine(LoadRoutine());
             return true;
-        }
-
-        private void BuildToggle()
-        {
-            var canvasObject = new GameObject("SimulationToggleCanvas", typeof(RectTransform));
-            canvasObject.transform.SetParent(transform, false);
-
-            var canvas = canvasObject.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 100; // 연구 화면과 미션 컨트롤 UI 모두 위
-            canvasObject.AddComponent<GraphicRaycaster>();
-
-            var scaler = canvasObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1280f, 720f);
-            scaler.matchWidthOrHeight = 0.5f;
-
-            var buttonObject = new GameObject("SimulationToggleButton", typeof(RectTransform));
-            buttonObject.transform.SetParent(canvasObject.transform, false);
-
-            var rect = (RectTransform)buttonObject.transform;
-            rect.anchorMin = Vector2.one;
-            rect.anchorMax = Vector2.one;
-            rect.pivot = Vector2.one;
-            rect.anchoredPosition = new Vector2(-16f, -16f);
-            rect.sizeDelta = new Vector2(110f, 40f);
-
-            var image = buttonObject.AddComponent<Image>();
-            image.color = ButtonColor;
-
-            var button = buttonObject.AddComponent<Button>();
-            button.targetGraphic = image;
-            button.onClick.AddListener(Toggle);
-
-            var labelObject = new GameObject("Label", typeof(RectTransform));
-            labelObject.transform.SetParent(buttonObject.transform, false);
-            toggleLabel = labelObject.AddComponent<TextMeshProUGUI>();
-            toggleLabel.text = "시뮬레이션";
-            toggleLabel.fontSize = 15;
-            toggleLabel.fontStyle = FontStyles.Bold;
-            toggleLabel.alignment = TextAlignmentOptions.Center;
-            toggleLabel.color = Color.white;
-            toggleLabel.raycastTarget = false;
-
-            var labelRect = (RectTransform)labelObject.transform;
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = Vector2.zero;
-            labelRect.offsetMax = Vector2.zero;
-        }
-
-        private void Toggle()
-        {
-            if (busy) return;
-
-            if (loaded)
-            {
-                StartCoroutine(UnloadRoutine());
-                return;
-            }
-
-            OpenDesignStageInternal();
         }
 
         private IEnumerator LoadRoutine()
@@ -205,7 +122,6 @@ namespace Simulation
 
             loaded = true;
             busy = false;
-            toggleLabel.text = "연구 화면";
         }
 
         private IEnumerator UnloadRoutine()
@@ -228,7 +144,6 @@ namespace Simulation
 
             loaded = false;
             busy = false;
-            toggleLabel.text = "시뮬레이션";
         }
 
         private static Camera FindSceneCamera(Scene scene)

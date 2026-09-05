@@ -47,7 +47,7 @@ MonoBehaviour:
   Priority:
     Enabled: 1
     m_Value: 10
-  OutputChannel: 1
+  OutputChannel: 2
   StandbyUpdate: 2
   m_StreamingVersion: 0
   m_LegacyPriority: 0
@@ -122,7 +122,7 @@ MonoBehaviour:
   Priority:
     Enabled: 1
     m_Value: 0
-  OutputChannel: 1
+  OutputChannel: 2
   StandbyUpdate: 2
   m_StreamingVersion: 0
   m_LegacyPriority: 0
@@ -205,13 +205,13 @@ MonoBehaviour:
   launchBlendSeconds: 1.5
   chaseDistance: 12
   cameraFloorY: -6
-  pullbackDistance: 150
-  pullbackMaxFov: 100
-  pullbackFill: 0.8
+  pullbackNearDistance: 40
+  pullbackGrowth: 3
+  pullbackFarDistance: 500
   pipResolution: {x: 320, y: 180}
   trailMaterial: {fileID: 2100000, guid: 43bf6270bcc4a45429227ef14f6d7552, type: 2}
   trailDotSpacing: 3
-  trailDotSize: 2
+  trailDotScreenSize: 0.015
   trailLayer: 8
   orbitSensitivity: 0.3
   minPitch: -20
