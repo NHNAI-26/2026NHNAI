@@ -16,6 +16,7 @@ namespace Simulation
         private static readonly int SrcBlendAlphaId = Shader.PropertyToID("_SrcBlendAlpha");
         private static readonly int DstBlendAlphaId = Shader.PropertyToID("_DstBlendAlpha");
         private static readonly int ZWriteId = Shader.PropertyToID("_ZWrite");
+        private static readonly int CullId = Shader.PropertyToID("_Cull");
         private static readonly int CastShadowsId = Shader.PropertyToID("_CastShadows");
         private static readonly int ReceiveShadowsId = Shader.PropertyToID("_ReceiveShadows");
         private static readonly int HologramEnabledId = Shader.PropertyToID("_HologramEnabled");
@@ -34,6 +35,7 @@ namespace Simulation
         private const string HologramKeyword = "_HOLOGRAM_ON";
         private const string TransparentKeyword = "_SURFACE_TYPE_TRANSPARENT";
         private const string UnlitKeyword = "_UNLIT_ON";
+        private const float TargetVisualScaleMultiplier = 4f;
 
         private readonly Color idleColor = new(1f, 0.86f, 0.22f, 0.28f);
         private readonly Color activeColor = new(1f, 1f, 0.38f, 0.52f);
@@ -60,7 +62,7 @@ namespace Simulation
             rocket = rocketTransform;
             targetRadius = Mathf.Max(radius, 0.01f);
             targetBounds = new Bounds(center, Vector3.one * (targetRadius * 2f));
-            CreateTargetSphere();
+            CreateTargetCube();
             CreateArrow();
             Tick(false);
         }
@@ -102,9 +104,9 @@ namespace Simulation
 
         private void OnDestroy() => Dispose();
 
-        private void CreateTargetSphere()
+        private void CreateTargetCube()
         {
-            var host = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            var host = GameObject.CreatePrimitive(PrimitiveType.Cube);
             host.name = "Launch Target Zone";
             Collider collider = host.GetComponent<Collider>();
             if (collider != null)
@@ -113,7 +115,8 @@ namespace Simulation
                 DestroyUnityObject(collider);
             }
             host.transform.SetPositionAndRotation(targetBounds.center, Quaternion.identity);
-            host.transform.localScale = Vector3.one * (targetRadius * 2f);
+            host.transform.localScale = Vector3.one *
+                (targetRadius * 2f * TargetVisualScaleMultiplier);
             targetRoot = host.transform;
             targetRenderer = host.GetComponent<MeshRenderer>();
             targetRenderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -166,6 +169,7 @@ namespace Simulation
             if (material.HasProperty(SrcBlendAlphaId)) material.SetFloat(SrcBlendAlphaId, (float)BlendMode.One);
             if (material.HasProperty(DstBlendAlphaId)) material.SetFloat(DstBlendAlphaId, (float)BlendMode.OneMinusSrcAlpha);
             if (material.HasProperty(ZWriteId)) material.SetFloat(ZWriteId, 0f);
+            if (material.HasProperty(CullId)) material.SetFloat(CullId, (float)CullMode.Off);
             if (material.HasProperty(CastShadowsId)) material.SetFloat(CastShadowsId, 0f);
             if (material.HasProperty(ReceiveShadowsId)) material.SetFloat(ReceiveShadowsId, 0f);
             if (material.HasProperty(HologramEnabledId))
