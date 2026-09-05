@@ -28,6 +28,7 @@ namespace Simulation
 
         private Rocket rocket;
         private Rigidbody body;
+        private bool pinOnly;
         private Vector3 origin;
         private Quaternion baseRotation;
         private Vector3 leanAxis;
@@ -59,11 +60,17 @@ namespace Simulation
         /// </summary>
         private void FixedUpdate() => Pin();
 
+        /// <summary>
+        /// 위치는 부르는 쪽이 쥐고, 이쪽은 물리만 계속 묶는다. 달 컷처럼 경로를 밖에서 그릴 때 쓴다 —
+        /// 이 핀을 놓으면 <c>ReleaseLift()</c> 가 kinematic 을 풀어 로켓이 스스로 날아간다.
+        /// </summary>
+        public void PinPhysicsOnly() => pinOnly = true;
+
         private void LateUpdate()
         {
             Pin();
 
-            if (rocket == null) return;
+            if (pinOnly || rocket == null) return;
             // 홀드(클램프) 동안은 로켓이 제자리에 있어야 한다 — 그 구간의 그림은 원본이 만든다.
             if (!rocket.Launched || rocket.Holding) return;
 

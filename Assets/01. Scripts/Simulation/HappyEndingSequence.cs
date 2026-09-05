@@ -30,6 +30,12 @@ namespace Simulation
         /// <summary>`Assets/05. Arts/Texture/Resources` 로 옮겨 둔 크레이터 노이즈 맵.</summary>
         private const string MoonTextureName = "Craters_03-512x512";
 
+        /// <summary>
+        /// 발사 시작부터 배기를 고정할 때까지. 씬 값 기준 홀드 2.5 + 보조 상승 2.5 + 물리 전환 1 = 6 초에
+        /// 여유를 조금 더한 값이다. 이보다 일찍 고정하면 리프트 연기가 영원히 나온다.
+        /// </summary>
+        private const float ExhaustFreezeSeconds = 6.5f;
+
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
         private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
         private static readonly int MetallicId = Shader.PropertyToID("_Metallic");
@@ -80,6 +86,7 @@ namespace Simulation
         private HappyEndingFlight flight;
 
         private readonly List<Behaviour> suspended = new();
+        private readonly List<ParticleSystem> exhaust = new();
         private bool researchWasActive;
 
         private Coroutine routine;
@@ -95,6 +102,8 @@ namespace Simulation
         private UnityEngine.Rendering.AmbientMode ambientModeBackup;
         private bool fogBackup;
         private Color fogColorBackup;
+        private float fogDensityBackup;
+        private FogMode fogModeBackup;
         private bool environmentStored;
 
         public static HappyEndingSequence Play(
@@ -196,13 +205,23 @@ namespace Simulation
                 rocket.Launch();
             }
 
-            // ponytail: 엔진이 실제로 연료를 태우고 발열한다. 이 구간이 길어지면 연료 소진으로 불이
-            // 꺼지거나 과열로 Rocket 이 스스로 폭발한다. 10초 안쪽으로 유지할 것.
+            bool frozen = false;
             for (float elapsed = 0f; elapsed < launchSeconds; elapsed += Time.deltaTime)
             {
+                // 리프트 구간(홀드 2.5초 + 보조 상승 2.5초 + 물리 전환 1초)이 지나면 배기를 고정한다.
+                // 여기까지가 인게임과 같아야 하는 그림이고, 그 뒤로는 연료도 발열도 진행하지 않아
+                // 엔딩이 끝날 때까지 불이 꺼지지도 과열로 폭발하지도 않는다.
+                if (!frozen && elapsed >= ExhaustFreezeSeconds)
+                {
+                    frozen = true;
+                    FreezeExhaust();
+                }
+
                 if (rocket != null) stageCamera.transform.LookAt(rocket.transform.position);
                 yield return null;
             }
+
+            if (!frozen) FreezeExhaust();
 
             // B4 — 달 컷. 카메라를 옮겨 붙이는 컷 전환이라 블렌드하지 않는다.
             yield return MoonCut(height);
@@ -230,15 +249,6 @@ namespace Simulation
             Vector3 toMoon = (moon.position - spaceOrigin).normalized;
             EnsureSpaceLight(toMoon);
 
-            if (rocket != null)
-            {
-                // 여기서부터는 경로를 직접 쥔다. 발사 구간의 상승 스크립트는 역할이 끝났다.
-                if (flight != null) Destroy(flight);
-                flight = null;
-                rocket.transform.rotation = Quaternion.FromToRotation(Vector3.up, toMoon);
-                ClearParticleTrails();
-            }
-
             // 우주선이 카메라에 훨씬 가깝다. 시작은 우하단에서 화면을 크게 물고 들어오고,
             // 끝나도 여전히 가까운 채로 달 쪽으로 멀어진다.
             Vector3 near = spaceOrigin
@@ -250,7 +260,20 @@ namespace Simulation
                 + stageCamera.transform.right * (rocketHeight * 0.1f)
                 + stageCamera.transform.up * (-rocketHeight * 0.1f);
 
-            if (rocket != null) rocket.transform.position = near;
+            if (rocket != null)
+            {
+                // 여기서부터는 경로를 밖에서 쥔다. 다만 핀은 놓지 않는다 — 놓으면 ReleaseLift 가
+                // kinematic 을 풀어 로켓이 제 갈 길로 날아간다.
+                if (flight != null) flight.PinPhysicsOnly();
+
+                // 우주에서는 소리를 재운다. OnDisable 이 구독 해제와 재생 중인 루프 정리까지 해 준다.
+                foreach (RocketAudio audio in rocket.GetComponentsInChildren<RocketAudio>(true)) Suspend(audio);
+
+                rocket.transform.SetPositionAndRotation(near, Quaternion.FromToRotation(Vector3.up, toMoon));
+                ClearParticleTrails();
+                KeepExhaustAlive();
+            }
+
             yield return Wait(moonHoldSeconds);
 
             // B5 — 달 항행
@@ -348,6 +371,11 @@ namespace Simulation
             // 갱신하지 않는다. 이걸 안 바꾸면 하늘만 밤이고 지면은 대낮이다.
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
             RenderSettings.ambientLight = new Color(0.12f, 0.11f, 0.16f);
+            // 안개는 직접 켠다. SkyEnvironment 를 재우기 전에 그쪽이 써 둔 값에 기대면, 로켓이 높이
+            // 떠 있는 상태에서 엔딩에 들어왔을 때 밀도 커브가 이미 0 이라 안개가 아예 없다.
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.ExponentialSquared;
+            RenderSettings.fogDensity = 0.007f;
             // 지평선색과 맞춘다. 안 맞추면 먼 수면만 딴 색 안개로 남는다.
             RenderSettings.fogColor = new Color(0.50f, 0.38f, 0.38f);
         }
@@ -423,8 +451,39 @@ namespace Simulation
         }
 
         /// <summary>
+        /// 지금 뿜고 있는 배기를 기억해 두고 <see cref="Rocket"/> 을 재운다. 그 순간부터 연료도 발열도
+        /// 진행하지 않으므로 화염이 꺼지지도, 과열로 폭발하지도 않는다 — 엔딩이 끝날 때까지 계속 탄다.
+        ///
+        /// 이걸 이륙 직후가 아니라 리프트 구간이 끝난 뒤에 부르는 이유: <see cref="RocketLiftSmoke"/> 가
+        /// <c>LiftAssistActive</c> 를 보는데, 그 전에 재우면 값이 true 로 굳어 리프트 연기가 영원히 나온다.
+        ///
+        /// 뿜는 중인 것만 골라 담으므로 점화 실패용 <c>Smoke_Fail</c> 같은 것은 딸려오지 않는다.
+        /// </summary>
+        private void FreezeExhaust()
+        {
+            if (rocket == null) return;
+
+            exhaust.Clear();
+            foreach (ParticleSystem particles in rocket.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                if (particles.isEmitting) exhaust.Add(particles);
+            }
+
+            Suspend(rocket);
+        }
+
+        /// <summary>컷 전환이나 순간이동 뒤에 배기가 멎었으면 다시 켠다.</summary>
+        private void KeepExhaustAlive()
+        {
+            foreach (ParticleSystem particles in exhaust)
+            {
+                if (particles != null && !particles.isEmitting) particles.Play(true);
+            }
+        }
+
+        /// <summary>
         /// 컷 전환에서 로켓을 순간이동시키므로 잔상만 지운다. 재생 상태는 건드리지 않는다 —
-        /// 화염을 켜고 끄는 것은 <see cref="RocketPart"/> 의 몫이고, 여기서 손대면 인게임과 어긋난다.
+        /// 켜고 끄는 판단은 <see cref="FreezeExhaust"/> 이전에는 <see cref="RocketPart"/> 의 몫이다.
         /// </summary>
         private void ClearParticleTrails()
         {
@@ -448,6 +507,7 @@ namespace Simulation
         {
             if (flight != null) Destroy(flight);
             flight = null;
+            exhaust.Clear();
             if (moon != null) Destroy(moon.gameObject);
             moon = null;
             if (stageCamera != null) Destroy(stageCamera.gameObject);
@@ -676,6 +736,8 @@ namespace Simulation
             ambientBackup = RenderSettings.ambientLight;
             fogBackup = RenderSettings.fog;
             fogColorBackup = RenderSettings.fogColor;
+            fogDensityBackup = RenderSettings.fogDensity;
+            fogModeBackup = RenderSettings.fogMode;
             environmentStored = true;
         }
 
@@ -694,6 +756,8 @@ namespace Simulation
             RenderSettings.ambientLight = ambientBackup;
             RenderSettings.fog = fogBackup;
             RenderSettings.fogColor = fogColorBackup;
+            RenderSettings.fogDensity = fogDensityBackup;
+            RenderSettings.fogMode = fogModeBackup;
             skyMaterial = null;
             environmentStored = false;
         }
