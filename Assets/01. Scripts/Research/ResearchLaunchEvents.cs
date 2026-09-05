@@ -6,7 +6,8 @@ namespace Border.Research
     public enum LaunchOutcomeEventId
     {
         None, SponsorBoost, CleanTelemetry, PublicPressure, NearMissInspection,
-        RecoveredPayload, PadDamage, QuietLessons, MediaBacklash, FinalProof
+        RecoveredPayload, PadDamage, QuietLessons, MediaBacklash, QuietBreakthrough,
+        UsefulFailureData, Whistleblower, FinalProof
     }
 
     public sealed class LaunchOutcomeEventResult
@@ -109,6 +110,7 @@ namespace Border.Research
             {
                 if (visibility == TestVisibility.Public) candidates.Add(LaunchOutcomeEventId.SponsorBoost);
                 candidates.Add(LaunchOutcomeEventId.CleanTelemetry);
+                if (visibility == TestVisibility.Private) candidates.Add(LaunchOutcomeEventId.QuietBreakthrough);
                 if (visibility == TestVisibility.Public && launchYear < 2025) candidates.Add(LaunchOutcomeEventId.PublicPressure);
             }
             else
@@ -120,6 +122,8 @@ namespace Border.Research
                     candidates.Add(LaunchOutcomeEventId.PadDamage);
                 if (visibility == TestVisibility.Private) candidates.Add(LaunchOutcomeEventId.QuietLessons);
                 if (visibility == TestVisibility.Public) candidates.Add(LaunchOutcomeEventId.MediaBacklash);
+                candidates.Add(LaunchOutcomeEventId.UsefulFailureData);
+                if (visibility == TestVisibility.Private) candidates.Add(LaunchOutcomeEventId.Whistleblower);
             }
             return candidates;
         }
@@ -149,13 +153,13 @@ namespace Border.Research
             switch (id)
             {
                 case LaunchOutcomeEventId.SponsorBoost:
-                    name = "후원 기관 추가 지원";
-                    description = "공개 발사 성공을 본 후원 기관이 다음 시험 예산을 추가 지원했습니다.";
+                    name = "돈 냄새를 맡은 사람들";
+                    description = "공개 발사 뒤 후원 기관들이 뒤늦게 줄을 섰습니다. 기술 설명보다 예산 회의가 먼저 잡혔습니다.";
                     ApplyPublicSuccessEventFunds(500, 100, effects);
                     break;
                 case LaunchOutcomeEventId.CleanTelemetry:
-                    name = "깨끗한 비행 데이터";
-                    description = "성공한 비행의 기록으로 다음 엔진 개선 연구를 준비했습니다.";
+                    name = "그래프가 우리 편";
+                    description = "비행 기록이 보기 드물게 깨끗했습니다. 연구진은 실패 원인 대신 개선 목록을 적었습니다.";
                     ApplyEventFunds(100, 0, effects);
                     ApplyEventEngine(target, 5, 4, effects);
                     if (target != null)
@@ -165,44 +169,60 @@ namespace Border.Research
                     }
                     break;
                 case LaunchOutcomeEventId.PublicPressure:
-                    name = "공개 성공 뒤 일정 압박";
-                    description = "추가 지원과 함께 다음 시험 일정을 앞당겨 달라는 요청이 왔습니다.";
+                    name = "박수 뒤의 독촉장";
+                    description = "성공 축하가 끝나기도 전에 다음 발사 일정을 묻는 연락이 왔습니다.";
                     ApplyPublicSuccessEventFunds(350, 0, effects);
                     pendingPublicPressure = true;
                     effects.Add("다음 행동이 대기면 분기 예산 -50 / 설계 진입이면 비용 -50");
                     break;
                 case LaunchOutcomeEventId.NearMissInspection:
-                    name = "근접 사고 점검";
-                    description = "지면 추락 기록을 분석하고 다음 설계 점검 비용을 지원합니다.";
+                    name = "추락 현장의 힌트";
+                    description = "추락 지점에서 설계 결함 하나가 또렷하게 드러났습니다. 사고는 났지만 점검 방향은 잡혔습니다.";
                     pendingInspectionDiscount = true;
                     effects.Add("다음 설계 진입 비용 -50");
                     ApplyEventEngine(target, 3, 0, effects);
                     break;
                 case LaunchOutcomeEventId.RecoveredPayload:
-                    name = "시험 장비 회수";
-                    description = "이륙하지 못한 시험 장비를 회수했습니다. 같은 미션에 다시 사용할 수 있습니다.";
+                    name = "못 뜬 덕분에 산 장비";
+                    description = "로켓은 뜨지 못했지만 장비는 멀쩡했습니다. 실패 현장에서 다음 시도 비용을 건졌습니다.";
                     pendingDiscountMission = entry.MissionId;
                     effects.Add($"{GetConfiguredMissionConfig(entry.MissionId).DisplayName} 다음 설치비 -20% (최대 300)");
                     break;
                 case LaunchOutcomeEventId.PadDamage:
-                    name = "발사대 손상";
-                    description = "지면 추락으로 시설과 엔진에 정비가 필요합니다.";
+                    name = "수리비 착륙";
+                    description = "발사는 짧았고 견적서는 길었습니다. 시설팀은 로켓보다 발사대를 먼저 봤습니다.";
                     ApplyEventFunds(-200, 0, effects);
                     pendingPadSurcharge = true;
                     effects.Add("다음 설계 진입 비용 +50");
                     ApplyEventEngine(target, -3, 0, effects);
                     break;
                 case LaunchOutcomeEventId.QuietLessons:
-                    name = "조용한 실패 분석";
-                    description = "비공개 시험의 실패 기록을 엔진 개선에 반영했습니다.";
+                    name = "조용히 망하고 조용히 배움";
+                    description = "밖은 몰랐고 연구실은 알았습니다. 체면은 지켰고 데이터는 남았습니다.";
                     ApplyEventEngine(target, 4, 3, effects);
                     break;
                 case LaunchOutcomeEventId.MediaBacklash:
-                    name = "공개 실패 역풍";
-                    description = "공개 실패 소식에 후원 기관이 지원 규모를 줄였습니다.";
+                    name = "공개 처형식";
+                    description = "실패 장면이 너무 잘 보였습니다. 후원 기관은 박수 대신 예산 검토표를 꺼냈습니다.";
                     ApplyEventFunds(0, -150, effects);
                     pendingPublicRewardPenalty = true;
                     effects.Add("다음 발사: 공개 성공 이벤트 연구비 -25% / 비공개 선택 시 소멸");
+                    break;
+                case LaunchOutcomeEventId.QuietBreakthrough:
+                    name = "닫힌 문 안의 정답";
+                    description = "공식 발표는 없었지만 성능표는 좋아졌습니다. 연구팀은 조용히 다음 설계를 고쳤습니다.";
+                    ApplyEventFunds(75, 0, effects);
+                    ApplyEventEngine(target, 8, 2, effects);
+                    break;
+                case LaunchOutcomeEventId.UsefulFailureData:
+                    name = "망한 김에 본 것";
+                    description = "실패 순간에 평소엔 보이지 않던 흔들림이 잡혔습니다. 망했지만 빈손은 아니었습니다.";
+                    ApplyEventEngine(target, 2, 1, effects);
+                    break;
+                case LaunchOutcomeEventId.Whistleblower:
+                    name = "내부 고발자";
+                    description = "관계자가 비공개 실패 기록과 예산 처리에 \"비리 관계 있다\"고 주장했습니다. 후원 기관이 다음 분기 지원을 깎았습니다.";
+                    ApplyEventFunds(0, -100, effects);
                     break;
                 default:
                     name = "최종 검증 인정";

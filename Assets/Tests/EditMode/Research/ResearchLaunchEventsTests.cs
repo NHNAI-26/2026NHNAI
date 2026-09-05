@@ -11,17 +11,17 @@ namespace Border.Research.Tests
         [TestCase(LaunchMissionId.LowAltitude, true, TestVisibility.Public, 2025, LaunchTerminationReason.Succeeded,
             new[] { LaunchOutcomeEventId.SponsorBoost, LaunchOutcomeEventId.CleanTelemetry })]
         [TestCase(LaunchMissionId.LowAltitude, true, TestVisibility.Private, 2024, LaunchTerminationReason.Succeeded,
-            new[] { LaunchOutcomeEventId.CleanTelemetry })]
+            new[] { LaunchOutcomeEventId.CleanTelemetry, LaunchOutcomeEventId.QuietBreakthrough })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Private, 2024, LaunchTerminationReason.NoLiftoff,
-            new[] { LaunchOutcomeEventId.RecoveredPayload, LaunchOutcomeEventId.QuietLessons })]
+            new[] { LaunchOutcomeEventId.RecoveredPayload, LaunchOutcomeEventId.QuietLessons, LaunchOutcomeEventId.UsefulFailureData, LaunchOutcomeEventId.Whistleblower })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Private, 2024, LaunchTerminationReason.GroundCrash,
-            new[] { LaunchOutcomeEventId.NearMissInspection, LaunchOutcomeEventId.QuietLessons })]
+            new[] { LaunchOutcomeEventId.NearMissInspection, LaunchOutcomeEventId.QuietLessons, LaunchOutcomeEventId.UsefulFailureData, LaunchOutcomeEventId.Whistleblower })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Public, 2024, LaunchTerminationReason.GroundCrash,
-            new[] { LaunchOutcomeEventId.NearMissInspection, LaunchOutcomeEventId.PadDamage, LaunchOutcomeEventId.MediaBacklash })]
+            new[] { LaunchOutcomeEventId.NearMissInspection, LaunchOutcomeEventId.PadDamage, LaunchOutcomeEventId.MediaBacklash, LaunchOutcomeEventId.UsefulFailureData })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Public, 2024, LaunchTerminationReason.NoLiftoff,
-            new[] { LaunchOutcomeEventId.MediaBacklash })]
+            new[] { LaunchOutcomeEventId.MediaBacklash, LaunchOutcomeEventId.UsefulFailureData })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Private, 2024, LaunchTerminationReason.SelfDestruct,
-            new[] { LaunchOutcomeEventId.QuietLessons })]
+            new[] { LaunchOutcomeEventId.QuietLessons, LaunchOutcomeEventId.UsefulFailureData, LaunchOutcomeEventId.Whistleblower })]
         [TestCase(LaunchMissionId.LowPowerZoneHold, true, TestVisibility.FinalMission, 2024, LaunchTerminationReason.Succeeded,
             new[] { LaunchOutcomeEventId.FinalProof })]
         [TestCase(LaunchMissionId.LowPowerZoneHold, false, TestVisibility.FinalMission, 2024, LaunchTerminationReason.GroundCrash,
@@ -202,6 +202,48 @@ namespace Border.Research.Tests
             Assert.That(engine.Completion, Is.EqualTo(4));
             Assert.That(engine.Cooling, Is.EqualTo(38));
             Assert.That(result.OutcomeEvent.EffectsText, Does.Contain("냉각 능력 +3"));
+        }
+
+        [Test]
+        public void QuietBreakthrough_AddsPrivateSuccessEngineRewardWithoutLargePublicFunding()
+        {
+            var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: Sequence(1));
+            EnginePresetState engine = model.GetEnginePreset(EnginePresetId.Engine01);
+
+            ResearchLaunchResultData result = Launch(model, TestVisibility.Private, true, LaunchTerminationReason.Succeeded);
+
+            Assert.That(result.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.QuietBreakthrough));
+            Assert.That(result.OutcomeEvent.EffectsText, Does.Contain("연구비 +75"));
+            Assert.That(engine.Completion, Is.EqualTo(8));
+            Assert.That(result.OutcomeEvent.Name, Is.EqualTo("닫힌 문 안의 정답"));
+        }
+
+        [Test]
+        public void UsefulFailureData_LetsPublicFailureProduceSmallLearningInsteadOfGuaranteedLargeLoss()
+        {
+            var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: Sequence(1));
+            EnginePresetState engine = model.GetEnginePreset(EnginePresetId.Engine01);
+
+            ResearchLaunchResultData result = Launch(model, TestVisibility.Public, false, LaunchTerminationReason.NoLiftoff);
+
+            Assert.That(result.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.UsefulFailureData));
+            Assert.That(model.QuarterlyFunding, Is.EqualTo(ResearchPrototypeModel.InitialQuarterlyFunding));
+            Assert.That(result.OutcomeEvent.EffectsText, Does.Not.Contain("연구비 -"));
+            Assert.That(result.OutcomeEvent.EffectsText, Does.Not.Contain("분기 연구비 -"));
+            Assert.That(engine.Completion, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Whistleblower_LetsPrivateFailureHitQuarterlyFunding()
+        {
+            var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: Sequence(2));
+
+            ResearchLaunchResultData result = Launch(model, TestVisibility.Private, false, LaunchTerminationReason.SelfDestruct);
+
+            Assert.That(result.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.Whistleblower));
+            Assert.That(result.OutcomeEvent.Name, Is.EqualTo("내부 고발자"));
+            Assert.That(model.QuarterlyFunding, Is.EqualTo(ResearchPrototypeModel.InitialQuarterlyFunding - 100));
+            Assert.That(result.OutcomeEvent.EffectsText, Does.Contain("분기 연구비 -100"));
         }
 
         [Test]

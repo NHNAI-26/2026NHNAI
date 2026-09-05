@@ -43,21 +43,27 @@ namespace Border.Research
             switch (outcomeEvent.Id)
             {
                 case LaunchOutcomeEventId.SponsorBoost:
-                    return "로켓이 뜨자, 예산도 떴다";
+                    return "\"저건 됩니다\" 후원 기관, 뒤늦게 줄 섰다";
                 case LaunchOutcomeEventId.CleanTelemetry:
-                    return "비행은 끝났고, 연구는 앞당겨졌다";
+                    return "연구진 \"이번엔 그래프가 우리 편\"";
                 case LaunchOutcomeEventId.PublicPressure:
-                    return "성공 확인, 다음 발사는 언제?";
+                    return "성공 축하합니다. 다음 건 언제죠?";
                 case LaunchOutcomeEventId.NearMissInspection:
-                    return "땅에 남긴 흔적, 설계에 남길 교훈";
+                    return "추락 현장서 뜻밖의 개선점 발견";
                 case LaunchOutcomeEventId.RecoveredPayload:
-                    return "못 뜬 로켓, 버리지 않은 장비";
+                    return "이륙 실패, 장비 회수에는 성공";
                 case LaunchOutcomeEventId.PadDamage:
-                    return "발사는 끝났고, 수리비가 남았다";
+                    return "발사는 짧았고, 견적서는 길었다";
                 case LaunchOutcomeEventId.QuietLessons:
-                    return "실패는 비공개, 교훈은 연구실로";
+                    return "아무도 몰랐지만 연구팀은 알았다";
                 case LaunchOutcomeEventId.MediaBacklash:
-                    return "로켓은 멈추고, 여론은 들끓었다";
+                    return "전 국민 앞에서 멈춘 로켓, 예산도 멈췄다";
+                case LaunchOutcomeEventId.QuietBreakthrough:
+                    return "공식 발표 없이 성능표만 좋아졌다";
+                case LaunchOutcomeEventId.UsefulFailureData:
+                    return "깨진 기록에서 멀쩡한 답 나왔다";
+                case LaunchOutcomeEventId.Whistleblower:
+                    return "관계자, \"비리 관계 있다\" 밝혀";
                 case LaunchOutcomeEventId.FinalProof:
                     return "적게 태우고, 끝내 증명했다";
                 default:
