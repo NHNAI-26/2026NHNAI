@@ -506,6 +506,29 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void TargetOverviewCameraPose_FramesLaunchPadAndTargetFromFarPullback()
+        {
+            Vector3 launchPad = Vector3.zero;
+            Bounds target = new(new Vector3(0f, 260f, 100f), new Vector3(120f, 120f, 120f));
+
+            RocketBuilder.TargetOverviewCameraPose(launchPad, target, 40f, 500f,
+                out Vector3 position, out Quaternion rotation);
+
+            Vector3 focus = Vector3.Lerp(launchPad, target.center, 0.5f);
+            Vector3 forward = rotation * Vector3.forward;
+            Assert.Less(Vector3.Angle(forward, (focus - position).normalized), 0.01f,
+                "시작 뷰는 목표만이 아니라 발사대와 목표 사이를 바라봐야 한다.");
+            Assert.Less(position.z, launchPad.z,
+                "카메라는 목표 반대편으로 빠져 있어야 발사장과 목표 구역을 한 화면에 잡는다.");
+            Assert.Greater(Vector3.Distance(position, focus), 300f,
+                "목표 구역 클로즈업이 아니라 발사 후 후퇴 뷰에 가까운 원거리 구도여야 한다.");
+            Assert.LessOrEqual(Vector3.Distance(
+                new Vector3(position.x, focus.y, position.z),
+                new Vector3(focus.x, focus.y, focus.z)), 500f + target.extents.x,
+                "시작 뷰는 후퇴 카메라 상한 근처를 쓰되 과하게 멀어지면 안 된다.");
+        }
+
+        [Test]
         public void TrailDotWorldSize_HoldsTheSameScreenFraction_AtEveryDistance()
         {
             const float Fraction = 0.015f;

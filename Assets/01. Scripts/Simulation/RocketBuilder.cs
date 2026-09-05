@@ -342,7 +342,7 @@ namespace Simulation
             ApplyLaunchViews();
         }
 
-        public void PreviewDesignTarget(Bounds targetBounds, float holdSeconds = 3f, float travelSeconds = 1.1f)
+        public void PreviewDesignTarget(Bounds targetBounds, float holdSeconds = 0.8f, float travelSeconds = 1.4f)
         {
             _designTargetIntroBounds = targetBounds;
             _designTargetIntroHoldSeconds = Mathf.Max(0f, holdSeconds);
@@ -551,6 +551,28 @@ namespace Simulation
             return Mathf.Clamp(nearDistance + Mathf.Max(altitude, 0f) * growth, nearDistance, farDistance);
         }
 
+        public static void TargetOverviewCameraPose(Vector3 launchPad, Bounds targetBounds,
+            float nearDistance, float farDistance, out Vector3 position, out Quaternion rotation)
+        {
+            Vector3 targetCenter = targetBounds.center;
+            Vector3 horizontal = targetCenter - launchPad;
+            horizontal.y = 0f;
+            if (horizontal.sqrMagnitude < 0.0001f) horizontal = Vector3.forward;
+
+            Vector3 targetDirection = horizontal.normalized;
+            Vector3 side = Vector3.Cross(Vector3.up, targetDirection).normalized;
+            Vector3 focus = Vector3.Lerp(launchPad, targetCenter, 0.5f);
+            float span = Vector3.Distance(launchPad, targetCenter) + targetBounds.extents.magnitude;
+            float distance = Mathf.Clamp(span * 1.35f, nearDistance, farDistance);
+            float lift = Mathf.Max(span * 0.28f, 80f);
+
+            position = focus
+                - targetDirection * distance
+                + side * (targetBounds.extents.x * 0.35f)
+                + Vector3.up * lift;
+            rotation = LookAt(position, focus);
+        }
+
         /// <summary>궤적 레이어 비트만 켜고 끈 컬링 마스크. 나머지 비트는 건드리지 않는다.</summary>
         public static int TrailCullingMask(int cullingMask, int trailLayer, bool visible)
         {
@@ -572,19 +594,9 @@ namespace Simulation
             _designTargetIntroEndPosition =
                 rocket.transform.position + _designTargetIntroEndRotation * new Vector3(0f, 0f, -_distance);
 
-            Vector3 fromPad = _designTargetIntroBounds.center - rocket.transform.position;
-            fromPad.y = 0f;
-            if (fromPad.sqrMagnitude < 0.0001f) fromPad = Vector3.forward;
-            Vector3 targetDirection = fromPad.normalized;
-            Vector3 side = Vector3.Cross(Vector3.up, targetDirection).normalized;
-            float backDistance = Mathf.Max(_designTargetIntroBounds.extents.z * 1.4f, 90f);
-            float lift = Mathf.Max(_designTargetIntroBounds.extents.y * 0.55f, 40f);
-
-            _designTargetIntroStartPosition = _designTargetIntroBounds.center
-                + targetDirection * backDistance
-                + side * (_designTargetIntroBounds.extents.x * 0.35f)
-                + Vector3.up * lift;
-            _designTargetIntroStartRotation = LookAt(_designTargetIntroStartPosition, _designTargetIntroBounds.center);
+            TargetOverviewCameraPose(rocket.transform.position, _designTargetIntroBounds,
+                pullbackNearDistance, pullbackFarDistance,
+                out _designTargetIntroStartPosition, out _designTargetIntroStartRotation);
         }
 
         private bool TryApplyDesignTargetIntro()
