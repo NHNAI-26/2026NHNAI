@@ -20,6 +20,9 @@ namespace Border.UI
             AttachValid,
             AttachInvalid,
             Rotate,
+
+            /// <summary>OS 커서를 감춘다 — 커서 자리를 대신하는 실물이 화면에 있을 때만 쓴다.</summary>
+            Hidden,
         }
 
         /// <summary>런타임에 그리는 UI 아이콘. 커서와 팔레트를 공유한다.</summary>
@@ -138,6 +141,7 @@ namespace Border.UI
             if (instance == this)
             {
                 Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+                Cursor.visible = true;
                 instance = null;
             }
         }
@@ -164,11 +168,16 @@ namespace Border.UI
         private void Apply(Visual visual)
         {
             if (currentVisual == visual) return;
+            currentVisual = visual;
+
+            // 요청이 없는 프레임은 LateUpdate 가 Default 로 되돌리므로, 감춘 커서는 저절로 돌아온다.
+            Cursor.visible = visual != Visual.Hidden;
+            if (visual == Visual.Hidden) return; // 전용 PNG 가 없다 — 마지막 텍스처를 그대로 둔다
+
             if (!sprites.TryGetValue(visual, out CursorSprite sprite))
                 sprites.TryGetValue(Visual.Default, out sprite);
 
             Cursor.SetCursor(sprite.Texture, sprite.Hotspot, CursorMode.Auto);
-            currentVisual = visual;
         }
 
         private bool IsPointerOverInteractiveTarget(Vector2 position)

@@ -992,7 +992,6 @@ namespace Simulation
             public void OnBeginDrag(PointerEventData eventData)
             {
                 background.color = TintIdle;
-                ArtemisCursor.Request(ArtemisCursor.Visual.Drag, 30);
                 owner.BeginPresetDrag(preset, eventData.position);
             }
 
