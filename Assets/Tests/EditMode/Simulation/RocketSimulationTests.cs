@@ -1,10 +1,12 @@
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Border.Core;
 using Border.Research;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.TestTools;
 
 namespace Simulation.Tests
 {
@@ -529,6 +531,39 @@ namespace Simulation.Tests
                     Track(library.Slots[i]);
 
             return library;
+        }
+
+        [Test]
+        public void OutlineAndHologram_ToggleShaderStateOnTheInstancedMaterial()
+        {
+            RocketPart part = CreateEngine(Stats(fuel: 10f, cooling: 10f, output: BaselineOutput, ignition: 100f));
+            Material shared = Track(new Material(Shader.Find("Shader/Uber/3D Object")));
+            part.gameObject.AddComponent<MeshRenderer>().sharedMaterial = shared;
+
+            // EditMode 에서는 renderer.materials 인스턴스화가 에러 로그를 남긴다. 플레이 중에는 정상 경로다.
+            LogAssert.Expect(LogType.Error, new Regex("Instantiating material"));
+
+            part.SetOutline(true);
+            part.SetHologram(true);
+
+            Material instance = part.GetComponent<MeshRenderer>().sharedMaterial;
+            Assert.AreNotSame(shared, instance, "공유 머티리얼을 건드리면 붙어 있는 엔진 전부가 같이 켜진다.");
+            Assert.IsTrue(instance.IsKeywordEnabled("_STENCIL_OUTLINE_ON"));
+            Assert.AreEqual(1f, instance.GetFloat("_StencilOutlineEnabled"), 1e-4f,
+                "이 값은 포워드 패스의 스텐실 WriteMask 다 — 0 이면 아웃라인 패스가 아무것도 못 그린다.");
+            Assert.IsTrue(instance.GetShaderPassEnabled("StencilOutline"),
+                "머티리얼 에셋이 아웃라인 패스를 꺼둔 채로 들어오므로 패스도 같이 켜야 한다.");
+            Assert.IsTrue(instance.IsKeywordEnabled("_HOLOGRAM_ON"));
+            Assert.AreEqual(1f, instance.GetFloat("_HologramEnabled"), 1e-4f);
+
+            part.SetOutline(false);
+            part.SetHologram(false);
+
+            Assert.IsFalse(instance.IsKeywordEnabled("_STENCIL_OUTLINE_ON"));
+            Assert.AreEqual(0f, instance.GetFloat("_StencilOutlineEnabled"), 1e-4f);
+            Assert.IsFalse(instance.GetShaderPassEnabled("StencilOutline"));
+            Assert.IsFalse(instance.IsKeywordEnabled("_HOLOGRAM_ON"));
+            Assert.AreEqual(0f, instance.GetFloat("_HologramEnabled"), 1e-4f);
         }
 
         private T Track<T>(T target) where T : Object

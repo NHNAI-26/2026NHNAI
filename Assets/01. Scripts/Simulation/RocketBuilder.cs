@@ -523,13 +523,16 @@ namespace Simulation
                     _dragged.transform.position = hit.point;
                     HideGuides();
                 }
-
-                return;
+            }
+            else
+            {
+                HideGuides();
+                if (_dragPlane.Raycast(ray, out float distance))
+                    _dragged.transform.position = ray.GetPoint(distance);
             }
 
-            HideGuides();
-            if (_dragPlane.Raycast(ray, out float distance))
-                _dragged.transform.position = ray.GetPoint(distance);
+            // 놓는 순간 사라질 자리에 있으면 홀로그램으로 알린다 — AttachInvalid 커서와 같은 뜻이다.
+            _dragged.SetHologram(!_overRocket);
         }
 
         private void EndDrag()
@@ -625,6 +628,7 @@ namespace Simulation
                 Vector3 wanted = _grabPosition + _grabAxisWorld * (t - _grabT);
                 part.position = ProjectOntoBody(SnapToGuides(wanted, _selected), _selected, _grabPosition);
                 return;
+            part.SetHologram(false);
             }
 
             if (!AngleOnPlane(_grabPosition, _grabAxisWorld, _grabReference, ray, out float angle)) return;
@@ -1140,3 +1144,6 @@ namespace Simulation
         }
     }
 }
+            if (_selected != null) _selected.SetOutline(false);
+            if (part != null) part.SetOutline(true);
+

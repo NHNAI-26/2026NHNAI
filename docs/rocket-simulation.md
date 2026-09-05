@@ -151,6 +151,39 @@ GDD 07 §5의 "부품 자세는 로켓 기준" 조항은 이 변경에 맞춰 �
 색이라 가이드가 쓰는 URP Unlit 이 읽지 않을 수 있다. `widthMultiplier` 는 이미 매 프레임 쓰는
 float 이라 할당이 0 이다.
 
+### 선택과 드래그를 머티리얼로 알린다
+
+기즈모는 `_mode != EditMode.None` 일 때만 뜬다. 그래서 **누르기만 한 부품에는 표시가 하나도 없었다** —
+어느 것을 골랐는지 버튼 바 위치로 추측해야 했다. 지금은 `RocketPart.SetOutline` 이 Uber 3D Object 의
+스텐실 아웃라인을 켠다. 훅은 `RocketBuilder.Select` 한 곳뿐이다 — 삭제·발사·빈 공간 클릭·로켓 밖
+드롭이 전부 그 함수를 지나므로 끄는 자리를 따로 챙길 필요가 없다.
+
+드래그 중 로켓 밖에 있는 동안은 `SetHologram` 으로 반투명 청록이 된다. **놓으면 사라지는 자리**라는
+뜻이고, 이미 있던 `AttachInvalid` 커서와 같은 신호다. 로켓 위로 되돌리면 즉시 원래 외형으로 돌아온다.
+프리셋 패널에서 갓 꺼낸 엔진도 같은 규칙을 탄다.
+
+**`MaterialPropertyBlock` 을 쓸 수 없어 렌더러마다 머티리얼 인스턴스를 만든다.** 아웃라인 스위치인
+`_StencilOutlineEnabled` 는 포워드 패스의 스텐실 `WriteMask` 라 렌더 스테이트고, 블록으로는 덮이지
+않는다. 키워드(`_STENCIL_OUTLINE_ON` / `_HOLOGRAM_ON`)도 마찬가지다. 공유 머티리얼을 건드리면 붙어
+있는 엔진 전부가 같이 켜지므로 인스턴스가 유일한 길이다. 게다가 머티리얼 에셋이 `disabledShaderPasses`
+로 아웃라인 패스를 꺼둔 채 들어오므로 `SetShaderPassEnabled` 도 같이 불러야 한다 — 셋 중 하나라도
+빠지면 아무것도 안 그려진다. 인스턴스는 `RocketPart.OnDestroy` 에서 지운다.
+
+두 키워드 모두 `UberShaderVariantManifest` 에 이미 등록돼 있어 매니페스트도 `.shadervariants` 도
+건드리지 않았다.
+
+### 버튼은 텍스트가 아니라 아이콘
+
+이동/회전 버튼은 런타임에 그린 64×64 아이콘을 쓴다(`ArtemisCursor.IconSprite`). `RocketDesignUI` 는
+`RuntimeInitializeOnLoadMethod` 로 스폰돼 인스펙터에서 스프라이트를 꽂아 줄 사람이 없고, 프로젝트에
+이동/회전 아이콘 에셋이 아예 없었다. 커서가 이미 같은 방식으로 텍스처를 그리고 있어 그 옆에 붙였다 —
+에셋도 `Resources` 폴더도 임포트 설정도 늘지 않는다. 아이콘 안에는 커서와 달리 마우스 화살표를 넣지
+않는다(34 px 버튼에서는 잡음이다).
+
+라벨이 사라지면서 "이동 중 / 회전 중" 표시도 같이 사라지므로, **활성 모드는 버튼 배경색**으로 알린다.
+`Button` 기본 ColorTint 의 `normalColor` 가 흰색이라 `Image.color` 를 직접 넣어도 그대로 나오고,
+호버 피드백은 유지된다.
+
 잡는 순간 **축과 기준 방향을 스냅샷으로 고정**한다. 매 프레임 부품 자세에서 다시 읽으면 회전한 만큼
 기준도 같이 돌아 각도 변화가 정확히 상쇄되고, 링이 죽은 것처럼 보인다. 같은 이유로 드래그 중에는
 카메라를 묶고(궤도·줌 모두), `IsPointerOverGameObject()` 는 **잡기만 막고 드래그는 막지 않는다** —
@@ -593,9 +626,9 @@ FBX 정점 bounds 는 `0.547 × 0.541 × 1.0`, 중심 `(0, -0.001, 0)` 으로 **
 `CacheBodyShape()` 가 `GetComponentInChildren<CapsuleCollider>()` 로 몸통을 찾기 때문에 엔진이 먼저
 걸리면 부착 수학이 엔진 치수로 돈다.
 
-`MAT_BaseEngine` 은 Uber 3D Object 셰이더의 **홀로그램 머티리얼**(`_HOLOGRAM_ON`, 투명)이다.
-설계 화면에서는 어울리지만 발사 후에도 반투명 청록으로 남는다. 불투명 머티리얼이 필요하면 아트 쪽에서
-분리해야 한다.
+`MAT_BaseEngine` 은 Uber 3D Object 셰이더를 쓰고 **평소에는 아웃라인도 홀로그램도 꺼져 있다**.
+두 수치는 에셋에 이미 authoring 돼 있고 켜는 것만 런타임이 한다(아래 "선택과 드래그를 머티리얼로 알린다").
+표면 타입만 Transparent 로 남아 있어 홀로그램을 켤 때 블렌드를 손댈 필요가 없다.
 
 ## 01_Main 에 얹기: 미션 컨트롤 뷰
 

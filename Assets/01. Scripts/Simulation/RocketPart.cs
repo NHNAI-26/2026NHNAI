@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Border.Core;
 using UnityEngine;
 
@@ -15,9 +16,19 @@ namespace Simulation
         [SerializeField, Range(0f, 1f)] private float throttle = 1f; // 설계 단계의 힘 슬라이더 자리
         [SerializeField] private ParticleSystem flame;
 
+        // Uber 3D Object 셰이더의 두 기능을 부품 단위로 켠다. MaterialPropertyBlock 은 못 쓴다 —
+        // _StencilOutlineEnabled 는 포워드 패스의 스텐실 WriteMask 라 렌더 스테이트고, 키워드도
+        // 블록으로는 못 바꾼다. 그래서 렌더러당 머티리얼 인스턴스를 하나 만들어 들고 있는다.
+        private static readonly int OutlineEnabledId = Shader.PropertyToID("_StencilOutlineEnabled");
+        private static readonly int HologramEnabledId = Shader.PropertyToID("_HologramEnabled");
+        private const string OutlineKeyword = "_STENCIL_OUTLINE_ON";
+        private const string HologramKeyword = "_HOLOGRAM_ON";
+        private const string OutlinePass = "StencilOutline";
+
         private float _remaining;
         private float _temperature;
         private bool _ignited;
+        private Material[] _uberMaterials;
 
         public EngineStatsSO Stats => stats;
         public bool HasStats => stats != null;
@@ -81,6 +92,68 @@ namespace Simulation
 
             SetFlame(burning);
             return burning;
+        }
+
+        /// <summary>
+        /// 선택 표시. 셰이더의 스텐실 아웃라인을 켠다. 머티리얼 에셋(<c>MAT_BaseEngine</c>)은
+        /// <c>disabledShaderPasses</c> 에 아웃라인 패스를 꺼둔 상태라 패스도 같이 켜야 한다.
+        /// </summary>
+        public void SetOutline(bool on)
+        {
+            foreach (Material material in UberMaterials)
+            {
+                material.SetFloat(OutlineEnabledId, on ? 1f : 0f);
+                if (on) material.EnableKeyword(OutlineKeyword);
+                else material.DisableKeyword(OutlineKeyword);
+                material.SetShaderPassEnabled(OutlinePass, on);
+            }
+        }
+
+        /// <summary>
+        /// 로켓에서 떨어져 있는 동안의 표시. 머티리얼이 이미 Transparent 라 블렌드나 렌더 큐는
+        /// 건드릴 필요가 없고, 홀로그램 수치도 에셋에 이미 들어 있다 — 스위치만 올린다.
+        /// </summary>
+        public void SetHologram(bool on)
+        {
+            foreach (Material material in UberMaterials)
+            {
+                material.SetFloat(HologramEnabledId, on ? 1f : 0f);
+                if (on) material.EnableKeyword(HologramKeyword);
+                else material.DisableKeyword(HologramKeyword);
+            }
+        }
+
+        /// <summary>
+        /// Uber 셰이더를 쓰는 렌더러의 머티리얼 인스턴스. 불꽃 파티클처럼 다른 셰이더를 쓰는
+        /// 렌더러는 프로퍼티가 없어 자동으로 빠진다.
+        /// </summary>
+        private Material[] UberMaterials
+        {
+            get
+            {
+                if (_uberMaterials != null) return _uberMaterials;
+
+                var found = new List<Material>();
+                foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
+                foreach (Material material in renderer.materials) // 여기서 인스턴스가 만들어진다
+                    if (material != null && material.HasProperty(OutlineEnabledId))
+                        found.Add(material);
+
+                _uberMaterials = found.ToArray();
+                return _uberMaterials;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_uberMaterials == null) return;
+
+            // 인스턴스는 우리가 만들었으니 우리가 지운다. EditMode 테스트에서도 도는 경로라 분기한다.
+            foreach (Material material in _uberMaterials)
+                if (Application.isPlaying) Destroy(material);
+                else DestroyImmediate(material);
+
+            _uberMaterials = null;
         }
 
         /// <summary>

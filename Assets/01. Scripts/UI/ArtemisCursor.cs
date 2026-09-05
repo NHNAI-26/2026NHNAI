@@ -20,6 +20,13 @@ namespace Border.UI
             Rotate,
         }
 
+        /// <summary>런타임에 그리는 UI 아이콘. 커서와 팔레트를 공유한다.</summary>
+        public enum Icon
+        {
+            Move,
+            Rotate,
+        }
+
         private const int Size = 64;
         private static readonly Color32 Clear = new(0, 0, 0, 0);
         private static readonly Color32 Ink = new(2, 7, 11, 255);
@@ -35,6 +42,8 @@ namespace Border.UI
         private static int requestPriority = int.MinValue;
         private static Visual requestedVisual = Visual.Default;
 
+        private static readonly Dictionary<Icon, Sprite> icons = new();
+
         private readonly Dictionary<Visual, CursorSprite> sprites = new();
         private Visual currentVisual = (Visual)(-1);
 
@@ -45,6 +54,7 @@ namespace Border.UI
             requestFrame = -1;
             requestPriority = int.MinValue;
             requestedVisual = Visual.Default;
+            icons.Clear();
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -72,6 +82,21 @@ namespace Border.UI
 
             requestedVisual = visual;
             requestPriority = priority;
+        }
+
+        /// <summary>
+        /// 버튼에 붙일 수 있는 아이콘 스프라이트. 커서와 같은 방식으로 런타임에 그리므로 에셋도
+        /// 인스펙터 참조도 필요 없다 — 코드로 스폰되는 UI(<c>RocketDesignUI</c>)가 이 경로를 쓴다.
+        /// </summary>
+        public static Sprite IconSprite(Icon icon)
+        {
+            if (icons.TryGetValue(icon, out Sprite cached) && cached != null) return cached;
+
+            Texture2D texture = icon == Icon.Move ? DrawMove() : DrawRotateIcon();
+            var sprite = Sprite.Create(texture, new Rect(0f, 0f, Size, Size), new Vector2(0.5f, 0.5f));
+            sprite.name = $"ArtemisIcon_{icon}";
+            icons[icon] = sprite;
+            return sprite;
         }
 
         private void Awake()
@@ -184,6 +209,36 @@ namespace Border.UI
             FillPolygon(texture, new[] { new Vector2(53, 18), new Vector2(62, 31), new Vector2(47, 30) }, Ink);
             FillPolygon(texture, new[] { new Vector2(53, 18), new Vector2(60, 29), new Vector2(48, 28) }, Cyan);
             DrawArrow(texture, 17f, 20f, 0.58f);
+            return Finalize(texture);
+        }
+
+        // 아이콘은 커서와 달리 안에 마우스 화살표를 넣지 않는다 — 34px 버튼에서는 잡음이 된다.
+        private static Texture2D DrawMove()
+        {
+            Texture2D texture = CreateTexture();
+            DrawLine(texture, 32, 14, 32, 50, Ink, 15);
+            DrawLine(texture, 14, 32, 50, 32, Ink, 15);
+            FillPolygon(texture, new[] { new Vector2(32, 2), new Vector2(47, 19), new Vector2(17, 19) }, Ink);
+            FillPolygon(texture, new[] { new Vector2(32, 62), new Vector2(47, 45), new Vector2(17, 45) }, Ink);
+            FillPolygon(texture, new[] { new Vector2(2, 32), new Vector2(19, 17), new Vector2(19, 47) }, Ink);
+            FillPolygon(texture, new[] { new Vector2(62, 32), new Vector2(45, 17), new Vector2(45, 47) }, Ink);
+            DrawLine(texture, 32, 17, 32, 47, Metal, 8);
+            DrawLine(texture, 17, 32, 47, 32, Metal, 8);
+            FillPolygon(texture, new[] { new Vector2(32, 8), new Vector2(43, 20), new Vector2(21, 20) }, Metal);
+            FillPolygon(texture, new[] { new Vector2(32, 56), new Vector2(43, 44), new Vector2(21, 44) }, Metal);
+            FillPolygon(texture, new[] { new Vector2(8, 32), new Vector2(20, 21), new Vector2(20, 43) }, Metal);
+            FillPolygon(texture, new[] { new Vector2(56, 32), new Vector2(44, 21), new Vector2(44, 43) }, Metal);
+            FillCircle(texture, 32, 32, 4, Cyan);
+            return Finalize(texture);
+        }
+
+        private static Texture2D DrawRotateIcon()
+        {
+            Texture2D texture = CreateTexture();
+            DrawArc(texture, 32, 32, 21, 20f, 320f, Ink, 15);
+            DrawArc(texture, 32, 32, 21, 20f, 320f, Metal, 8);
+            FillPolygon(texture, new[] { new Vector2(52, 10), new Vector2(64, 27), new Vector2(42, 29) }, Ink);
+            FillPolygon(texture, new[] { new Vector2(52, 15), new Vector2(60, 26), new Vector2(45, 27) }, Cyan);
             return Finalize(texture);
         }
 

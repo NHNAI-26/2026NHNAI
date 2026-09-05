@@ -47,8 +47,6 @@ namespace Simulation
         private RectTransform partTools;
         private Button moveButton;
         private Button rotateButton;
-        private TMP_Text moveLabel;
-        private TMP_Text rotateLabel;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void SpawnInSimulationScene()
@@ -253,15 +251,16 @@ namespace Simulation
             partTools.anchorMin = Vector2.zero;
             partTools.anchorMax = Vector2.zero;
             partTools.pivot = new Vector2(0.5f, 0f); // 아래 가운데를 기준점으로 잡아 부품 위에 세운다
-            partTools.sizeDelta = new Vector2(160f, 34f);
+            partTools.sizeDelta = new Vector2(80f, 34f); // 정사각 아이콘 버튼 두 개 + spacing
 
             var layout = partTools.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 6f;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
 
-            moveButton = CreateButton("MoveButton", partTools, "이동", out moveLabel);
-            rotateButton = CreateButton("RotateButton", partTools, "회전", out rotateLabel);
+            moveButton = CreateButton("MoveButton", partTools, ArtemisCursor.IconSprite(ArtemisCursor.Icon.Move));
+            rotateButton = CreateButton("RotateButton", partTools,
+                ArtemisCursor.IconSprite(ArtemisCursor.Icon.Rotate));
 
             moveButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Move));
             rotateButton.onClick.AddListener(() => builder.SetMode(RocketBuilder.EditMode.Rotate));
@@ -281,9 +280,12 @@ namespace Simulation
             partTools.gameObject.SetActive(hasSelection);
             if (!hasSelection) return;
 
-            // 진행 중인 모드를 라벨로 알린다 — 회전 모드에서는 좌클릭 드래그가 카메라가 아니라 부품을 돌린다.
-            moveLabel.text = builder.Mode == RocketBuilder.EditMode.Move ? "이동 중" : "이동";
-            rotateLabel.text = builder.Mode == RocketBuilder.EditMode.Rotate ? "회전 중" : "회전";
+            // 진행 중인 모드를 배경색으로 알린다 — 회전 모드에서는 좌클릭 드래그가 카메라가 아니라 부품을 돌린다.
+            // Button 의 기본 ColorTint 는 normalColor 가 흰색이라 Image.color 를 그대로 곱해 내보낸다.
+            moveButton.targetGraphic.color =
+                builder.Mode == RocketBuilder.EditMode.Move ? EntryHoverColor : EntryColor;
+            rotateButton.targetGraphic.color =
+                builder.Mode == RocketBuilder.EditMode.Rotate ? EntryHoverColor : EntryColor;
         }
 
         /// <summary>
@@ -457,16 +459,19 @@ namespace Simulation
             return label;
         }
 
-        private static Button CreateButton(string name, Transform parent, string text, out TMP_Text label)
+        private static Button CreateButton(string name, Transform parent, Sprite icon)
         {
             RectTransform rect = CreatePanel(name, parent, EntryColor);
             var button = rect.gameObject.AddComponent<Button>();
             button.targetGraphic = rect.GetComponent<Image>();
 
-            label = CreateText("Label", rect, 14, FontStyles.Bold, text);
-            label.alignment = TextAlignmentOptions.Center;
-            label.raycastTarget = false;
-            Fill((RectTransform)label.transform, 0f);
+            var iconObject = new GameObject("Icon", typeof(RectTransform));
+            iconObject.transform.SetParent(rect, false);
+            var image = iconObject.AddComponent<Image>();
+            image.sprite = icon;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            Fill((RectTransform)iconObject.transform, 7f);
 
             return button;
         }
