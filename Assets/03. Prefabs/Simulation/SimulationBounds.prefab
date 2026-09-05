@@ -26,7 +26,7 @@ Transform:
   m_GameObject: {fileID: 8822875445031525}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 500, z: 405}
+  m_LocalPosition: {x: 0, y: 500, z: 805}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -51,7 +51,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 820, y: 1200, z: 10}
+  m_Size: {x: 1620, y: 1200, z: 10}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &358645637475675536
 GameObject:
@@ -114,7 +114,7 @@ Transform:
   m_GameObject: {fileID: 5498621091844208121}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 405, y: 500, z: 0}
+  m_LocalPosition: {x: 805, y: 500, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -139,7 +139,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 10, y: 1200, z: 820}
+  m_Size: {x: 10, y: 1200, z: 1620}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &7036852579676945596
 GameObject:
@@ -167,7 +167,7 @@ Transform:
   m_GameObject: {fileID: 7036852579676945596}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 500, z: -405}
+  m_LocalPosition: {x: 0, y: 500, z: -805}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -192,7 +192,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 820, y: 1200, z: 10}
+  m_Size: {x: 1620, y: 1200, z: 10}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &8233835621421386021
 GameObject:
@@ -220,7 +220,7 @@ Transform:
   m_GameObject: {fileID: 8233835621421386021}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -405, y: 500, z: 0}
+  m_LocalPosition: {x: -805, y: 500, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -245,5 +245,5 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 10, y: 1200, z: 820}
+  m_Size: {x: 10, y: 1200, z: 1620}
   m_Center: {x: 0, y: 0, z: 0}
