@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Reflection;
+using System.Collections;
+using Border.Audio;
+using Border.Prologue;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -23,6 +26,7 @@ namespace Border.Research
         private const int ResearchCinemachineCameraPriority = 20;
 
         [SerializeField] private GameObject operationScreenPrefab;
+        [SerializeField] private SoundManager soundManagerPrefab;
         [SerializeField] private Button enginePresetCardPrefab;
         [SerializeField] private ResearchResultReportController resultReport;
         [SerializeField] private ResearchEndingController endingScreen;
@@ -144,6 +148,16 @@ namespace Border.Research
             }
         }
 
+        private IEnumerator Start()
+        {
+            var prologue = FindFirstObjectByType<PrologueController>();
+            while (prologue != null && prologue.gameObject.activeInHierarchy)
+                yield return null;
+
+            if (initialized && RequestedScreenName == ResearchFlowSession.ResearchScreenName)
+                SoundManager.Instance?.PlayBgm("EngineBGM");
+        }
+
         private void OnDisable()
         {
             if (visibilityDialog != null) visibilityDialog.Hide();
@@ -202,6 +216,11 @@ namespace Border.Research
             }
 
             initialized = true;
+            if (Application.isPlaying)
+            {
+                if (SoundManager.Instance == null && soundManagerPrefab != null)
+                    Instantiate(soundManagerPrefab);
+            }
             Refresh();
             PlayResearchEntryAnimation(PanelGroup.Hub);
         }
@@ -806,6 +825,7 @@ namespace Border.Research
 
         private void ShowDesignScreen()
         {
+            if (Application.isPlaying) SoundManager.Instance?.PlayBgm("LaunchPanelLoop");
             RequestedScreenName = ResearchFlowSession.DesignScreenName;
             isTransitioningToDesign = false;
             KillResearchCameraDrift(resetRotation: true);
@@ -860,6 +880,7 @@ namespace Border.Research
             }
 
             RequestedScreenName = ResearchFlowSession.ResearchScreenName;
+            if (Application.isPlaying) SoundManager.Instance?.PlayBgm("EngineBGM");
             isTransitioningToDesign = false;
             // A hard reset back to the hub, not an animated close — the canvas is still off at this point.
             closingPartDevelopment = false;
@@ -892,6 +913,7 @@ namespace Border.Research
             }
 
             RequestedScreenName = "ResultReport";
+            if (Application.isPlaying) SoundManager.Instance?.StopBgm();
             if (canvasTransform != null) canvasTransform.gameObject.SetActive(false);
             HideEnginePreview();
             HideResearchLab();
@@ -925,6 +947,7 @@ namespace Border.Research
             }
             if (endingScreen.gameObject.activeSelf) return;
             RequestedScreenName = "Ending";
+            if (Application.isPlaying) SoundManager.Instance?.StopBgm();
             if (canvasTransform != null)
             {
                 canvasTransform.gameObject.SetActive(false);

@@ -216,17 +216,39 @@ namespace Simulation
             // Keep the result and photograph until the player dismisses its newspaper.
             // 등급은 여기서만 확정된다 — 발사 정보 패널이 스스로 알 수 없으므로 건네준다.
             if (designUI != null) designUI.ShowLaunchResult(result.Grade);
-            StartCoroutine(HoldThenUnload());
+            StartCoroutine(HoldThenUnload(succeeded));
         }
 
         /// <summary>
         /// 최종 수치를 읽을 시간을 준 뒤 정리한다. 곧바로 언로드하면 발사 정보 패널의 마지막 값과
         /// 성공·등급이 한 프레임 스치고 사라진다.
         /// </summary>
-        private IEnumerator HoldThenUnload()
+        private IEnumerator HoldThenUnload(bool succeeded)
         {
             // 대기 중에도 복귀 버튼이 살아 있으면 CloseDesignStage 가 두 번째 언로드를 띄운다.
             busy = true;
+            var presentation = succeeded && mission != null
+                ? mission.GetComponentInChildren<MissionSuccessPresentation>() : null;
+            Camera camera = FindSceneCamera(SceneManager.GetSceneByName(SimulationSceneName));
+            if (presentation != null && presentation.Begin(camera))
+            {
+                try
+                {
+                    double startedAt = Time.realtimeSinceStartupAsDouble;
+                    while (Time.realtimeSinceStartupAsDouble - startedAt < MissionSuccessPresentation.Duration)
+                    {
+                        presentation.Evaluate((float)(Time.realtimeSinceStartupAsDouble - startedAt));
+                        yield return null;
+                    }
+                    presentation.Evaluate(MissionSuccessPresentation.Duration);
+                }
+                finally
+                {
+                    if (presentation != null) presentation.End();
+                }
+                yield return UnloadRoutine();
+                yield break;
+            }
             yield return new WaitForSecondsRealtime(launchResultHoldSeconds);
             yield return UnloadRoutine();
         }

@@ -144,6 +144,22 @@ Texture Sheet Animation의 Start Frame을 무작위로 선택하고 Frame over T
 
 게임의 긴장은 음악보다 기계음과 통신음에서 나온다.
 
+### 등록된 효과음
+
+`Downloads/final/sfx`의 원본 4개를 `Assets/04. Audios/SFX/`에 가져와
+`Assets/02. ScriptableObjects/Audio/SoundDatabase.asset`의 SFX 목록에 등록했다.
+ID와 파일의 대응은 아래 표와 같으며, 볼륨과 피치는 1, 공간 음향은 꺼져 있다.
+
+| ID | 파일 | 반복 재생 |
+| --- | --- | --- |
+| `EngineStop` | `EngineStop.mp3` | 끔 |
+| `RocketLaunch` | `RocketLaunch.mp3` | 끔 |
+| `SparkStart` | `SparkStart.wav` | 끔 |
+| `RocketLoop` | `rocket_inflight_seamless_loop.wav` | 켬 |
+
+`SoundManager.Instance.PlaySfx(id)`로 재생할 수 있다. 비행 루프는 반환된
+`SoundHandle`을 보관해 종료 시 정지한다. 발사 상태별 재생은 `RocketAudio`가 처리한다.
+
 ### 운영 화면
 
 - 낮은 볼륨의 관제실 드론
@@ -210,13 +226,29 @@ Final verification confirmed.
 
 ## 10. 음악
 
-- 프롤로그: 15~20초의 낮은 긴장
-- 운영: 짧은 루프 1개
-- 발사: 공통 긴장 루프 또는 앰비언스 1개
-- 최종 미션 성공: 10~15초 성공 스팅어
-- 실패: 짧은 저음 스팅어
+`Assets/04. Audios/BGM/`의 네 곡을 `SoundDatabase.asset`의 BGM 목록에 등록했다.
+모두 반복 재생하며 볼륨과 피치는 1이다. 긴 곡을 메모리에 전부 풀어 두지 않도록
+오디오 Importer의 Load Type은 Streaming을 사용한다.
 
-미션별 완전한 BGM 6곡은 만들지 않는다.
+| 상황 | BGM ID | 파일 |
+| --- | --- | --- |
+| 엔진 연구실 진입·복귀 | `EngineBGM` | `EngineBGM.mp3` |
+| 로켓 설계 진입·비행 초기화 | `LaunchPanelLoop` | `Launch Panel Loop.mp3` |
+| 발사 승인 후 점화 시작 | `Launch` | `Launch.mp3` |
+| 우주 경계에 처음 도달 | `ToSpace` | `ToSpace.mp3` |
+
+전환은 기존 `BgmPlayer`의 두 AudioSource로 1초 크로스페이드한다. 같은 곡을 다시 요청해도
+처음부터 재생하지 않는다. 연구 화면은 `SoundManager` 프리팹을 참조하여 초기화한다.
+게임 시작 시에는 프롤로그의 텍스트와 검은 오버레이가 모두 사라진 뒤 `EngineBGM`을 재생한다.
+클릭으로 건너뛴 경우에도 오버레이 페이드가 끝날 때까지 기다리며, 프롤로그가 없는 씬에서는
+연구 화면 시작 시 바로 재생한다. 로켓의 `RocketAudio`는 발사 이벤트와 비행 초기화를 처리한다.
+
+우주 판정은 해당 로켓을 추적하는 `SkyEnvironment.IsInSpace`를 사용한다. 현재 프리팹은
+월드 1유닛을 250m로 환산하며, 연출 고도 70km(발사대에서 280유닛 상승)를 우주 경계로 삼는다.
+한 비행에서 `ToSpace` 전환은 한 번만 발생하고 하강 중에도 유지한다. 결과 보고서와 엔딩에서는
+1초 동안 음악을 줄여 정지하며, 연구실로 복귀하면 `EngineBGM`을 다시 재생한다.
+
+프롤로그·성공·실패 전용 곡은 아직 연결하지 않았다.
 
 ## 11. 연출 우선순위
 

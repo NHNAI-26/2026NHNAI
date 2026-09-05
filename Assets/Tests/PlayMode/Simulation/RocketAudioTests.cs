@@ -19,6 +19,8 @@ namespace Simulation.Tests
         private Rocket rocket;
         private RocketPart first;
         private RocketPart second;
+        private BgmPlayer bgm;
+        private GameObject skyHost;
 
         [UnitySetUp]
         public IEnumerator SetUp()
@@ -40,10 +42,22 @@ namespace Simulation.Tests
                 entries.Add(new SfxEntry(id, clip, loop: id == "RocketLoop", useSpatialAudio: id == "RocketLoop"));
             }
             SetField(database, "sfxEntries", entries);
+            var music = new List<BgmEntry>();
+            foreach (string id in new[] { "EngineBGM", "LaunchPanelLoop", "Launch", "ToSpace" })
+            {
+                var clip = AudioClip.Create(id, 441000, 1, 44100, false);
+                clips.Add(clip);
+                music.Add(new BgmEntry(id, clip, loop: true));
+            }
+            SetField(database, "bgmEntries", music);
             database.RebuildLookup();
+            bgm = soundRoot.AddComponent<BgmPlayer>();
+            SetField(bgm, "sourceA", soundRoot.AddComponent<AudioSource>());
+            SetField(bgm, "sourceB", soundRoot.AddComponent<AudioSource>());
             var manager = soundRoot.AddComponent<SoundManager>();
             SetField(manager, "database", database);
             SetField(manager, "sfxPool", pool);
+            SetField(manager, "bgmPlayer", bgm);
 
             host = new GameObject("rocket audio test");
             host.transform.position = new Vector3(5000f, 20f, 5000f);
@@ -60,6 +74,7 @@ namespace Simulation.Tests
         public IEnumerator TearDown()
         {
             if (host != null) Object.Destroy(host);
+            if (skyHost != null) Object.Destroy(skyHost);
             yield return null;
             if (soundRoot != null) Object.Destroy(soundRoot);
             if (database != null) Object.Destroy(database);
@@ -115,6 +130,45 @@ namespace Simulation.Tests
 
         private AudioSource[] Sources(string id) => soundRoot.GetComponentsInChildren<AudioSource>()
             .Where(s => s.clip != null && s.clip.name == id).ToArray();
+
+        [UnityTest]
+        public IEnumerator Music_TransitionsAtSpaceBoundary_StaysDuringDescent_ResetsForNextLaunch()
+        {
+            skyHost = new GameObject("music altitude test");
+            skyHost.SetActive(false);
+            var sky = skyHost.AddComponent<SkyEnvironment>();
+            sky.enabled = false;
+            SetField(sky, "target", host.transform);
+            SetField(sky, "_zeroY", 20f);
+            SetField(sky, "worldMetersPerUnit", 1f);
+            SetField(sky, "spaceKm", 0.05f);
+            SetField(sky, "_bound", true);
+            skyHost.SetActive(true);
+            yield return null;
+            Assert.AreEqual("LaunchPanelLoop", bgm.CurrentId);
+
+            rocket.Launch();
+            host.GetComponent<Rigidbody>().isKinematic = true;
+            Assert.AreEqual("Launch", bgm.CurrentId);
+            host.transform.position = Vector3.up * 69f;
+            yield return null;
+            Assert.AreEqual("Launch", bgm.CurrentId);
+            host.transform.position = Vector3.up * 70f;
+            yield return null;
+            Assert.AreEqual("ToSpace", bgm.CurrentId);
+            var spaceSource = bgm.CurrentSource;
+            host.transform.position = Vector3.up * 40f;
+            yield return null;
+            Assert.AreSame(spaceSource, bgm.CurrentSource);
+            Assert.AreEqual("ToSpace", bgm.CurrentId);
+
+            rocket.ResetFlight(Vector3.up * 20f, Quaternion.identity);
+            yield return null;
+            Assert.AreEqual("LaunchPanelLoop", bgm.CurrentId);
+            rocket.Launch();
+            Assert.AreEqual("Launch", bgm.CurrentId);
+            SetField(sky, "_bound", false);
+        }
 
         private RocketPart CreateEngine(string name)
         {

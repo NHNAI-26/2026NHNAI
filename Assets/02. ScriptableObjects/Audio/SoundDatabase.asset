@@ -12,7 +12,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5296d3f630b29da4cbd1063a0513c705, type: 3}
   m_Name: SoundDatabase
   m_EditorClassIdentifier: Border::Border.Audio.SoundDatabaseSO
-  bgmEntries: []
+  bgmEntries:
+  - id: EngineBGM
+    clip: {fileID: 8300000, guid: 4084d486608a742faa63aaf5c7add49e, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
+  - id: LaunchPanelLoop
+    clip: {fileID: 8300000, guid: f04a9a6eea20640fe879973a38b416ec, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
+  - id: Launch
+    clip: {fileID: 8300000, guid: 67d4bd79721fb45619a3f6dbae135902, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
+  - id: ToSpace
+    clip: {fileID: 8300000, guid: 0530c6833058244cebf56077a8430871, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
   sfxEntries:
   - id: EngineStop
     clip: {fileID: 8300000, guid: 53b79cfbcfacc4abdbce7f205151f18d, type: 3}

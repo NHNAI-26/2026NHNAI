@@ -1019,6 +1019,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Border::Border.Research.ResearchOperationUIController
   operationScreenPrefab: {fileID: 0}
+  soundManagerPrefab: {fileID: 6733057746963571286, guid: ba3fcd9ffa8812249b9f94c14cc82eb9, type: 3}
   enginePresetCardPrefab: {fileID: 0}
   resultReport: {fileID: 222143198}
   endingScreen: {fileID: 1002248058}
