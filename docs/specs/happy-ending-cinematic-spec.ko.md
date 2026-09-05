@@ -6,15 +6,15 @@
 
 | 항목 | 값 |
 | --- | --- |
-| Interview state | `active` |
-| Working language | 한국어 |
-| Current revision | 3 |
+| Interview state | `explicitly-finished` |
+| Working language | 한국어(인터뷰), 영어(정본) |
+| Current revision | 5 |
 | Last updated | 2026-09-06 (KST) |
 | Project or workspace root | `C:\myGame\2026NHNAI` |
-| Base path | `docs/specs/happy-ending-cinematic-spec.md` (명시적 finish 시 영어 정본용으로 예약) |
-| Korean mirror path | `docs/specs/happy-ending-cinematic-spec.ko.md` (현재 활성 문서) |
-| Explicit finish received | `no` |
-| Next authorized action | 남은 확인(OI-007, RK-005 테스트 수정 범위) 또는 사용자의 명시적 finish. 구현 착수는 별도 승인 필요 |
+| Base path | `docs/specs/happy-ending-cinematic-spec.md` (영어 정본) |
+| Korean mirror path | `docs/specs/happy-ending-cinematic-spec.ko.md` (이 파일) |
+| Explicit finish received | `yes` ("계획확정하고 구현을 해줘", revision 4) |
+| Next authorized action | Play Mode 가 비면 EditMode 스위트 실행과 게임 뷰 확인. 룩 작업과 Timeline 전환(R-016)은 별도 승인 필요 |
 
 ## Current Snapshot
 
@@ -22,10 +22,10 @@
 - **Primary users or audience:** 게임을 끝까지 클리어한 플레이어. 부차적으로 데모/발표에서 엔딩을 보여줘야 하는 개발자.
 - **In scope:** 해피엔딩 연출 7비트(날짜 카드 → 전화 대사 → 야간 발사 → 달 전환 → 달 항행 → 신문 → 페이드 아웃), 재생 트리거 지점, 로켓 외형 확보 방식, 구현 기술 선택.
 - **Out of scope:** 새드엔딩 연출, 엔딩 크레딧, 세이브/로드, 승패 판정 규칙 변경.
-- **Current decision focus:** 구조 결정은 모두 닫힘. 남은 것은 구현 착수 승인과 테스트 수정 범위 산정.
+- **Current decision focus:** 없음. 구조 결정은 모두 닫혔다.
 - **Material unresolved items:** OI-007
 - **Active question IDs:** 없음
-- **확정된 축(rev 2~3):** 최종 성공 시 낙하산 6초와 결과 신문을 건너뛰고 곧바로 엔딩 시네마틱으로 진입한다(UD-004). 로켓은 씬 언로드 직전 보존한 실제 발사 로켓을 쓴다(UD-005). 3D 구간만 Timeline, 나머지는 프롤로그식 코루틴이다(UD-006). 페이드 후 `00_Title` 로 복귀한다(UD-007). 전화 대사는 3~4줄, 담담한 톤(UD-008). 총 길이 40~60초(UD-009).
+- **확정된 축(rev 2~4):** 최종 성공 시 낙하산 6초와 결과 신문을 건너뛰고 곧바로 엔딩 시네마틱으로 진입한다(UD-004). 로켓은 씬 언로드 직전 보존한 실제 발사 로켓을 쓴다(UD-005). 3D 구간만 Timeline, 나머지는 프롤로그식 코루틴이다(UD-006). 페이드 후 `00_Title` 로 복귀한다(UD-007). 전화 대사는 3~4줄, 담담한 톤(UD-008). 총 길이 40~60초(UD-009).
 
 ## Outcome and Context
 
@@ -41,7 +41,7 @@
 
 ### Planning Boundary
 
-이 계획은 해피엔딩 연출의 범위, 비트 구성, 트리거 지점, 데이터 소유, 기술 선택을 결정한다. 결정하지 않는 것: 실제 대사 문안, 사운드 에셋 제작, 새드엔딩, 그리고 구현 착수 자체. 구현·커밋·씬 편집은 별도 승인이 필요하다.
+이 계획은 해피엔딩 연출의 범위, 비트 구성, 트리거 지점, 데이터 소유, 기술 선택을 결정한다. 결정하지 않는 것: 실제 대사 문안, 사운드 에셋 제작, 새드엔딩. 구현은 이 계획을 확정한 같은 메시지에서 별도로 승인되었다. 커밋·씬 편집·패키지 설치·배포는 승인되지 않았다.
 
 ## Users and Stakeholders
 
@@ -103,7 +103,7 @@
 | --- | --- | --- | --- |
 | 플레이어가 화면을 클릭 | 프롤로그와 동일하게 남은 비트를 버리고 마지막 페이드로 직행 | R-008, SF-004 | active |
 | 연출 프리팹/참조 누락 | 연출을 포기하고 기존 `ResearchEndingController` 경로로 진행. 절대 검은 화면에 갇히지 않는다 | R-009, SF-004 | active |
-| 최종 성공 로켓 외형을 확보하지 못함 | 대체 로켓으로 재생하고 연출을 중단하지 않는다 | R-010, OI-002 | unresolved |
+| 최종 성공 로켓 외형을 확보하지 못함 | 대체 로켓으로 재생하고 연출을 중단하지 않는다 | R-010, UD-005 | active |
 | 데드라인 패배(`GameWon == false`) | 이 연출은 재생하지 않는다. 기존 경로 유지 | R-011, UD-002 | active |
 | 연출 도중 컴포넌트 비활성화 | 카메라·로켓·오디오를 원상 복구한다. `MissionSuccessPresentation` 의 기존 규칙과 동일 | R-012, SF-003 | active |
 
@@ -127,7 +127,7 @@
 | R-007 | B6 은 기존 신문 연출과 동일한 형식으로 성공 기사를 보여준다 | functional | UD-002, SF-006 | must | active | 기존 신문 UI 재사용 확인 |
 | R-008 | 연출 전체를 클릭으로 스킵할 수 있다 | quality | SF-004 | must | active | 클릭 시 마지막 페이드로 직행 |
 | R-009 | 필수 참조가 누락되어도 게임이 잠기지 않고 기존 엔딩 경로로 진행한다 | operational | SF-004 | must | active | 참조를 비운 상태로 재생 |
-| R-010 | 로켓 외형 확보에 실패해도 연출은 대체 외형으로 계속된다 | operational | OI-002 | should | active | 외형 소스 제거 후 재생 |
+| R-010 | 로켓 외형 확보에 실패해도 연출은 대체 외형으로 계속된다 | operational | UD-005 | should | active | 외형 소스 제거 후 재생 |
 | R-011 | 기존 `ResearchCompletionFlowTests` 가 계속 통과한다 | quality | SF-009 | must | active | EditMode 테스트 통과 |
 | R-012 | 연출 종료·중단 시 카메라, 로켓 부모, 오디오, 시간 상태를 원상 복구한다 | operational | SF-003 | must | active | 연출 중 비활성화 테스트 |
 | R-013 | 연출 재생을 개발용으로 강제 트리거할 수단이 있다 | operational | AR-005 | should | proposed | 에디터 메뉴 또는 디버그 버튼 |
@@ -176,6 +176,7 @@
 | UD-007 | user decision | B7 페이드 아웃 후 `00_Title` 로 복귀한다. 해피엔딩에서는 기존 기록 패널을 보여주지 않는다 | Q-004 답변 "타이틀로 복귀" (rev 3) | active | R-017, R-018, OI-004 resolved, RK-007 |
 | UD-008 | user decision | B2 전화 대사는 3~4줄, 담담한 톤. 프롤로그 통신 톤을 뒤집는 방향 | Q-005 답변 "3~4줄, 담담하게" (rev 3) | active | R-019, OI-005 resolved |
 | UD-009 | user decision | 연출 총 길이 예산은 40~60초 | Q-006 답변 "40~60초" (rev 3) | active | R-019, OI-006 resolved, 비트별 길이 배분 |
+| UD-010 | user decision | 계획을 확정하고 구현까지 진행한다 | "계획확정하고 구현을 해줘" (rev 4) | active | Interview state `explicitly-finished`, 구현 승인 |
 | SF-012 | sourced fact | 타이틀에서 본편으로 가는 경로만 존재한다. `TitleMenu.NewGame()` 이 `ResearchFlowSession.PrepareNewGame()`(내부적으로 `ResetResearch()`) 후 `SceneManager.LoadScene("01_Main")` 을 호출한다. 본편에서 타이틀로 돌아가는 코드는 없다. `ResearchFlowSession` 은 `DontDestroyOnLoad` 라 씬을 넘어도 살아남는다 | `Assets/01. Scripts/Title/TitleMenu.cs:38-44`, `Assets/01. Scripts/Research/ResearchFlowSession.cs:253-257,283` | active | R-017, R-018, RK-007 |
 | SF-001 | sourced fact | 승리는 `LowPowerZoneHold` 최고 등급 B 이상, 패배는 `RemainingTurns <= 0`(2026 Q4). `EvaluateGameEnd` 가 `HasGameEnded`/`GameWon` 을 확정 | `Assets/01. Scripts/Research/ResearchPrototypeModel.cs:1524-1534` | active | R-001 |
 | SF-002 | sourced fact | 엔딩 화면은 `ResearchEndingController` 하나이며 제목 문자열만 `MISSION COMPLETE`/`MISSION FAILED` 로 갈린다. 본문·버튼은 공통 | `Assets/01. Scripts/Research/ResearchEndingController.cs:27-28` | active | OI-004 |
@@ -219,6 +220,40 @@
 | 1 | 최초 요청 + 코드/문서 조사 | 최초 계획 가설 작성 | 없음 | Snapshot, Scope, Flow, R-001~R-013, RK-001~RK-006, Ledger, Q-001~Q-003 |
 | 2 | Q-001~Q-003 답변 | 낙하산 생략·즉시 엔딩, 발사 로켓 보존, 하이브리드 구현 확정 | AR-002·AR-003 accepted, OI-001~OI-003 resolved, Q-001~Q-003 answered | Snapshot, Scope, Primary Flow 진입 지점, R-014~R-016, RK-001·RK-003·RK-005, OI-007 신규, Q-004~Q-006 신규 |
 | 3 | Q-004~Q-006 답변 | 타이틀 복귀, 대사 3~4줄, 40~60초 예산 확정. 타이틀 복귀 경로가 신규 구현임을 SF-012 로 확인 | OI-004~OI-006 resolved, Q-004~Q-006 answered | Snapshot, Primary Flow B7 + 길이 배분표, R-017~R-019, SF-012, RK-006·RK-007·RK-008, Coverage, Checkpoint |
+| 4 | 명시적 finish + 구현 승인 | 인터뷰 종료. 영어 정본 작성, 한국어 미러 동기화 | UD-010 신규. Open Items 표에서 뒤늦게 남아 있던 OI-004~OI-006 상태를 resolved 로 정정 | Document State, Snapshot, Ledger, Open Items, Coverage, Finalization |
+| 5 | 1차 구현 | 구현 결과와 계획의 차이를 기록 | R-003·R-004·R-006 partial, R-013 not-implemented, R-016 deviated, RK-005 overstated 로 정정 | 아래 "구현 기록" |
+
+## 구현 기록 (revision 5)
+
+코드는 들어갔다. 계획과 다른 지점만 적는다. 같은 것은 위 표가 이미 말한다.
+
+### 들어간 것
+
+| 파일 | 내용 |
+| --- | --- |
+| `Assets/01. Scripts/Simulation/HappyEndingSequence.cs` | 신규. 일곱 비트 전부와 무대 생성·해체, 로켓 보존, 클릭 스킵, 타이틀 복귀 |
+| `Assets/01. Scripts/Simulation/SimulationStageHost.cs` | `CompleteLaunch` 에 `result.FinalMissionWon` 분기와 `HappyEndingRoutine` 추가 |
+| `Assets/01. Scripts/Research/ResearchOperationUIController.cs` | `SetEndingOverride` 추가. `ShowEndingScreen` 한 곳에서만 가로챈다 |
+| `Assets/Tests/EditMode/Research/ResearchCompletionFlowTests.cs` | `EndingOverride_TakesOverInsteadOfShowingEndingScreen` 추가 |
+| `Assets/01. Scripts/Simulation/HappyEndingDebugTester.cs` | 신규. 에디터 전용 강제 재생. **F8** 과 `Tools > Border > Debug > Play Happy Ending` |
+| `docs/mission-success-cinematic.md` | 최종 미션은 낙하산 연출을 타지 않는다는 예외 명시 |
+
+### 계획과 다른 점
+
+| ID | 상태 | 실제 |
+| --- | --- | --- |
+| R-016 | deviated | Timeline 을 쓰지 않는다. 무대를 런타임에 세우므로 Timeline 이 바인딩할 대상이 없다. B3~B5 는 코루틴 코드다. Timeline 으로 바꾸려면 발사대·달·카메라를 먼저 프리팹으로 만들어야 하고, 그건 에디터 작업이다 |
+| R-004, R-006 | partial | 발사대·지면·달은 프리미티브 자리표시자다. 밤은 조명 세기와 색으로만 만든다. 룩 교체는 에디터 몫 |
+| R-003 | partial | 대사는 `HappyEndingSequence` 의 직렬화 필드다. 런타임 생성 컴포넌트라 인스펙터로 열리지 않으므로, 지금은 문안 수정에 코드 편집이 필요하다 |
+| R-013 | done | `HappyEndingDebugTester` 가 F8 과 메뉴로 강제 재생한다. 확인 대기 중인 발사 결과가 없으면 신문 비트만 건너뛴다 — 결과를 위조하지 않는다 |
+| RK-005 | corrected | 과대평가였다. `ResearchCompletionFlowTests` 는 `SimulationStageHost` 를 지나가지 않고, 문제의 테스트는 최종 승리가 아니라 데드라인 패배 경로다. 기존 테스트 수정 없음 |
+| RK-007 | mitigated | 타이틀 복귀는 `SceneManager.LoadScene("00_Title")` 한 줄. 세션 초기화는 기존 `TitleMenu.NewGame` 에 맡기고 중복 호출하지 않는다 |
+
+### 검증 상태
+
+컴파일 통과(에디터가 Play Mode 로 들어갔으므로 컴파일 에러가 없다). 테스트 추가분과
+`ResearchCompletionFlowTests` 전체는 **아직 돌리지 않았다** — 작업 시점에 사용자가 Play Mode 를
+점유 중이었다. 게임 뷰 확인은 사용자 몫이며 아직 수행되지 않았다.
 
 ## Risks, Conflicts, and Dependencies
 
@@ -240,9 +275,9 @@
 | OI-001 | 신문 중복·낙하산 유지 여부 | resolved | 트리거 지점, 테스트 수정 범위 | — | 사용자 | UD-004 로 종결 |
 | OI-002 | 로켓 외형 소스 | resolved | R-005 성립 여부 | — | 사용자 | UD-005 로 종결 |
 | OI-003 | 구현 기술 | resolved | 코드량·유지보수 | — | 사용자 | UD-006 로 종결 |
-| OI-004 | 페이드 이후 도착 지점 | open | 흐름 종결부 | 기존 엔딩 화면을 시네마틱 뒤에 유지(재시작 수단 필요) | 사용자 | Q-004 답변 |
-| OI-005 | 전화 대사 내용 | open | 연출 길이와 톤 | 3~4줄, 프롤로그와 같은 통신음 | 사용자 | Q-005 답변 |
-| OI-006 | 총 길이 예산 | open | 각 비트 타이밍 | 40~60초 | 사용자 | Q-006 답변 |
+| OI-004 | 페이드 이후 도착 지점 | resolved | 흐름 종결부 | — | 사용자 | UD-007 로 종결 |
+| OI-005 | 전화 대사 내용 | resolved | 연출 길이와 톤 | — | 사용자 | UD-008 로 종결. 문안은 구현 시 작성 |
+| OI-006 | 총 길이 예산 | resolved | 각 비트 타이밍 | — | 사용자 | UD-009 로 종결 |
 | OI-007 | 낙하산 연출 보완 여부 | open | 이미 검증까지 끝낸 연출이 최종 미션에서 사라짐 | 보완하지 않는다. 0~4번 미션 성공에서는 그대로 쓰이므로 사장되지 않음 | 사용자 | 엔딩 첫 재생 확인 후 |
 
 ## Coverage and Consistency Check
@@ -258,25 +293,30 @@
 | Success evidence | partial | R-001~R-019 | 육안 확인 항목의 기준 컷 미정 |
 | Risks and dependencies | covered | RK-001~RK-008 | — |
 | Unresolved decisions | covered | OI-007 | 6건 해결, 1건 잔존(연출 자산 활용도, 구현 무관) |
-| Handoff and authorization | covered | Document State | 구현 미승인 |
+| Handoff and authorization | covered | UD-010, Document State | 구현 승인됨. 커밋·씬 편집은 미승인 |
 
 ## Interview Checkpoint
 
-- **Latest user message incorporated:** Q-004~Q-006 답변 (revision 3)
+- **Latest user message incorporated:** 명시적 finish + 구현 승인 (revision 4)
 - **Latest sourced evidence incorporated:** SF-012 (`TitleMenu.cs`, `ResearchFlowSession.cs`)
-- **Ledger transitions applied:** UD-007~UD-009 신규, SF-012 신규, OI-004~OI-006 resolved, Q-004~Q-006 answered, RK-007·RK-008 신규
-- **Affected sections reconciled:** Snapshot, Primary Flow B7 + 길이 배분표, Requirements(R-017~R-019), Success Evidence, Risks, Open Items, Question Register, Coverage
+- **Ledger transitions applied:** UD-010 신규. Open Items 표의 OI-004~OI-006 을 resolved 로 정정
+- **Affected sections reconciled:** Document State, Snapshot, Ledger, Open Items, Coverage, Finalization
 - **Contradictory active items check:** passed
 - **Traceability check:** passed (R-001~R-019 모두 UD/SF/AR/OI 연결)
-- **Current focus:** 구조 결정 종료. 구현 착수 승인 대기
+- **Current focus:** 없음. 인터뷰 종료
 - **Next question IDs:** 없음
-- **Resume point:** 사용자가 finish 하면 영어 정본 + 한국어 미러 생성. 구현 착수 시 RK-005 의 테스트 수정 범위부터 산정
+- **Resume point:** 계획이 다시 열리면 OI-007 과 구현에서 드러난 RK-005 결과부터
 
 ## Finalization and Handoff
 
-- **Final interview state:** `active` (미완료)
-- **Authoritative English source:** `docs/specs/happy-ending-cinematic-spec.md` (예약, 미생성)
-- **Korean mirror:** `docs/specs/happy-ending-cinematic-spec.ko.md` (현재 활성)
-- **Next authorized action:** Q-004~Q-006 답변 수집
+- **Final interview state:** `explicitly-finished`
+- **Authoritative English source:** `docs/specs/happy-ending-cinematic-spec.md`
+- **Korean mirror:** `docs/specs/happy-ending-cinematic-spec.ko.md`
+- **Synchronization check:** 두 파일이 같은 ID, 상태, 요구사항, 결정, 위험, 미해결 항목, next authorized action 을 담는다
+- **Remaining gaps and consequences:** OI-007(낙하산 연출 보완 여부) — 구현을 막지 않는다. RK-005(테스트 재작성)는 구현 중 처리
+- **Assumptions still requiring confirmation:** AR-001, AR-004, AR-005 는 여전히 권고이며 사용자 결정이 아니다
+- **Next authorized action:** R-001~R-019 구현. finish 와 같은 메시지에서 승인됨
+- **Implementation handoff:** 진입점 `SimulationStageHost.CompleteLaunch`(R-014), 보존 `Rocket` 루트 복제(R-015), 연출 B1~B7(R-002~R-007), 종료 `SceneManager.LoadScene("00_Title")`(R-017, R-018), 테스트 재작성 `ResearchCompletionFlowTests`(R-011, RK-005)
+- **Resume point if planning reopens:** OI-007, 그리고 구현에서 나온 RK-005 결과
 
-> 이 계획을 승인하는 것은 구현, 커밋, 씬 편집, 패키지 설치, 배포를 승인하는 것이 아니다. 별도 승인이 필요하다.
+> 이 계획을 확정·승인하는 것은 커밋, PR, 패키지 설치, 배포, 외부 시스템 변경을 승인하는 것이 아니다. 이 계획의 구현만 사용자가 별도로 승인했다.

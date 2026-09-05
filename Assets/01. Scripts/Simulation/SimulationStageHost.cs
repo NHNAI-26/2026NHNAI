@@ -238,7 +238,49 @@ namespace Simulation
             // Keep the result and photograph until the player dismisses its newspaper.
             // 등급은 여기서만 확정된다 — 발사 정보 패널이 스스로 알 수 없으므로 건네준다.
             if (designUI != null) designUI.ShowLaunchResult(result.Grade);
+            // 최종 미션을 통과한 발사만 여기서 갈린다. 낙하산 6초와 결과 신문을 건너뛰고 곧바로
+            // 해피엔딩으로 들어간다 — 신문은 엔딩의 마지막 비트에서 한 번만 나온다.
+            // docs/specs/happy-ending-cinematic-spec.md (UD-004, R-014)
+            if (result.FinalMissionWon && research != null)
+            {
+                StartCoroutine(HappyEndingRoutine(result));
+                return;
+            }
             StartCoroutine(HoldThenUnload(succeeded));
+        }
+
+        /// <summary>
+        /// 시뮬레이션 씬을 내리되 연구 화면을 되살리지 않고 엔딩에 넘긴다. 로켓의 시각 계층은
+        /// 언로드 <b>전에</b> 복제해 둔다 — 파트 배치는 직렬화되지 않아 씬과 함께 사라진다.
+        /// </summary>
+        private IEnumerator HappyEndingRoutine(ResearchLaunchResultData result)
+        {
+            busy = true;
+            while (photoCapture != null && photoCapture.IsCapturing) yield return null;
+
+            GameObject rocketVisual = HappyEndingSequence.PreserveRocket(FindFirstObjectByType<Rocket>());
+
+            if (crt != null) yield return crt.PowerOffRoutine();
+            designUI = null;
+
+            Scene scene = SceneManager.GetSceneByName(SimulationSceneName);
+            if (scene.isLoaded) yield return SceneManager.UnloadSceneAsync(scene);
+
+            if (mainCamera != null)
+            {
+                mainCamera.tag = MainCameraTag;
+                mainCamera.cullingMask = mainCameraCullingMask;
+                mainCamera.clearFlags = mainCameraClearFlags;
+            }
+
+            ResearchFlowSession.GetOrCreate().ClearPendingDesignEntry();
+            mission = null;
+            photoCapture = null;
+            loaded = false;
+            busy = false;
+
+            // 커튼은 걷지 않는다 — 엔딩이 자기 검은 화면을 세운 뒤 직접 걷는다.
+            HappyEndingSequence.Play(rocketVisual, research, result, crt);
         }
 
         /// <summary>

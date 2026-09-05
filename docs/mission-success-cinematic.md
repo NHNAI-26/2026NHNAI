@@ -51,6 +51,11 @@ Play Mode에 들어가지 않아도 전용 창에서 낙하산 연출을 볼 수
 
 ## 실제 성공 흐름
 
+최종 미션(`LowPowerZoneHold`)을 B 이상으로 통과한 발사는 이 연출을 재생하지 않습니다.
+`SimulationStageHost.CompleteLaunch`가 `result.FinalMissionWon`을 보고 낙하산과 결과 신문을 모두 건너뛴 뒤
+해피엔딩 시네마틱으로 넘깁니다. 신문은 그 시네마틱의 마지막 비트에서 한 번만 나옵니다.
+자세한 것은 `docs/specs/happy-ending-cinematic-spec.md`. 아래는 그 외 모든 성공에 해당합니다.
+
 `SimulationStageHost.CompleteLaunch(true)`에서 등급과 보상을 확정한 뒤 연출을 시작합니다.
 `RocketBody.prefab`의 `MissionSuccessPresentation`은 상위의 실제 `Rocket`을 찾아 사용하므로
 몸통 프리팹에 별도 로켓이나 Rigidbody를 만들지 않습니다.

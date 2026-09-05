@@ -50,6 +50,7 @@ namespace Border.Research
 
         private ResearchFlowSession session;
         private ResearchPrototypeModel model;
+        private Action endingOverride;
         private EnginePresetId selectedEnginePreset = EnginePresetId.Engine01;
         private EngineStatId selectedStat = EngineStatId.FuelCapacity;
         private LaunchMissionId selectedMission = LaunchMissionId.LowAltitude;
@@ -985,8 +986,24 @@ namespace Border.Research
             session.PublishPendingLaunchOutcome();
         }
 
+        /// <summary>
+        /// 엔딩 화면 대신 다른 연출이 마무리를 가져간다. 해피엔딩 시네마틱이 결과 신문을 마지막
+        /// 비트로 쓰기 때문에 필요하다 — 신문을 닫는 모든 경로가 <see cref="ShowEndingScreen"/> 로
+        /// 모이므로, 경로마다 막지 않고 여기 한 곳에서만 가로챈다.
+        /// 한 번 쓰면 해제된다. 넘겨받은 쪽이 화면을 책임진다.
+        /// </summary>
+        public void SetEndingOverride(Action takeover) => endingOverride = takeover;
+
         private void ShowEndingScreen()
         {
+            if (endingOverride != null)
+            {
+                Action takeover = endingOverride;
+                endingOverride = null;
+                takeover();
+                return;
+            }
+
             if (endingScreen == null)
             {
                 Debug.LogError("Research ending prefab must be assigned in the scene.", this);
