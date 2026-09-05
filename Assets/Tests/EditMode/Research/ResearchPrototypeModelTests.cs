@@ -883,8 +883,15 @@ namespace Border.Research.Tests
             {
                 ResearchOperationUIController controller = host.AddComponent<ResearchOperationUIController>();
                 controller.InitializeForTests();
+                GameObject dialog = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/ResearchTestVisibilityDialog.prefab"), host.transform);
+                var binding = new SerializedObject(controller);
+                binding.FindProperty("visibilityDialog").objectReferenceValue = dialog.GetComponent<ResearchTestVisibilityDialog>();
+                binding.ApplyModifiedPropertiesWithoutUndo();
 
                 FindButton(host.transform, "EnterDesignButton").onClick.Invoke();
+                Assert.That(session.HasPendingDesignEntry, Is.False);
+                Assert.That(session.Model.Funds, Is.EqualTo(funds));
+                FindButton(dialog.transform, "ConfirmButton").onClick.Invoke();
 
                 Assert.That(controller.Model, Is.SameAs(session.Model));
                 Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.ResearchScreenName));

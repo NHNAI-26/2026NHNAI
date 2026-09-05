@@ -36,6 +36,12 @@
 
 `SelectedEngineCompletion`은 조작 불가 게이지이며 선택 엔진의 기존 완성도 0~100을 표시한다. 카드 선택이나 연구 완료 시 기존 텍스트와 함께 갱신한다. 중앙 전시 영역에는 새 UI 그래픽을 추가하지 않는다.
 
+설계 진입은 `ResearchTestVisibilityDialog.prefab`에서 공개/비공개를 선택한 뒤 확정한다. 기본은 비공개이며 선택창 열기·취소는 비용과 분기를 소모하지 않는다. 최종 미션은 선택창을 생략한다. 선택은 `ResearchDesignEntryData.Visibility`에 고정하고 임시 설계 화면의 공개성 변경 버튼은 제거한다. 현재 물리 버전에서 공개성은 경제 효과만 적용하며 성공률과 점화 확률을 바꾸지 않는다.
+
+`ResearchLaunchOutcome.asset`은 결과 데이터와 사유를 전달하는 이벤트 채널이다. 세션이 보상과 결과를 확정한 뒤 통지를 대기시키고, 물리 발사 씬 정리 및 연구/엔딩 복귀 완료 후 `PublishPendingLaunchOutcome()`을 한 번 호출한다. 임시 경로는 보고서 표시 후 통지한다. 보고서 확인 여부와 통지 대기는 별개이며 새 게임에서는 대기 통지를 지운다.
+
+메인 씬의 `ResearchLaunchOutcomeHooks` 프리팹에서 `Succeeded`(S/A/B), `Partially Succeeded`(C), `Failed`(F) UnityEvent에 후속 UI·음향·연출을 연결한다. 코드에서는 채널의 `OnEventRaised` 또는 리스너의 `LastOutcome`으로 미션·공개성·등급·보상·최종 승패·사유를 읽는다. 기본 리스너는 연결 항목이 비어 있어 별도 팝업을 자동 표시하지 않는다. `Border/Research/Rebuild Test Visibility Dialog`와 `Border/Research/Install Test Visibility and Outcome Hooks` 명령으로 프리팹 생성과 씬 연결을 갱신한다.
+
 미니게임도 같은 아트를 사용한다. 공통 창과 실행/결과 닫기 버튼, 연료·출력 게이지 바탕, 연료 채움에 스프라이트를 연결한다. 냉각 밸브·온도 표시와 점화 버튼은 가운데가 빈 장식 테두리만 더해 기존 색상 및 노란 점멸을 보존한다. 목표선·판정 범위·출력 채움색과 입력 판정은 변경하지 않는다. `Border/Research/Apply Mini Game UI Art`로 미니게임 프리팹만 다시 적용할 수 있으며 재생성 도구에도 동일하게 반영한다.
 
 결과 보고서와 엔딩도 `ResearchResultReport.prefab`, `ResearchEnding.prefab`을 `01_Main`의 독립된 비활성 인스턴스로 배치한다. 연구 컨트롤러는 직렬화된 화면 참조를 사용하며 런타임에 UI 오브젝트를 조립하지 않는다. 프리팹 재생성은 `Border/Research/Rebuild Result and Ending Prefabs`, 씬 연결은 `Border/Research/Install Session and Result Screens` 에디터 명령으로 수행한다.

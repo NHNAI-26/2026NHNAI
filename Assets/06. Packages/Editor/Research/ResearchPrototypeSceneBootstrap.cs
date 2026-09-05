@@ -36,6 +36,86 @@ namespace Border.Editor.Research
         private const string VisualLibraryAssetPath = VisualLibraryFolderPath + "/EnginePresetVisualLibrary.asset";
         private static readonly Vector3 DefaultPreviewLocalPosition = new(-0.81f, 0.65f, 0f);
 
+        [MenuItem("Border/Research/Install Test Visibility and Outcome Hooks")]
+        public static void InstallTestVisibilityAndOutcomeHooks()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                throw new InvalidOperationException("Install testing UI in Edit Mode only.");
+            const string dialogPath = "Assets/03. Prefabs/UI/ResearchTestVisibilityDialog.prefab";
+            const string channelPath = "Assets/02. ScriptableObjects/Research/ResearchLaunchOutcome.asset";
+            const string hooksPath = "Assets/03. Prefabs/UI/ResearchLaunchOutcomeHooks.prefab";
+            GameObject dialogPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(dialogPath);
+            if (dialogPrefab == null) throw new InvalidOperationException("Build the test visibility dialog prefab first.");
+            ResearchLaunchOutcomeEventChannelSO channel = AssetDatabase.LoadAssetAtPath<ResearchLaunchOutcomeEventChannelSO>(channelPath);
+            if (channel == null)
+            {
+                channel = ScriptableObject.CreateInstance<ResearchLaunchOutcomeEventChannelSO>();
+                AssetDatabase.CreateAsset(channel, channelPath);
+            }
+            GameObject hooksPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(hooksPath);
+            if (hooksPrefab == null)
+            {
+                var root = new GameObject("Research Launch Outcome Hooks");
+                try
+                {
+                    var listener = root.AddComponent<ResearchLaunchOutcomeListener>();
+                    var listenerData = new SerializedObject(listener);
+                    listenerData.FindProperty("channel").objectReferenceValue = channel;
+                    listenerData.ApplyModifiedPropertiesWithoutUndo();
+                    hooksPrefab = PrefabUtility.SaveAsPrefabAsset(root, hooksPath);
+                }
+                finally { UnityEngine.Object.DestroyImmediate(root); }
+            }
+
+            const string designPath = "Assets/03. Prefabs/UI/Resources/ResearchUI/ResearchDesignScreen.prefab";
+            GameObject design = PrefabUtility.LoadPrefabContents(designPath);
+            try
+            {
+                if (RemoveVisibilityControls(design)) PrefabUtility.SaveAsPrefabAsset(design, designPath);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(design); }
+
+            Scene active = SceneManager.GetActiveScene();
+            Scene scene = SceneManager.GetSceneByPath(MainScenePath);
+            bool opened = !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(MainScenePath, OpenSceneMode.Additive);
+            try
+            {
+                var session = FindComponentInScene<ResearchFlowSession>(scene);
+                var operation = FindComponentInScene<ResearchOperationUIController>(scene);
+                if (session == null || operation == null) throw new InvalidOperationException("Research session and operation controller must be installed first.");
+                var dialog = FindComponentInScene<ResearchTestVisibilityDialog>(scene);
+                if (dialog == null) dialog = ((GameObject)PrefabUtility.InstantiatePrefab(dialogPrefab, scene)).GetComponent<ResearchTestVisibilityDialog>();
+                dialog.Hide();
+                if (FindComponentInScene<ResearchLaunchOutcomeListener>(scene) == null) PrefabUtility.InstantiatePrefab(hooksPrefab, scene);
+                var sessionData = new SerializedObject(session);
+                sessionData.FindProperty("outcomeChannel").objectReferenceValue = channel;
+                sessionData.ApplyModifiedPropertiesWithoutUndo();
+                var operationData = new SerializedObject(operation);
+                operationData.FindProperty("visibilityDialog").objectReferenceValue = dialog;
+                operationData.ApplyModifiedPropertiesWithoutUndo();
+                foreach (GameObject root in scene.GetRootGameObjects()) RemoveVisibilityControls(root);
+                EditorSceneManager.MarkSceneDirty(scene);
+                if (!EditorSceneManager.SaveScene(scene)) throw new InvalidOperationException("Could not save testing UI connections.");
+            }
+            finally
+            {
+                if (opened) EditorSceneManager.CloseScene(scene, true);
+                if (active.IsValid() && active.isLoaded) SceneManager.SetActiveScene(active);
+            }
+        }
+
+        private static bool RemoveVisibilityControls(GameObject root)
+        {
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name != "VisibilityControls") continue;
+                UnityEngine.Object.DestroyImmediate(child.gameObject);
+                return true;
+            }
+            return false;
+        }
+
         [MenuItem("Border/Research/Install Session and Result Screens")]
         public static void InstallSessionAndResultScreens()
         {

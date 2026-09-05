@@ -52,6 +52,12 @@ namespace Border.Research.Editor
         {
             Sprite[] sprites = LoadSprites();
             if (sprites == null) return;
+            LayoutElement topRow = Find(root.transform, "TopRow")?.GetComponent<LayoutElement>();
+            if (topRow != null)
+            {
+                topRow.minHeight = topRow.preferredHeight = 48f;
+                topRow.flexibleHeight = 0f;
+            }
             Skin(Find(root.transform, "MiniGamePanel")?.GetComponent<Image>(), sprites[0]);
             SkinButton(Find(root.transform, "PrimaryActionButton")?.GetComponent<Button>(), sprites[5]);
 
@@ -71,6 +77,14 @@ namespace Border.Research.Editor
                     AddFrame(button.transform, sprites[4]);
             Transform hotspot = Find(root.transform, "CoolingHotspot");
             if (hotspot != null) AddFrame(hotspot, sprites[5]);
+            foreach (string name in new[] { "FuelJudgementText", "OutputJudgementText", "ResultDetailText" })
+            {
+                TMP_Text text = Find(root.transform, name)?.GetComponent<TMP_Text>();
+                if (text == null) continue;
+                text.enableAutoSizing = true;
+                text.fontSizeMin = name == "ResultDetailText" ? 14f : 24f;
+                text.fontSizeMax = name == "ResultDetailText" ? 21f : 38f;
+            }
         }
 
         private static void AddFrame(Transform parent, Sprite sprite)

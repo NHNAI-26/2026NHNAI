@@ -12,6 +12,9 @@ namespace Border.Research
         private static ResearchFlowSession instance;
 
         [SerializeField] private ResearchBalanceConfigSO balanceConfig;
+        [SerializeField] private ResearchLaunchOutcomeEventChannelSO outcomeChannel;
+        private ResearchLaunchOutcomeData pendingOutcome;
+        public bool HasPendingOutcomeNotification { get; private set; }
 
         private ResearchPrototypeModel model;
         private ResearchDesignEntryData pendingDesignEntry;
@@ -75,7 +78,12 @@ namespace Border.Research
 
         public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, out ResearchDesignEntryData data)
         {
-            ResearchActionResult result = Model.TryEnterDesign(missionId, presetId, out data);
+            return TryEnterDesign(missionId, presetId, missionId == LaunchMissionId.LowPowerZoneHold ? TestVisibility.FinalMission : TestVisibility.Private, out data);
+        }
+
+        public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, TestVisibility visibility, out ResearchDesignEntryData data)
+        {
+            ResearchActionResult result = Model.TryEnterDesign(missionId, presetId, visibility, out data);
             if (result == ResearchActionResult.Success)
             {
                 StoreDesignEntry(data);
@@ -114,12 +122,18 @@ namespace Border.Research
 
         public ResearchActionResult CompleteActiveLaunch(bool succeeded, out ResearchLaunchResultData result)
         {
+            return CompleteActiveLaunch(succeeded, null, out result);
+        }
+
+        public ResearchActionResult CompleteActiveLaunch(bool succeeded, string reason, out ResearchLaunchResultData result)
+        {
             ResearchActionResult action = Model.CompleteLaunch(succeeded, out result);
             if (action == ResearchActionResult.Success)
             {
                 lastLaunchResult = result;
                 hasLastLaunchResult = true;
                 HasUnacknowledgedLaunchResult = true;
+                QueueOutcome(result, reason);
             }
             return action;
         }
@@ -138,6 +152,7 @@ namespace Border.Research
                 lastLaunchResult = result;
                 hasLastLaunchResult = true;
                 HasUnacknowledgedLaunchResult = true;
+                QueueOutcome(result, null);
                 ClearPendingDesignEntry();
             }
 
@@ -155,6 +170,21 @@ namespace Border.Research
             HasUnacknowledgedLaunchResult = false;
         }
 
+        private void QueueOutcome(ResearchLaunchResultData result, string reason)
+        {
+            pendingOutcome = new ResearchLaunchOutcomeData(result, reason);
+            HasPendingOutcomeNotification = true;
+        }
+
+        public void PublishPendingLaunchOutcome()
+        {
+            if (!HasPendingOutcomeNotification) return;
+            ResearchLaunchOutcomeData outcome = pendingOutcome;
+            HasPendingOutcomeNotification = false;
+            pendingOutcome = default;
+            if (outcomeChannel != null) outcomeChannel.RaiseEvent(outcome);
+        }
+
         public void ResetResearch()
         {
             model = CreateModel();
@@ -162,6 +192,8 @@ namespace Border.Research
             lastLaunchResult = default;
             hasLastLaunchResult = false;
             HasUnacknowledgedLaunchResult = false;
+            HasPendingOutcomeNotification = false;
+            pendingOutcome = default;
         }
 
         public static void PrepareNewGame()

@@ -160,6 +160,7 @@ namespace Simulation
 
             loaded = false;
             busy = false;
+            ResearchFlowSession.GetOrCreate().PublishPendingLaunchOutcome();
         }
 
         private bool BeginLaunch(Rocket rocket)
@@ -202,7 +203,7 @@ namespace Simulation
         private void CompleteLaunch(bool succeeded)
         {
             var session = ResearchFlowSession.GetOrCreate();
-            if (session.CompleteActiveLaunch(succeeded, out _) != ResearchActionResult.Success) return;
+            if (session.CompleteActiveLaunch(succeeded, mission != null ? mission.Status : null, out _) != ResearchActionResult.Success) return;
             // Physical missions return directly to research; keep the result available in its status panel.
             session.AcknowledgeLaunchResult();
             StartCoroutine(UnloadRoutine());

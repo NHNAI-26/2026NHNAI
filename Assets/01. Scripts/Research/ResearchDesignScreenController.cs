@@ -29,8 +29,6 @@ namespace Border.Research
         private TMP_Text installedEngineText;
         private TMP_Text statusText;
         private TMP_Text launchButtonText;
-        private Button publicButton;
-        private Button privateButton;
         private Button launchButton;
         private Button[] presetButtons;
         private GameObject interfaceRoot;
@@ -180,8 +178,6 @@ namespace Border.Research
             designDataText = FindRequiredText(root, "DesignDataText");
             installedEngineText = FindRequiredText(root, "InstalledEngineText");
             statusText = FindRequiredText(root, "StatusText");
-            publicButton = FindRequiredButton(root, "PublicTestButton");
-            privateButton = FindRequiredButton(root, "PrivateTestButton");
             launchButton = FindRequiredButton(root, "LaunchButton");
             Button backButton = FindRequiredButton(root, "ReturnToResearchButton");
             Button removeButton = FindRequiredButton(root, "RemoveEngineButton");
@@ -195,8 +191,6 @@ namespace Border.Research
                 || designDataText == null
                 || installedEngineText == null
                 || statusText == null
-                || publicButton == null
-                || privateButton == null
                 || launchButton == null
                 || backButton == null
                 || removeButton == null
@@ -220,8 +214,6 @@ namespace Border.Research
             addButton.onClick.AddListener(() => ChangeInstalledEngineCount(1));
             fitDownButton.onClick.AddListener(() => ChangeDesignFit(-10));
             fitUpButton.onClick.AddListener(() => ChangeDesignFit(10));
-            publicButton.onClick.AddListener(() => SetVisibility(TestVisibility.Public));
-            privateButton.onClick.AddListener(() => SetVisibility(TestVisibility.Private));
             interfaceBuilt = true;
             return true;
         }
@@ -322,21 +314,6 @@ namespace Border.Research
             Refresh();
         }
 
-        private void SetVisibility(TestVisibility nextVisibility)
-        {
-            if (session.HasPendingDesignEntry && session.PendingDesignEntry.MissionId == LaunchMissionId.LowPowerZoneHold)
-            {
-                visibility = TestVisibility.FinalMission;
-            }
-            else
-            {
-                visibility = nextVisibility;
-            }
-
-            SaveDraft();
-            Refresh();
-        }
-
         private void Refresh()
         {
             if (!session.HasPendingDesignEntry)
@@ -348,17 +325,13 @@ namespace Border.Research
             ResearchPrototypeModel model = session.Model;
             LaunchMissionConfig missionConfig = model.GetConfiguredMissionConfig(data.MissionId);
             EnginePresetConfig engineConfig = ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId);
-            int successChance = model.CalculateSuccessChance(data);
-            int partialChance = Math.Min(15, 95 - successChance);
-            int failureChance = 100 - successChance - partialChance;
             int remainingCost = data.ReservedInstallCost + (data.LaunchCostPaid ? 0 : data.LaunchCost);
             RefreshPresetButtons(model);
 
             headerText.text = $"{missionConfig.DisplayName} 설계";
             designDataText.text = $"날짜: {data.Year} Q{data.Quarter} / 맵 시드: {data.MapSeed} / 목표: {data.TargetPathId}\n"
                 + $"선택 프리셋: {engineConfig.DisplayName} / 완성도 {data.SelectedEngineCompletion} / 성능 {data.SelectedEngineScore}\n"
-                + $"설계 적합도: {data.DesignFit} ({ResearchPrototypeModel.CalculateDesignFitModifier(data.DesignFit):+#;-#;0}%p) / {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)} ({model.GetConfiguredVisibilitySuccessModifier(data.Visibility):+#;-#;0}%p)\n"
-                + $"성공 {successChance}% / 부분 {partialChance}% / 실패 {failureChance}%";
+                + $"설계 적합도: {data.DesignFit} / {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)}";
             installedEngineText.text = $"설치 엔진: {FormatInstalledEngines(data)}\n"
                 + $"설치 엔진 점수 {data.InstalledEngineScore} / {(data.LaunchCostPaid ? "지불한" : "필요")} 예산 {data.LaunchCost} / 남은 설치비 {data.ReservedInstallCost}";
             statusText.text = data.LaunchCostPaid
@@ -367,9 +340,6 @@ namespace Border.Research
             launchButtonText.text = $"발사\n남은 비용 {remainingCost} / 1분기";
             launchButton.interactable = model.Funds >= remainingCost && !model.DeadlineReached;
 
-            bool finalMission = data.MissionId == LaunchMissionId.LowPowerZoneHold;
-            publicButton.interactable = !finalMission;
-            privateButton.interactable = !finalMission;
         }
 
         private void RefreshPresetButtons(ResearchPrototypeModel model)

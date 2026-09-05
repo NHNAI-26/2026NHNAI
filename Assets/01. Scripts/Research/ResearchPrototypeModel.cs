@@ -990,7 +990,17 @@ namespace Border.Research
 
         public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, out ResearchDesignEntryData data)
         {
+            return TryEnterDesign(missionId, presetId, GetDefaultVisibility(missionId), out data);
+        }
+
+        public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, TestVisibility visibility, out ResearchDesignEntryData data)
+        {
             data = default;
+            if (missionId != LaunchMissionId.LowPowerZoneHold && visibility != TestVisibility.Public && visibility != TestVisibility.Private)
+            {
+                LastMessage = "공개 또는 비공개 테스트를 선택하세요.";
+                return ResearchActionResult.RequirementNotMet;
+            }
             if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
             if (HasGameEnded) return EndedActionResult;
             LaunchMissionState mission = GetMission(missionId);
@@ -1021,7 +1031,7 @@ namespace Border.Research
 
             Funds -= config.LaunchCost;
             TotalSpentFunds += config.LaunchCost;
-            data = CreateDesignEntry(missionId, presetId, CreateDefaultInstalledEngineCounts(missionId, presetId), 50, GetDefaultVisibility(missionId), true);
+            data = CreateDesignEntry(missionId, presetId, CreateDefaultInstalledEngineCounts(missionId, presetId), 50, visibility, true);
             LastMessage = $"{config.DisplayName} 설계 진입. 예산 {config.LaunchCost} 지불.";
             return ResearchActionResult.Success;
         }
@@ -1221,6 +1231,10 @@ namespace Border.Research
         {
             return balanceConfig.GetVisibilitySuccessModifier(visibility);
         }
+
+        public double GetConfiguredRewardMultiplier(TestVisibility visibility) => balanceConfig.GetRewardMultiplier(visibility);
+
+        public int GetConfiguredFailureFundingDelta(TestVisibility visibility) => balanceConfig.GetFailureQuarterlyFundingDelta(visibility);
 
         public int CalculateInstalledEngineScore(int[] installedEngineCounts)
         {

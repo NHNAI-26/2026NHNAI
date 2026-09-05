@@ -30,6 +30,73 @@ namespace Border.Editor
             Save(CreateResearchOutcome(false), "ResearchEnding");
         }
 
+        [MenuItem("Border/Research/Rebuild Test Visibility Dialog")]
+        public static void RebuildTestVisibilityDialog()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            var root = new GameObject("ResearchTestVisibilityDialog");
+            root.SetActive(false);
+            var controller = root.AddComponent<ResearchTestVisibilityDialog>();
+            RectTransform canvas = CanvasRoot(root.transform, "VisibilityCanvas", 35);
+            RectTransform panel = Panel(canvas, "VisibilityPanel", new Vector2(780, 420));
+            Sprite frame = FindEngineSprite("engine_ui_01_0");
+            panel.GetComponent<Image>().sprite = frame;
+            panel.GetComponent<Image>().type = UnityEngine.UI.Image.Type.Sliced;
+            panel.GetComponent<Image>().color = Color.white;
+            Text(panel, "Title", "테스트 방식 선택", new Vector2(720, 44), new Vector2(0, 162), 28);
+            TMP_Text mission = Text(panel, "Mission", string.Empty, new Vector2(720, 34), new Vector2(0, 112), 18);
+            var group = panel.gameObject.AddComponent<ToggleGroup>();
+            Toggle publicToggle = VisibilityToggle(panel, group, "PublicToggle", "공개 테스트", -190, false);
+            Toggle privateToggle = VisibilityToggle(panel, group, "PrivateToggle", "비공개 테스트", 190, true);
+            TMP_Text publicDetails = Text(panel, "PublicDetails", string.Empty, new Vector2(330, 110), new Vector2(-190, -15), 18);
+            TMP_Text privateDetails = Text(panel, "PrivateDetails", string.Empty, new Vector2(330, 110), new Vector2(190, -15), 18);
+            TMP_Text error = Text(panel, "Error", string.Empty, new Vector2(710, 42), new Vector2(0, -109), 16);
+            error.color = new Color(1f, 0.65f, 0.4f);
+            Button cancel = Button(panel, "CancelButton", "취소", new Vector2(190, 48), new Vector2(-108, -166));
+            Button confirm = Button(panel, "ConfirmButton", "설계 진입", new Vector2(190, 48), new Vector2(108, -166));
+            foreach (Button button in new[] { cancel, confirm })
+            {
+                Image image = button.GetComponent<Image>();
+                image.sprite = FindEngineSprite("engine_ui_01_5");
+                image.type = UnityEngine.UI.Image.Type.Sliced;
+                image.color = Color.white;
+            }
+            Bind(controller, "publicToggle", publicToggle);
+            Bind(controller, "privateToggle", privateToggle);
+            Bind(controller, "missionText", mission);
+            Bind(controller, "publicDetails", publicDetails);
+            Bind(controller, "privateDetails", privateDetails);
+            Bind(controller, "errorText", error);
+            Bind(controller, "confirmButton", confirm);
+            Bind(controller, "cancelButton", cancel);
+            Save(root, "ResearchTestVisibilityDialog");
+        }
+
+        private static Toggle VisibilityToggle(Transform parent, ToggleGroup group, string name, string label, float x, bool selected)
+        {
+            RectTransform row = Rect(parent, name, new Vector2(330, 40), new Vector2(x, 64));
+            var toggle = row.gameObject.AddComponent<Toggle>();
+            RectTransform box = Image(row, "Box", new Vector2(30, 30), new Vector2(-116, 0), Color.white);
+            box.GetComponent<Image>().sprite = FindEngineSprite("engine_ui_01_4");
+            box.GetComponent<Image>().type = UnityEngine.UI.Image.Type.Sliced;
+            RectTransform mark = Image(box, "Mark", new Vector2(12, 12), Vector2.zero, new Color(0.15f, 0.95f, 1f));
+            mark.GetComponent<Image>().raycastTarget = false;
+            TMP_Text title = Text(row, "Label", label, new Vector2(220, 40), new Vector2(25, 0), 22);
+            title.raycastTarget = true;
+            toggle.targetGraphic = box.GetComponent<Image>();
+            toggle.graphic = mark.GetComponent<Image>();
+            toggle.group = group;
+            toggle.SetIsOnWithoutNotify(selected);
+            return toggle;
+        }
+
+        private static Sprite FindEngineSprite(string name)
+        {
+            foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath("Assets/05. Arts/UI/Resources/engine_ui_01.psd"))
+                if (asset is Sprite sprite && sprite.name == name) return sprite;
+            return null;
+        }
+
         private static GameObject CreateResearchOutcome(bool report)
         {
             var root = new GameObject(report ? "ResearchResultReport" : "ResearchEnding");

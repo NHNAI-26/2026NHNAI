@@ -433,11 +433,6 @@ namespace Border.Research.Editor
             CreateButton("DesignFitDownButton", designRow, "적합도 -10", 0f, 38f);
             CreateButton("DesignFitUpButton", designRow, "적합도 +10", 0f, 38f);
 
-            RectTransform visibilityRow = CreateGroup("VisibilityControls", infoPanel);
-            AddHorizontalLayout(visibilityRow, 0f, 0f, 0f, 6f);
-            visibilityRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 38f;
-            CreateButton("PublicTestButton", visibilityRow, "공개 테스트", 0f, 38f);
-            CreateButton("PrivateTestButton", visibilityRow, "비공개 테스트", 0f, 38f);
             CreateText("InstalledEngineText", infoPanel, 14, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
             CreateText("StatusText", infoPanel, 14, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
         }

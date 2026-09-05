@@ -22,6 +22,7 @@ namespace Border.Research
         [SerializeField] private Button enginePresetCardPrefab;
         [SerializeField] private ResearchResultReportController resultReport;
         [SerializeField] private ResearchEndingController endingScreen;
+        [SerializeField] private ResearchTestVisibilityDialog visibilityDialog;
         [SerializeField] private ResearchEnginePreviewController enginePreview;
         [SerializeField] private ResearchMiniGameController miniGameController;
         [SerializeField] private ResearchDesignScreenController designScreenController;
@@ -116,6 +117,7 @@ namespace Border.Research
 
         private void OnDisable()
         {
+            if (visibilityDialog != null) visibilityDialog.Hide();
             if (initialized)
             {
                 KillDesignTransition();
@@ -451,19 +453,33 @@ namespace Border.Research
 
         private void EnterDesign()
         {
-            if (isTransitioningToDesign)
+            if (isTransitioningToDesign || model.HasGameEnded || session.HasActiveLaunch || (visibilityDialog != null && visibilityDialog.IsOpen))
             {
                 return;
             }
 
             selectedMission = model.GetCurrentMission();
-            if (session.TryEnterDesign(selectedMission, selectedEnginePreset, out _) == ResearchActionResult.Success)
+            if (selectedMission == LaunchMissionId.LowPowerZoneHold)
             {
-                BeginDesignTransition();
+                if (ConfirmDesignEntry(selectedMission, selectedEnginePreset, TestVisibility.FinalMission) != ResearchActionResult.Success) Refresh();
                 return;
             }
+            if (visibilityDialog == null)
+            {
+                Debug.LogError("Research test visibility dialog must be assigned in the scene.", this);
+                return;
+            }
+            LaunchMissionId mission = selectedMission;
+            EnginePresetId preset = selectedEnginePreset;
+            visibilityDialog.Open(model, mission, visibility => ConfirmDesignEntry(mission, preset, visibility));
+        }
 
-            Refresh();
+        private ResearchActionResult ConfirmDesignEntry(LaunchMissionId mission, EnginePresetId preset, TestVisibility visibility)
+        {
+            if (isTransitioningToDesign) return ResearchActionResult.RequirementNotMet;
+            ResearchActionResult result = session.TryEnterDesign(mission, preset, visibility, out _);
+            if (result == ResearchActionResult.Success) BeginDesignTransition();
+            return result;
         }
 
         private void WaitQuarter()
@@ -704,6 +720,7 @@ namespace Border.Research
 
                 ReturnFromDesignScreen();
             });
+            session.PublishPendingLaunchOutcome();
         }
 
         private void ShowEndingScreen()
@@ -732,6 +749,7 @@ namespace Border.Research
 
         private void ResetResearchState()
         {
+            if (visibilityDialog != null) visibilityDialog.Hide();
             KillDesignTransition();
             isTransitioningToDesign = false;
             resultReport?.Hide();
