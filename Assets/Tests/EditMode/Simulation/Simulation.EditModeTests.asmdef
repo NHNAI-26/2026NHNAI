@@ -4,6 +4,7 @@
     "references": [
         "Border",
         "Simulation",
+        "Border.Editor",
         "UnityEngine.UI"
     ],
     "includePlatforms": [

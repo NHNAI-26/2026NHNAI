@@ -1,7 +1,7 @@
 {
     "name": "Simulation.PlayModeTests",
     "rootNamespace": "Simulation.Tests",
-    "references": ["Border", "Simulation"],
+    "references": ["Border", "Simulation", "Unity.Timeline"],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

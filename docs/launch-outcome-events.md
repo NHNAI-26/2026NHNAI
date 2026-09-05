@@ -43,6 +43,8 @@
 
 ## 코드와 UI
 
+성공 연출용 프리팹과 후속 Timeline 연결 범위: [미션 성공 연출](mission-success-cinematic.md)
+
 `ResearchLaunchEvents.cs`가 후보, 선택, 효과, 대기 상태와 비용 계산을 담당하고 `ResearchPrototypeModel`의 행동 처리에 연결된다. 실제 종료 사유는 평가기 → 미션 컨트롤러 → 스테이지 호스트 → 연구 세션 → 모델 순서로 전달한다.
 
 신문 자체가 발사 후 이벤트 발표 화면이다. 기존 수치 보고서를 별도로 띄우지 않고, `ResearchResultReportController`가 `NewspaperReveal`에 기사와 사진을 전달한다. 신문에는 이벤트별 제목, 짧은 기사, 테스트 정산과 이벤트 효과의 실제 적용값을 표시한다. 공개 발사는 정규판, 비공개 발사는 연구소 내부 회보, 최종 성공은 특별호다. 등장 연출이 끝난 뒤 신문을 누르면 연구 화면 또는 기존 엔딩으로 이동한다.
