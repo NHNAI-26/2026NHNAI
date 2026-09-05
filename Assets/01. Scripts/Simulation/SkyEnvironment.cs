@@ -87,6 +87,9 @@ namespace Simulation
         private bool _fogBefore;
         private FogMode _fogModeBefore;
         private ParticleSystemRenderer _cloudRenderer;
+        private ParticleSystem.Particle[] _cloudParticles;
+        private Vector3 _cloudBox; // 랩 주기. ShapeModule 박스가 단일 출처다
+        private Vector3 _cloudCenter = new(float.NaN, float.NaN, float.NaN);
         private ParticleSystem _dust;
         private float _zeroY;
         private bool _bound;
@@ -135,6 +138,10 @@ namespace Simulation
             {
                 clouds.transform.position = new Vector3(0f, _zeroY + cloudKm * 1000f / worldMetersPerUnit, 0f);
                 _cloudRenderer = clouds.GetComponent<ParticleSystemRenderer>();
+                // 이미터 박스가 곧 랩 주기다 — 최초 버스트가 채우는 넓이와 되돌리는 간격이 같아야
+                // 이음매에서 밀도가 튀지 않는다. 넓이를 바꾸려면 프리팹의 Shape 박스 하나만 만진다.
+                _cloudBox = clouds.shape.scale;
+                _cloudParticles = new ParticleSystem.Particle[clouds.main.maxParticles];
             }
 
             BuildDust();
@@ -205,6 +212,7 @@ namespace Simulation
             // 우주에서 내려다보면 구름 판이 허공에 떠 있는 덩어리로 보인다. 렌더러만 끈다 —
             // 오브젝트를 껐다 켜면 한 번뿐인 버스트가 다시 터진다.
             if (_cloudRenderer != null) _cloudRenderer.enabled = !inSpace;
+            if (!inSpace) WrapClouds();
 
             // 대기권에서는 구름과 수면이 이미 속도를 말해 준다. 먼지는 그 둘이 꺼지는 우주부터다.
             // 모듈은 구조체 사본이라 바뀔 때만 쓴다.
@@ -214,6 +222,50 @@ namespace Simulation
                 emission.enabled = inSpace;
             }
         }
+
+        /// <summary>
+        /// 뒤로 흘려보낸 구름을 반대편 끝으로 되돌려, 고정 개수로 끝없는 구름 바다를 만든다.
+        /// 버스트는 한 번뿐이고 파티클은 World 공간이라 이미터를 옮겨도 따라오지 않는다 —
+        /// 살아 있는 입자를 직접 손댄다(<see cref="RocketBuilder.UpdateTrailDotSize"/> 와 같은 패턴).
+        /// 접는 기준은 로켓이 아니라 카메라다: 보이는 범위를 정하는 것이 카메라이고, 후퇴 뷰와
+        /// PiP 의 최대 이격 500 은 타일 반폭(1000)보다 작아 어느 뷰에서도 가장자리가 안 나온다.
+        /// 되돌아간 구름은 카메라에서 반폭만큼 떨어진 곳에 나타난다 — far clip(1000) 밖이라 안 보인다.
+        /// </summary>
+        private void WrapClouds()
+        {
+            if (clouds == null || _cloudParticles == null) return;
+
+            // 구름은 속도가 0 이라 카메라가 서 있으면 칸을 넘어갈 입자도 없다. 조립 화면에서
+            // 매 프레임 파티클 배열을 통째로 복사하지 않으려고 먼저 걸러 낸다.
+            Vector3 center = cam.transform.position;
+            if (center == _cloudCenter) return;
+            _cloudCenter = center;
+
+            int count = clouds.GetParticles(_cloudParticles);
+            bool moved = false;
+
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 p = _cloudParticles[i].position;
+                // 고도는 건드리지 않는다 — 구름은 한 겹이고 수직으로 접으면 층이 겹쳐 보인다.
+                float x = WrapAxis(p.x, center.x, _cloudBox.x);
+                float z = WrapAxis(p.z, center.z, _cloudBox.z);
+                if (x.Equals(p.x) && z.Equals(p.z)) continue;
+
+                _cloudParticles[i].position = new Vector3(x, p.y, z);
+                moved = true;
+            }
+
+            if (moved) clouds.SetParticles(_cloudParticles, count);
+        }
+
+        /// <summary>
+        /// <paramref name="center"/> 를 한가운데로 하는 폭 <paramref name="span"/> 의 칸 안으로 접는다.
+        /// <c>Round</c> 라 한 프레임에 몇 칸을 건너뛰어도 한 번에 맞는다 — 반복문이 필요 없다.
+        /// 폭이 0 이면 그대로 둔다. 접었다가는 구름 전체가 카메라 위 한 점으로 뭉친다.
+        /// </summary>
+        public static float WrapAxis(float value, float center, float span) =>
+            span <= 0f ? value : value - span * Mathf.Round((value - center) / span);
 
         /// <summary>
         /// 카메라 둘레의 먼지. 프리팹이 아니라 코드로 조립한다 —

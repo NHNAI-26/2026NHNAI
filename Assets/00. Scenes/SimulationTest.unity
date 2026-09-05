@@ -605,10 +605,6 @@ PrefabInstance:
       propertyPath: InitialModule.startRotationX.minMaxState
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 4233347052645007185, guid: 730c12c4684c1e84b8f311ead370138b, type: 3}
-      propertyPath: InitialModule.startRotationY.minMaxState
-      value: 0
-      objectReference: {fileID: 0}
     - target: {fileID: 5910329851164487975, guid: 730c12c4684c1e84b8f311ead370138b, type: 3}
       propertyPath: cam
       value: 
