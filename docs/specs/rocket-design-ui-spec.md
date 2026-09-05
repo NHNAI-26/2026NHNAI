@@ -38,8 +38,8 @@ Related documents: `docs/specs/rocket-prototype-revision-spec.md` (prior prototy
   attach or ground-place, selection with move/rotate buttons, **switch to a part-orientation-following thrust
   model**, keep the existing right-drag orbit camera, separate UI input from 3D input, revise GDD 07 §5 and
   `docs/rocket-simulation.md`.
-- **Out of scope:** the engine stat SO data model itself (other session), launch probability maths, engine
-  ON/OFF timeline, map and target path generation, design-fit display.
+- **Out of scope:** the engine stat SO data model itself (other session), engine ON/OFF timeline, and map and
+  target path generation.
 - **Delivery sequencing:** **Phase 1** = panel skeleton, drag placement/attachment, rotation and thrust model,
   input separation, document and test revision. **Phase 2** = wire hover stats once the other session's SO is
   final (UD-012).
@@ -100,7 +100,7 @@ The engine stat data structure (SO fields, preset count, price) belongs to
 | --- | --- | --- | --- |
 | Engine stat SO fields, preset count, price | UD-009, UD-012, SF-012 | active | Other session owns it; this work only consumes it |
 | Thrust magnitude slider, engine ON/OFF timeline | SF-005 | active | GDD 07 §4 items, not part of this request |
-| Map, target path, design fit, probability display | SF-016 | active | GDD 11 §7 items, not part of this request |
+| Map and target path | SF-016 | active | GDD 11 design-stage items, not part of this request |
 | Grid/mirror snapping, overlap checks | SF-004 | active | GDD 07 §5 deliberate omissions. Rotation angle snapping left this list in rev 4 (UD-011) |
 | Staging, gimbal, drag | SF-004 | active | GDD 07 §5 deliberate omissions |
 
@@ -224,8 +224,8 @@ The engine stat data structure (SO fields, preset count, price) belongs to
 | SF-013 | sourced fact | `Attach_KeepsWorldPoint_AndAlignsToRocket` locks the "orientation follows the rocket" rule | `Assets/Tests/EditMode/Simulation/RocketSimulationTests.cs:37-59` | active | R-011 |
 | SF-014 | sourced fact | `SimulationTest.unity` **is** tracked by git; the prior spec's "untracked" note is stale | `git ls-files "Assets/00. Scenes"` | active | Scene edits land in commits |
 | SF-015 | sourced fact | `07_로켓_설계.md` has a one-line uncommitted edit in §6.1 | `git diff` (rev 1) | active | R-009, RK-005 |
-| SF-016 | sourced fact | GDD 11 §7 requires target path, design fit, probabilities and a launch button on the design screen | `11_UI_UX_화면설계.md` §7 | active | Out of scope but affects the final screen |
-| SF-017 | sourced fact | GDD 18: "the player does not fly the rocket directly"; outcomes are pre-rolled | `18_확정사항_및_변경금지선.md` | active | Only design-stage interaction may grow |
+| SF-016 | sourced fact | GDD 11 requires a target path and launch button on the design screen | `11_UI_UX_화면설계.md` | active | Out of scope but affects the final screen |
+| SF-017 | sourced fact | GDD 18 keeps player input in the design stage; the launch then runs the submitted design through physics | `18_확정사항_및_변경금지선.md` | active | Only design-stage interaction may grow |
 | SF-018 | sourced fact | `activeInputHandler: 1` (Input System only) makes legacy `UnityEngine.Input` throw | `docs/rocket-simulation.md` | active | Limits input implementation |
 | SF-019 | sourced fact | The prior spec's R-018/R-019 (integration into the main game) are `blocked` on its Q-011 | that document §6 | active | RK-006 |
 | SF-020 | sourced fact | `docs/rocket-simulation.md` records part-following thrust as a **deliberately rejected** option — "a side engine would spin the rocket and the game becomes something else" | `docs/rocket-simulation.md` | active | RK-007, R-009 |

@@ -34,7 +34,7 @@ Each engine preset carries price, fuel tank capacity, cooling, max output, and i
 
 ### Problem and Background
 
-`RocketPart` hardcodes `thrust = 1200f`, `fuel = 100f`, `burnRate = 20f` (SF-005); "engines differ" exists in the GDD but not in data. GDD 06/07 fixed four stats on a `0~100` scale whose quality, penalty, probability, and derived-performance formulas all depend on same-scale comparisons such as `MaxOutput − Cooling` (SF-001, SF-009, SF-017). The user chose to abandon that scale rather than normalize (UD-010). The heat model gives GDD 08 §9's `Overheat` accident an actual simulation behind it (SF-018).
+`RocketPart` hardcodes `thrust = 1200f`, `fuel = 100f`, `burnRate = 20f` (SF-005); "engines differ" exists in the GDD but not in data. The old normalized scale mixed unlike quantities through comparisons such as `MaxOutput − Cooling` (SF-001, SF-009, SF-017). The user chose direct physical units instead (UD-010). The heat model gives the `Overheat` termination an actual simulation basis (SF-018).
 
 ### Planning Boundary
 
@@ -251,7 +251,7 @@ temperature >= CriticalTemperature  ->  overheat
 | OI-009 | unresolved item | Physical units for cooling and ignition reliability | — | resolved | UD-011, UD-013 |
 | OI-010 | unresolved item | Storage medium for the runtime 10 slots: SO assets or `SaveLoad` JSON | Runtime SO writes corrupt editor data | open | UD-008, RK-007, AR-006 |
 | OI-011 | unresolved item | Test tool form: menu item, inspector button, or context menu | Determines the hosting assembly | open | R-009; implementation adopts a `Border.Editor` menu item |
-| OI-012 | unresolved item | The actual content of the rewritten GDD 06 formulas (quality, imbalance penalty, test probability, failure weighting, derived performance, reward magnitudes) | Values in different units cannot be averaged or subtracted | open | UD-010, R-010, R-016, RK-008 |
+| OI-012 | unresolved item | Final tuning of direct physical relationships between thrust, fuel, cooling and heat | Values in different units cannot be averaged or subtracted | open | UD-010, R-010, R-016, RK-008 |
 | OI-013 | unresolved item | Output→heat coefficient and the shared critical temperature | No balance basis yet | open | R-012, R-013, AR-010 |
 | OI-014 | unresolved item | Which output drives heat | — | resolved | UD-016 |
 | OI-015 | unresolved item | Cooling recovery and off-engine handling | — | resolved | UD-017 |

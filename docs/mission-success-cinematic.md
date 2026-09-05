@@ -51,7 +51,7 @@ Play Mode에 들어가지 않아도 전용 창에서 낙하산 연출을 볼 수
 
 ## 실제 성공 흐름
 
-`SimulationStageHost.CompleteLaunch(true)`에서 등급과 보상을 확정한 뒤 연출을 시작합니다.
+`SimulationStageHost.CompleteLaunch(true)`에서 실제 미션 성공과 후속 효과를 확정한 뒤 연출을 시작합니다.
 `RocketBody.prefab`의 `MissionSuccessPresentation`은 상위의 실제 `Rocket`을 찾아 사용하므로
 몸통 프리팹에 별도 로켓이나 Rigidbody를 만들지 않습니다.
 

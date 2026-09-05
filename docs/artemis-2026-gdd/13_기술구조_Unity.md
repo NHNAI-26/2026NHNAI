@@ -1,637 +1,82 @@
-# 13. 기술 구조 — Unity 기준
+# 13. 기술 구조 - Unity 기준
 
-> 상태: **권장 구현 구조 확정**  
-> 목표: 48시간 안에 연구, 설계, 자동 발사를 분리하고, 발사 결과 중복 적용과 재굴림을 방지한다.
+## 씬
 
-## 1. 씬 구성
+- 타이틀 씬
+- 프로젝트 운영 씬
+- 연구 미니게임 씬 또는 오버레이
+- 로켓 설계 씬
+- 발사 시뮬레이션 씬
+- 결과 오버레이
 
-권장 씬:
+씬 전환 중에도 캠페인 상태는 하나의 세션 객체가 소유한다.
+
+## 런타임 데이터
+
+```csharp
+public struct MissionLaunchState
+{
+    public LaunchMissionId MissionId;
+    public bool Unlocked;
+    public bool Completed;
+    public int AttemptCount;
+}
+
+public struct LaunchResultData
+{
+    public LaunchMissionId MissionId;
+    public bool Succeeded;
+    public LaunchTerminationReason TerminationReason;
+    public LaunchTelemetry Telemetry;
+    public TestVisibility Visibility;
+}
+```
+
+엔진 상태는 완성도와 네 실제 스탯을 가진다. 설계 데이터는 설치 프리셋 ID, 위치, 회전과 가동 구간을 가진다. 실행 전 데이터에는 성공 여부를 넣지 않는다.
+
+## 책임 분리
+
+- 캠페인 모델: 시간, 연구비, 엔진과 미션 상태
+- 설계 컨트롤러: 조립 입력과 비용 검증
+- 시뮬레이션 호스트: 설계 데이터를 물리 객체로 변환
+- 로켓·엔진 컴포넌트: 힘, 연료, 열, 점화 처리
+- 미션 평가기: 실제 상태에서 목표와 종료 조건 평가
+- 결과 적용기: 해금, 이벤트와 캠페인 복귀를 한 번 처리
+- 결과 UI: 확정된 데이터만 표시
+
+## 발사 처리
 
 ```text
-01_Main
+validate -> pay -> load -> construct -> simulate
+-> measure -> evaluate -> capture -> apply -> report
 ```
 
-`00_Boot`는 선택 사항이다. 시간이 부족하면 `01_Main`에서 바로 초기화한다.
+시뮬레이션 호스트는 평가기가 준 성공 여부를 그대로 전달한다. 캠페인 모델은 이를 다른 공식으로 다시 계산하지 않는다.
 
-연구, 설계, 발사 결과는 모두 `01_Main` 단일 씬 안에서 화면 전환으로 처리한다. 자동 발사는 단계별 별도 씬을 만들지 않고, 공통 HUD와 실행 구조를 화면 컨트롤러 또는 프리팹으로 공유한다.
+## 미션 해금
 
-## 2. 핵심 런타임 데이터
+결과 적용기는 성공한 미션을 완료 상태로 바꾸고 바로 다음 미션을 연다. 이미 완료된 미션을 다시 성공해도 해금 처리를 반복하지 않는다.
 
-```csharp
-public enum MissionId
-{
-    StaticFire,
-    LowAltitude,
-    HighAltitude,
-    TargetZone,
-    ZoneHold,
-    LowPowerZoneHold
-}
+## 공개성
 
-public enum TestGrade
-{
-    S,
-    A,
-    B,
-    C,
-    F
-}
+공개성 설정은 시뮬레이션 입력에서 표시·이벤트 메타데이터로만 전달한다. 힘, 연료, 열, 점화와 평가 조건에는 접근하지 않는다.
 
-public enum LaunchVisibility
-{
-    Private,
-    Public,
-    FinalMission
-}
-```
+## 결과 중복 방지
 
-`MissionId`는 연구 단계가 아니라 발사 미션 ID다. 연구 단계 자체는 엔진 프리셋 연구와 새 엔진 개발만 가진다. 기존 `Engine/Rocket/Orbit/Moon` 단계 ID는 사용하지 않는다.
+각 발사에는 실행 ID를 부여한다. 캠페인 모델은 처리한 실행 ID를 다시 적용하지 않는다. 장면 해제, 결과 UI 재표시와 중복 콜백이 자원이나 진행 상태를 바꾸지 않아야 한다.
 
-### GameState
+## 데이터 에셋
 
-```csharp
-[Serializable]
-public sealed class GameState
-{
-    public int year = 2018;
-    public int quarter = 1;
-    public int remainingTurns = 36;
+- 엔진 기본값과 비용
+- 미션 목표와 제한 시간
+- 결과 이벤트 후보와 효과
+- 카메라·VFX·사운드 설정
 
-    public int funds = 2200;
-    public int quarterlyFunding = 600;
+실제 물리 수치의 원천을 중복하지 않는다. ScriptableObject와 프리팹 중 한 곳을 권위 원천으로 정한다.
 
-    public int developedEnginePresetCount = 1;
-    public EnginePresetState[] enginePresets;
-    public MissionLaunchState[] missions;
+## 오류 처리
 
-    public int totalFundsSpent;
-    public int totalLaunches;
-    public int totalFailures;
-    public bool gameEnded;
-}
-```
-
-### EnginePresetState
-
-```csharp
-[Serializable]
-public sealed class EnginePresetState
-{
-    public string presetId;
-    public bool developed;
-    public int completion;
-    public int fuelCapacity;
-    public int cooling;
-    public int maxOutput;
-    public int ignitionReliability;
-    public TestGrade? bestGrade;
-}
-```
-
-### MissionLaunchState
-
-```csharp
-[Serializable]
-public sealed class MissionLaunchState
-{
-    public MissionId id;
-    public int attemptCount;
-    public TestGrade? bestGrade;
-    public bool unlocked;
-}
-```
-
-### DesignData
-
-```csharp
-[Serializable]
-public sealed class DesignData
-{
-    public MissionId missionId;
-    public int year;
-    public int quarter;
-    public int mapSeed;
-    public string targetPathId;
-    public LaunchVisibility launchVisibility;
-    public int committedLaunchBudget;
-
-    public RocketPartPlacement[] partPlacements;
-    public InstalledEngineData[] installedEngines;
-    public int reservedEngineInstallCost;
-    public float force;
-    public float directionDegrees;
-    public EngineToggleEvent[] engineToggleSchedule;
-    public int designFit;
-}
-```
-
-`DesignData`는 설계 화면에서 수정된다. 발사 전 연구 화면으로 돌아가면 버릴 수 있다. 같은 분기·단계·시드로 다시 설계 화면에 들어오면 같은 맵과 목표 경로를 생성해야 한다.
-
-### InstalledEngineData
-
-```csharp
-[Serializable]
-public sealed class InstalledEngineData
-{
-    public string instanceId;
-    public string presetId;
-    public Vector3 localPosition;
-    public Quaternion localRotation;
-    public int installCost;
-}
-```
-
-같은 `presetId`를 가진 엔진을 여러 개 설치할 수 있다. 완성도와 스탯은 프리셋이 공유하고, 설치 비용과 위치·회전은 엔진 개체별로 따로 저장한다.
-
-### SimRunData
-
-```csharp
-[Serializable]
-public sealed class SimRunData
-{
-    public MissionId missionId;
-    public int year;
-    public int quarter;
-    public int mapSeed;
-    public string targetPathId;
-    public LaunchVisibility launchVisibility;
-    public int designFit;
-    public EngineToggleEvent[] engineToggleSchedule;
-    public InstalledEngineData[] installedEngines;
-    public int committedLaunchBudget;
-    public int committedEngineInstallCost;
-    public float installedEngineScore;
-    public int previousCertificationBonus;
-    public int experienceBonus;
-
-    public int successChance;
-    public int partialChance;
-    public int failChance;
-    public int roll;
-
-    public TestGrade grade;
-    public string incidentId;
-    public bool incidentRecovered;
-    public int seed;
-
-    public SimMetrics metrics;
-    public DesignData designData;
-
-    public bool resultApplied;
-}
-```
-
-`SimRunData`는 설계 화면에서 최종 `발사` 버튼을 누른 직후 생성하고 발사 결과 화면 표시 전에 보존한다.
-
-## 3. 권장 관리자
-
-### GameFlowController
-
-- 새 게임
-- 분기 행동 처리
-- 설계 화면 진입과 복귀
-- 화면 전환
-- 승리·패배 검사
-- 결과 보고서 호출
-
-### TimeManager
-
-- 현재 분기 계산
-- 남은 분기 계산
-- 분기 종료
-- 2026 Q4 마지막 행동 처리
-
-### EconomyManager
-
-- 비용 검사와 차감
-- 즉시 지원금 반영
-- 분기 연구비 증감과 범위 제한
-- 분기 종료 지급
-
-### ResearchManager
-
-- 엔진 프리셋별 일반·집중 연구
-- 새 엔진 프리셋 개발
-- 개발된 프리셋 수 관리
-- 엔진 프리셋 완성도 100 상한 처리
-- 미션 해금 검사
-- 엔진 프리셋 스탯 갱신
-
-### ProbabilityResolver
-
-- 성공·부분 성공·실패 확률 계산
-- 설계 적합도 보정 반영
-- 난수 생성
-- 등급 결정
-- 사고 선택
-- 연출용 지표 생성
-
-### SimulationDirector
-
-- `SimRunData` 읽기
-- 카운트다운
-- 정상 시퀀스
-- 사고 시퀀스
-- 결말 시퀀스
-- 결과 보고서 전환
-- 배속과 건너뛰기
-
-### DesignSceneController
-
-- 현재 단계와 분기 기준 맵 생성
-- 목표 경로 표시
-- 부품 위치, 엔진 프리셋 배치, 힘, 방향, 엔진 ON/OFF 타이밍 입력 처리
-- 엔진 설치 예약 비용 계산
-- 설계 적합도 계산
-- 설계 위험 안내 표시
-- 공개 테스트와 비공개 테스트 선택
-- 연구 단계로 복귀
-- 발사 확인과 `SimRunData` 생성 요청
-
-### ResultApplier
-
-- 결과를 정확히 한 번 반영
-- 발사 횟수 증가
-- 최고 등급 갱신
-- 즉시 지원금
-- 분기 연구비 변화
-- 총계 기록
-- 미션 해금
-
-## 4. 데이터 에셋
-
-ScriptableObject 권장:
-
-### GameBalanceConfig
-
-- 시작 자금
-- 분기 연구비
-- 하한·상한
-- 시작 엔진 프리셋 개수 1
-- 엔진 프리셋 최대 개수 10
-- 새 엔진 개발 비용 150과 소요 시간 0
-- 엔진 프리셋 공통 연구 비용과 공통 설치 비용
-- 미션별 설계 진입 비용
-- 등급 보상
-- 확률 하한·상한
-
-### EnginePresetConfig
-
-```text
-maxPresetCount
-startingPresetCount
-presetId
-displayName
-normalResearchCost
-focusedResearchCost
-installCost
-completionGainPerResearch
-baseFuelCapacity
-baseCooling
-baseMaxOutput
-baseIgnitionReliability
-normalStatGainByScore
-focusedStatGainByScore
-```
-
-### MissionConfig
-
-```text
-missionId
-displayName
-launchBudget
-unlockRequiredPreviousMission
-unlockRequiredGrade
-designScreenPrefabId
-simulationScreenPrefabId
-```
-
-### LaunchVisibilityConfig
-
-```text
-visibility
-successModifier
-immediateFundingMultiplier
-quarterlyFundingMultiplier
-failureQuarterlyFundingDelta
-availableForFinalMission
-```
-
-### IncidentConfig
-
-```text
-incidentId
-missionId
-relatedDesignFactors
-allowedGrades
-recoveredForGrades
-warningText
-resultReasonText
-```
-
-### DesignConfig
-
-```text
-missionId
-availablePartIds
-attachmentPoints
-forceMin
-forceMax
-targetPathPatterns
-engineToggleMode
-engineTogglePointCount
-designFitToleranceByProgress
-```
-
-시간이 부족하면 ScriptableObject 대신 직렬화된 단일 설정 클래스도 허용한다. 단, 수치를 여러 스크립트에 하드코딩하지 않는다.
-
-## 5. 행동 처리 의사코드
-
-### 연구
-
-```pseudo
-function ExecuteResearch(enginePreset, statId, mode):
-    if not enginePreset.developed:
-        return Locked
-
-    if enginePreset.completion >= 100:
-        return Completed
-
-    cost = GetEngineResearchCost(enginePreset.id, mode)
-
-    if funds < cost:
-        return NotEnoughFunds
-
-    funds -= cost
-    totalFundsSpent += cost
-
-    statGain = ResolveMiniGameStatGain(mode)
-
-    enginePreset.completion = min(enginePreset.completion + GetCompletionGainPerResearch(), 100)
-    IncreaseEngineStat(enginePreset, statId, statGain)
-
-    CheckMissionUnlocks()
-    EndQuarter()
-```
-
-### 새로운 엔진 개발
-
-```pseudo
-function DevelopNewEnginePreset():
-    if developedEnginePresetCount >= maxPresetCount:
-        return MaxPresetReached
-
-    cost = GetNewEngineDevelopmentCost()
-    duration = GetNewEngineDevelopmentDuration()
-
-    if funds < cost:
-        return NotEnoughFunds
-
-    funds -= cost
-    totalFundsSpent += cost
-
-    next = enginePresets[developedEnginePresetCount]
-    next.developed = true
-    next.completion = 0
-    ResetStatsToBase(next)
-
-    developedEnginePresetCount += 1
-
-    if duration > 0:
-        EndQuarter(duration)
-```
-
-새 엔진 개발의 비용과 시간은 아직 확정되지 않았다. 연구 비용과 공유하지 말고 별도 밸런스 값으로 둔다.
-
-### 설계 진입
-
-```pseudo
-function EnterDesign(mission):
-    if not mission.unlocked:
-        return Locked
-
-    if funds < mission.launchBudget:
-        return NotEnoughFunds
-
-    funds -= mission.launchBudget
-    totalFundsSpent += mission.launchBudget
-
-    designData = CreateOrLoadDesignData(mission, currentYear, currentQuarter)
-    designData.committedLaunchBudget = mission.launchBudget
-    HideResearchScreen()
-    ShowDesignScreen(designData)
-```
-
-설계 진입은 예산을 즉시 소비하지만 분기와 발사 횟수는 소비하지 않는다.
-
-### 연구 단계로 복귀
-
-```pseudo
-function ReturnFromDesign():
-    DiscardUnsavedDesignData()
-    HideDesignScreen()
-    ShowResearchScreen()
-```
-
-연구 단계로 복귀해도 설계 진입 때 차감한 예산은 환불하지 않는다. 예약 설치 비용만 버린다.
-
-### 발사 시작
-
-```pseudo
-function ConfirmLaunch(mission, designData, visibility):
-    totalCost = designData.reservedEngineInstallCost
-
-    if funds < totalCost:
-        return NotEnoughFunds
-
-    if mission.id == LowPowerZoneHold:
-        visibility = FinalMission
-
-    funds -= totalCost
-    totalFundsSpent += totalCost
-
-    designData.launchVisibility = visibility
-    simRunData = ProbabilityResolver.Resolve(mission, designData)
-
-    Persist(simRunData)
-    HideDesignScreen()
-    ShowLaunchResultScreen(simRunData)
-```
-
-### 발사 종료
-
-```pseudo
-function FinishSimulation():
-    ResultApplier.ApplyOnce(simRunData)
-
-    if IsFinalMissionVictory(simRunData):
-        ShowVictoryEnding(simRunData)
-        return
-
-    ShowResultReport(
-        simRunData,
-        onClose: EndQuarterAndReturnToMain
-    )
-```
-
-연구, 설계, 발사 결과는 모두 `01_Main` 단일 씬 안에서 화면 전환으로 처리한다. 단, 결과 적용은 한 곳에서만 수행한다.
-
-## 6. 확률 처리 의사코드
-
-```pseudo
-function GetSuccessChance(mission, designData):
-    experience = min(mission.attemptCount * 3, 9)
-    design = round((designData.designFit - 50) * 0.4)
-    visibility = GetLaunchVisibilityModifier(designData.launchVisibility)
-    installedEngineScore = CalculateInstalledEngineScore(designData.installedEngines)
-    certification = GetPreviousMissionBonus(mission.id)
-
-    if mission.id == StaticFire:
-        selectedEngineScore = CalculateSelectedEngineScore(designData.installedEngines[0])
-        raw = 20 + selectedEngineScore * 0.8 + experience + design + visibility
-    else:
-        raw = 20 + installedEngineScore * GetMissionEngineWeight(mission.id)
-                 + certification
-                 + experience
-                 + design
-                 + visibility
-
-    return clamp(round(raw), 10, 90)
-```
-
-## 7. 설계 맵 생성
-
-단순 구현 방법:
-
-1. 세션 시드, 현재 분기, 미션 ID로 `mapSeed` 생성
-2. 미션별 목표 경로 패턴 중 하나 선택
-3. 미션별 목표 난이도에 맞는 위험 구간 또는 보정 방향 표시
-4. 출발 지점과 목표 지점 배치
-5. 설계 입력과 엔진 ON/OFF 타이밍으로 예상 경로와 `designFit` 계산
-
-같은 분기와 같은 미션에서는 설계 화면을 다시 열어도 같은 맵과 목표 경로가 나와야 한다. 발사하지 않고 연구 단계로 돌아오면 비용과 시간은 그대로다.
-
-## 8. 3D 시퀀스 구현 방식
-
-권장 우선순위:
-
-1. 코루틴 또는 단순 상태 머신
-2. Animation Clip
-3. Unity Timeline
-4. 필요 시 DOTween
-
-팀이 이미 익숙한 방식 하나만 사용한다. Timeline, Animator, DOTween을 한 장면 안에서 무분별하게 혼합하지 않는다.
-
-성공 경로는 Transform 애니메이션으로 만들고, 실패 시점부터 Rigidbody를 켜는 방식이 가장 빠르다.
-
-## 9. 시뮬레이션 상태
-
-```csharp
-public enum SimulationPhase
-{
-    Briefing,
-    Countdown,
-    Nominal,
-    Incident,
-    Recovery,
-    SuccessEnding,
-    PartialEnding,
-    FailureEnding,
-    Complete
-}
-```
-
-각 미션 컨트롤러는 공통 인터페이스를 구현한다.
-
-```csharp
-public interface IMissionSimulation
-{
-    void Initialize(SimRunData data);
-    void Play();
-    void SkipToResult();
-}
-```
-
-## 10. 결과 중복 방지
-
-필수 안전장치:
-
-```csharp
-if (simRunData.resultApplied)
-{
-    return;
-}
-
-simRunData.resultApplied = true;
-ApplyRewardsAndMissionRecord();
-```
-
-아래 상황에서도 한 번만 적용되어야 한다.
-
-- 건너뛰기
-- 결과 화면 재표시
-- 버튼 연타
-- 결과 화면 중복 호출
-- 애니메이션 이벤트 중복
-
-## 11. UI 프리팹 정책
-
-운영, 설계, 발사 확인, 결과 보고서 UI는 프리팹 기반으로 만든다.
-
-- 화면 루트 프리팹: 운영 화면, 설계 화면, 발사 확인 모달, 결과 보고서
-- 반복 항목 프리팹: 엔진 프리셋 카드, 발사 목표 카드, 스탯 행, 버튼 행
-- 런타임에는 프리팹 인스턴스를 생성하고 데이터만 바인딩
-- 모든 UI를 코드에서 직접 생성하는 방식은 정식 구현 경로에서 사용하지 않음
-- 임시 디버그 UI만 예외적으로 코드 생성 허용
-
-## 12. 저장 정책
-
-게임잼 버전은 중간 저장을 제공하지 않는다. 그러나 화면 전환 사이 상태 보존은 필요하다.
-
-허용 방식:
-
-- `DontDestroyOnLoad` 런타임 세션 객체
-- 정적 세션 컨테이너
-- 임시 JSON 직렬화
-
-권장 방식은 `GameSession` 하나를 `01_Main` 안에서 유지하는 것이다. 영구 저장 시스템은 만들지 않는다.
-
-## 13. 입력
-
-메인 UI:
-
-- 마우스 클릭
-- Enter 또는 Space로 확인 가능하면 P1
-- Esc로 모달 닫기
-
-설계:
-
-- 마우스 드래그: 부품 위치 또는 방향 조정
-- 슬라이더: 힘 조정
-- 타임라인 또는 경로 마커: 엔진 ON/OFF 타이밍 조정
-- 토글: 공개 테스트 / 비공개 테스트 선택
-- Esc: 연구 단계로 돌아가기 확인
-
-시뮬레이션:
-
-- Space: 2배속 토글, P1
-- Esc: 일시정지
-- 결과 개입 입력 없음
-
-## 14. 오류 처리
-
-- `SimRunData` 없이 발사 결과 화면에 진입하면 연구 화면으로 복귀
-- `DesignData` 없이 설계 화면에 진입하면 연구 화면으로 복귀
-- 존재하지 않는 사고 ID면 등급 기본 시퀀스 사용
-- 설계 실패 연출 VFX가 없어도 성공률과 결과는 정상 처리
-- 카메라가 누락되어도 기본 카메라 사용
-- 결과 보고서 데이터가 누락되면 등급과 경제 변화만 표시
-
-## 15. 성능 기준
-
-- 1080p에서 안정적 실행
-- 폭발 파편 수를 제한
-- 설계 오류 스파크와 연기는 풀링 또는 소수 파티클로 구현
-- 실시간 그림자 수를 최소화
-- 한 장면에 하나의 주요 광원
-- 무거운 발사 연출 준비 중 짧은 로딩 화면 허용
+- 필수 설계 데이터가 없으면 발사를 시작하지 않는다.
+- 알 수 없는 종료 사유는 일반 실패로 표시하되 원본 값을 로그에 남긴다.
+- 결과 UI가 없어도 캠페인 상태 적용과 장면 복귀는 완료한다.
+- 사진 촬영 실패는 결과와 정산을 바꾸지 않는다.
