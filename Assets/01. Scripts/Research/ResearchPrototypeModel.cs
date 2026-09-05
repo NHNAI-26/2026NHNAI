@@ -266,14 +266,14 @@ namespace Border.Research
             IReadOnlyList<ResearchScoreRewardBand> normalResearchStatRewards = null,
             IReadOnlyList<ResearchScoreRewardBand> focusedResearchStatRewards = null,
             IReadOnlyList<ResearchGradeReward> launchRewards = null,
-            int publicSuccessModifier = -10,
-            int privateSuccessModifier = 10,
+            int publicSuccessModifier = 0,
+            int privateSuccessModifier = 0,
             int finalMissionSuccessModifier = 0,
-            double publicRewardMultiplier = 1.5d,
-            double privateRewardMultiplier = 0.5d,
+            double publicRewardMultiplier = 0d,
+            double privateRewardMultiplier = 0d,
             double finalMissionRewardMultiplier = 1d,
-            int publicFailureQuarterlyFundingDelta = -150,
-            int privateFailureQuarterlyFundingDelta = -50,
+            int publicFailureQuarterlyFundingDelta = 0,
+            int privateFailureQuarterlyFundingDelta = 0,
             int finalMissionFailureQuarterlyFundingDelta = -100)
         {
             InitialFunds = initialFunds;
@@ -805,11 +805,11 @@ namespace Border.Research
         {
             return new[]
             {
-                new LaunchMissionConfig(LaunchMissionId.LowAltitude, "낮은 고도 도달", 800, "기본 해금", 0.55d),
-                new LaunchMissionConfig(LaunchMissionId.HighAltitude, "높은 고도 도달", 900, "낮은 고도 도달 성공", 0.50d),
-                new LaunchMissionConfig(LaunchMissionId.TargetZone, "목표 구역 도달", 1100, "높은 고도 도달 성공", 0.45d),
-                new LaunchMissionConfig(LaunchMissionId.ZoneHold, "목표 구역 체류", 1300, "목표 구역 도달 성공", 0.42d),
-                new LaunchMissionConfig(LaunchMissionId.LowPowerZoneHold, "저전력 검증", 1500, "목표 구역 체류 성공", 0.40d),
+                new LaunchMissionConfig(LaunchMissionId.LowAltitude, "낮은 고도 도달", 50, "기본 해금", 0.55d),
+                new LaunchMissionConfig(LaunchMissionId.HighAltitude, "높은 고도 도달", 50, "낮은 고도 도달 성공", 0.50d),
+                new LaunchMissionConfig(LaunchMissionId.TargetZone, "목표 구역 도달", 50, "높은 고도 도달 성공", 0.45d),
+                new LaunchMissionConfig(LaunchMissionId.ZoneHold, "목표 구역 체류", 50, "목표 구역 도달 성공", 0.42d),
+                new LaunchMissionConfig(LaunchMissionId.LowPowerZoneHold, "저전력 검증", 50, "목표 구역 체류 성공", 0.40d),
             };
         }
 
@@ -1404,9 +1404,9 @@ namespace Border.Research
             switch (visibility)
             {
                 case TestVisibility.Public:
-                    return -10;
+                    return 0;
                 case TestVisibility.Private:
-                    return 10;
+                    return 0;
                 case TestVisibility.FinalMission:
                     return 0;
                 default:
@@ -1613,6 +1613,13 @@ namespace Border.Research
 
         private void GetVisibilityAdjustedReward(ResearchGrade grade, TestVisibility visibility, out int immediateFunding, out int quarterlyFundingDelta)
         {
+            if (visibility != TestVisibility.FinalMission)
+            {
+                immediateFunding = 0;
+                quarterlyFundingDelta = 0;
+                return;
+            }
+
             ResearchGradeReward reward = balanceConfig.GetLaunchReward(grade);
             if (grade == ResearchGrade.F)
             {

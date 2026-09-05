@@ -20,6 +20,7 @@ namespace Simulation
         public float TargetHorizontalMax { get; set; } = 120f;
         public Vector3 TargetBoxCenterOffset { get; set; } = new(0f, 260f, 100f);
         public Vector3 TargetBoxSize { get; set; } = new(100f, 120f, 100f);
+        public float TargetSphereRadius { get; set; } = 60f;
         public float RequiredHoldSeconds { get; set; } = 3f;
         public float MaxAttitudeError { get; set; } = 30f;
         public float MaxHoldSpeed { get; set; } = 50f;
@@ -43,6 +44,7 @@ namespace Simulation
             RequirePositive(copy.TargetBoxSize.x, nameof(TargetBoxSize));
             RequirePositive(copy.TargetBoxSize.y, nameof(TargetBoxSize));
             RequirePositive(copy.TargetBoxSize.z, nameof(TargetBoxSize));
+            RequirePositive(copy.TargetSphereRadius, nameof(TargetSphereRadius));
             RequireNonnegative(copy.RequiredHoldSeconds, nameof(RequiredHoldSeconds));
             RequireNonnegative(copy.MaxAttitudeError, nameof(MaxAttitudeError));
             RequireNonnegative(copy.MaxHoldSpeed, nameof(MaxHoldSpeed));
@@ -111,6 +113,8 @@ namespace Simulation
         /// <summary>이 미션이 실제로 쓰는 단계 수. 나머지 단계는 화면에서 흐리게 나온다.</summary>
         public int StageCount { get; }
         public Bounds TargetBoxBounds => new(_rules.TargetBoxCenterOffset, _rules.TargetBoxSize);
+        public Vector3 TargetZoneCenterOffset => _rules.TargetBoxCenterOffset;
+        public float TargetZoneRadius => _rules.TargetSphereRadius;
         public bool UsesTargetBox => UsesTargetBoxMission(_missionId);
 
         public LaunchMissionEvaluator(LaunchMissionId missionId, LaunchMissionRules rules = null)
@@ -232,7 +236,7 @@ namespace Simulation
                 case LaunchMissionId.HighAltitude:
                     return $"고도 {r.HighAltitude:0.##} m 도달";
                 case LaunchMissionId.TargetZone:
-                    return $"목표 구역 진입 ({r.TargetBoxSize.x:0.##}×{r.TargetBoxSize.y:0.##}×{r.TargetBoxSize.z:0.##} m)";
+                    return $"목표 구역 진입 (반지름 {r.TargetSphereRadius:0.##} m 구)";
                 default:
                     string hold = $"목표 구역 안에서 자세 오차 {r.MaxAttitudeError:0.##}° 이하, 속력 {r.MaxHoldSpeed:0.##} m/s 이하로 {r.RequiredHoldSeconds:0.##}초 연속 유지";
                     return missionId == LaunchMissionId.LowPowerZoneHold

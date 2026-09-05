@@ -47,13 +47,13 @@ namespace Border.Research
             get
             {
                 var lines = new List<string>();
-                if (pendingPublicPressure) lines.Add("다음 행동: 대기 시 분기 예산 -50 / 설계 진입 시 비용 -100");
-                if (pendingInspectionDiscount) lines.Add("다음 설계 진입 비용 -150");
-                if (pendingPadSurcharge) lines.Add("다음 설계 진입 비용 +150");
+                if (pendingPublicPressure) lines.Add("다음 행동: 대기 시 분기 예산 -50 / 설계 진입 시 비용 -50");
+                if (pendingInspectionDiscount) lines.Add("다음 설계 진입 비용 -50");
+                if (pendingPadSurcharge) lines.Add("다음 설계 진입 비용 +50");
                 if (pendingDiscountMission.HasValue)
                     lines.Add($"{GetConfiguredMissionConfig(pendingDiscountMission.Value).DisplayName} 다음 설치비 -20% (최대 300)");
-                if (pendingPublicRewardPenalty) lines.Add("다음 발사: 공개 보상 배율 -0.25 / 비공개 선택 시 소멸");
-                if (activePublicRewardPenalty) lines.Add("이번 공개 발사 보상 배율 -0.25 적용");
+                if (pendingPublicRewardPenalty) lines.Add("다음 발사: 공개 성공 이벤트 연구비 -25% / 비공개 선택 시 소멸");
+                if (activePublicRewardPenalty) lines.Add("이번 공개 발사 성공 이벤트 연구비 -25% 적용");
                 if (pendingFreeResearchEngine.HasValue)
                     lines.Add($"{GetEnginePresetName(pendingFreeResearchEngine.Value)} 다음 일반 연구: 시간 소모 없음 (비용 정상 지불)");
                 return string.Join("\n", lines);
@@ -73,8 +73,8 @@ namespace Border.Research
         public int GetDesignEntryCost(LaunchMissionId missionId)
         {
             return Math.Max(0, GetConfiguredMissionConfig(missionId).LaunchCost
-                - (pendingPublicPressure ? 100 : 0) - (pendingInspectionDiscount ? 150 : 0)
-                + (pendingPadSurcharge ? 150 : 0));
+                - (pendingPublicPressure ? 50 : 0) - (pendingInspectionDiscount ? 50 : 0)
+                + (pendingPadSurcharge ? 50 : 0));
         }
 
         public int GetLaunchPaymentCost(ResearchDesignEntryData entry)
@@ -116,7 +116,8 @@ namespace Border.Research
                 if (reason == LaunchTerminationReason.GroundCrash) candidates.Add(LaunchOutcomeEventId.NearMissInspection);
                 if (visibility == TestVisibility.Private && reason == LaunchTerminationReason.NoLiftoff)
                     candidates.Add(LaunchOutcomeEventId.RecoveredPayload);
-                if (reason == LaunchTerminationReason.GroundCrash) candidates.Add(LaunchOutcomeEventId.PadDamage);
+                if (visibility == TestVisibility.Public && reason == LaunchTerminationReason.GroundCrash)
+                    candidates.Add(LaunchOutcomeEventId.PadDamage);
                 if (visibility == TestVisibility.Private) candidates.Add(LaunchOutcomeEventId.QuietLessons);
                 if (visibility == TestVisibility.Public) candidates.Add(LaunchOutcomeEventId.MediaBacklash);
             }
@@ -150,11 +151,12 @@ namespace Border.Research
                 case LaunchOutcomeEventId.SponsorBoost:
                     name = "후원 기관 추가 지원";
                     description = "공개 발사 성공을 본 후원 기관이 다음 시험 예산을 추가 지원했습니다.";
-                    ApplyEventFunds(300, 50, effects);
+                    ApplyPublicSuccessEventFunds(500, 100, effects);
                     break;
                 case LaunchOutcomeEventId.CleanTelemetry:
                     name = "깨끗한 비행 데이터";
                     description = "성공한 비행의 기록으로 다음 엔진 개선 연구를 준비했습니다.";
+                    ApplyEventFunds(100, 0, effects);
                     ApplyEventEngine(target, 5, 4, effects);
                     if (target != null)
                     {
@@ -165,15 +167,15 @@ namespace Border.Research
                 case LaunchOutcomeEventId.PublicPressure:
                     name = "공개 성공 뒤 일정 압박";
                     description = "추가 지원과 함께 다음 시험 일정을 앞당겨 달라는 요청이 왔습니다.";
-                    ApplyEventFunds(250, 0, effects);
+                    ApplyPublicSuccessEventFunds(350, 0, effects);
                     pendingPublicPressure = true;
-                    effects.Add("다음 행동이 대기면 분기 예산 -50 / 설계 진입이면 비용 -100");
+                    effects.Add("다음 행동이 대기면 분기 예산 -50 / 설계 진입이면 비용 -50");
                     break;
                 case LaunchOutcomeEventId.NearMissInspection:
                     name = "근접 사고 점검";
                     description = "지면 추락 기록을 분석하고 다음 설계 점검 비용을 지원합니다.";
                     pendingInspectionDiscount = true;
-                    effects.Add("다음 설계 진입 비용 -150");
+                    effects.Add("다음 설계 진입 비용 -50");
                     ApplyEventEngine(target, 3, 0, effects);
                     break;
                 case LaunchOutcomeEventId.RecoveredPayload:
@@ -187,7 +189,7 @@ namespace Border.Research
                     description = "지면 추락으로 시설과 엔진에 정비가 필요합니다.";
                     ApplyEventFunds(-200, 0, effects);
                     pendingPadSurcharge = true;
-                    effects.Add("다음 설계 진입 비용 +150");
+                    effects.Add("다음 설계 진입 비용 +50");
                     ApplyEventEngine(target, -3, 0, effects);
                     break;
                 case LaunchOutcomeEventId.QuietLessons:
@@ -198,9 +200,9 @@ namespace Border.Research
                 case LaunchOutcomeEventId.MediaBacklash:
                     name = "공개 실패 역풍";
                     description = "공개 실패 소식에 후원 기관이 지원 규모를 줄였습니다.";
-                    ApplyEventFunds(0, -100, effects);
+                    ApplyEventFunds(0, -150, effects);
                     pendingPublicRewardPenalty = true;
-                    effects.Add("다음 발사: 공개 보상 배율 -0.25 / 비공개 선택 시 소멸");
+                    effects.Add("다음 발사: 공개 성공 이벤트 연구비 -25% / 비공개 선택 시 소멸");
                     break;
                 default:
                     name = "최종 검증 인정";
@@ -234,6 +236,17 @@ namespace Border.Research
             QuarterlyFunding = ClampInt(QuarterlyFunding + quarterlyDelta, balanceConfig.MinQuarterlyFunding, balanceConfig.MaxQuarterlyFunding);
             if (fundsDelta != 0) effects.Add($"연구비 {Funds - oldFunds:+#;-#;0}");
             if (quarterlyDelta != 0) effects.Add($"분기 연구비 {QuarterlyFunding - oldQuarterly:+#;-#;0}");
+        }
+
+        private void ApplyPublicSuccessEventFunds(int fundsDelta, int quarterlyDelta, List<string> effects)
+        {
+            if (activePublicRewardPenalty)
+            {
+                fundsDelta = (int)Math.Round(fundsDelta * 0.75d, MidpointRounding.AwayFromZero);
+                quarterlyDelta = (int)Math.Round(quarterlyDelta * 0.75d, MidpointRounding.AwayFromZero);
+            }
+
+            ApplyEventFunds(fundsDelta, quarterlyDelta, effects);
         }
 
         private void ApplyEventEngine(EnginePresetState target, int completionDelta, int statDelta, List<string> effects)

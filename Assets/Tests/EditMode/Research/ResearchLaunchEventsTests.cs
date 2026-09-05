@@ -15,7 +15,7 @@ namespace Border.Research.Tests
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Private, 2024, LaunchTerminationReason.NoLiftoff,
             new[] { LaunchOutcomeEventId.RecoveredPayload, LaunchOutcomeEventId.QuietLessons })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Private, 2024, LaunchTerminationReason.GroundCrash,
-            new[] { LaunchOutcomeEventId.NearMissInspection, LaunchOutcomeEventId.PadDamage, LaunchOutcomeEventId.QuietLessons })]
+            new[] { LaunchOutcomeEventId.NearMissInspection, LaunchOutcomeEventId.QuietLessons })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Public, 2024, LaunchTerminationReason.GroundCrash,
             new[] { LaunchOutcomeEventId.NearMissInspection, LaunchOutcomeEventId.PadDamage, LaunchOutcomeEventId.MediaBacklash })]
         [TestCase(LaunchMissionId.LowAltitude, false, TestVisibility.Public, 2024, LaunchTerminationReason.NoLiftoff,
@@ -102,18 +102,18 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void SponsorBoost_AppliesActualFundingAndQuarterlyClamp()
+        public void SponsorBoost_AppliesEventFundingAndQuarterlyClampWithoutBaseSettlement()
         {
             var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(initialQuarterlyFunding: 990, maxQuarterlyFunding: 1000), eventRandom: AlwaysFirst);
 
             ResearchLaunchResultData result = Launch(model, TestVisibility.Public, true, LaunchTerminationReason.Succeeded);
 
             Assert.That(result.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.SponsorBoost));
-            Assert.That(result.ImmediateFunding, Is.EqualTo(600));
-            Assert.That(result.QuarterlyFundingDelta, Is.EqualTo(10));
+            Assert.That(result.ImmediateFunding, Is.Zero);
+            Assert.That(result.QuarterlyFundingDelta, Is.Zero);
             Assert.That(model.QuarterlyFunding, Is.EqualTo(1000));
             Assert.That(model.HighestQuarterlyFunding, Is.EqualTo(1000));
-            Assert.That(model.Funds, Is.EqualTo(10_750));
+            Assert.That(model.Funds, Is.EqualTo(11_100));
         }
 
         [Test]
@@ -217,23 +217,23 @@ namespace Border.Research.Tests
             counts[(int)EnginePresetId.Engine01] = 1;
             counts[(int)EnginePresetId.Engine02] = 1;
 
-            ResearchLaunchResultData result = Launch(model, TestVisibility.Private, false, LaunchTerminationReason.GroundCrash, counts);
+            ResearchLaunchResultData result = Launch(model, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash, counts);
 
             Assert.That(result.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.PadDamage));
             Assert.That(model.Funds, Is.GreaterThanOrEqualTo(0));
             Assert.That(first.Completion, Is.EqualTo(2));
             Assert.That(second.Completion, Is.Zero);
-            Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.LowAltitude).LaunchCost + 150));
+            Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.LowAltitude).LaunchCost + 50));
         }
 
         [Test]
         public void PadDamage_CannotDriveFundsOrEngineBelowFloor()
         {
-            var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(initialFunds: 1_150, initialQuarterlyFunding: 0, minQuarterlyFunding: 0), eventRandom: Sequence(1, 0));
+            var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(initialFunds: 400, initialQuarterlyFunding: 0, minQuarterlyFunding: 0), eventRandom: Sequence(1, 0));
             EnginePresetState engine = model.GetEnginePreset(EnginePresetId.Engine01);
             engine.Completion = 1;
 
-            ResearchLaunchResultData result = Launch(model, TestVisibility.Private, false, LaunchTerminationReason.GroundCrash);
+            ResearchLaunchResultData result = Launch(model, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash);
 
             Assert.That(result.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.PadDamage));
             Assert.That(model.Funds, Is.Zero);
@@ -279,7 +279,7 @@ namespace Border.Research.Tests
         [Test]
         public void BeginLaunch_WhenFundsAreShortDoesNotConsumeDiscountOrFunds()
         {
-            var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(initialFunds: 2_600), eventRandom: AlwaysFirst);
+            var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(initialFunds: 1_000), eventRandom: AlwaysFirst);
             Launch(model, TestVisibility.Private, false, LaunchTerminationReason.NoLiftoff);
             var counts = new int[ResearchPrototypeModel.MaxEnginePresetCount];
             counts[(int)EnginePresetId.Engine01] = 5;
@@ -375,7 +375,7 @@ namespace Border.Research.Tests
             var failedResearchModel = CreatePressureModel();
             Assert.That(failedResearchModel.ExecuteEngineResearch(EnginePresetId.Engine02, EngineStatId.Cooling, false, 100), Is.EqualTo(ResearchActionResult.EnginePresetLocked));
             Assert.That(failedResearchModel.PendingLaunchEffectsText, Does.Contain("다음 행동"));
-            Assert.That(failedResearchModel.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.LowAltitude).LaunchCost - 100));
+            Assert.That(failedResearchModel.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(0));
 
             var focusedModel = CreatePressureModel();
             int funds = focusedModel.Funds;
@@ -394,23 +394,26 @@ namespace Border.Research.Tests
             var publicModel = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: AlwaysFirst);
             ResearchLaunchResultData backlash = Launch(publicModel, TestVisibility.Public, false, LaunchTerminationReason.NoLiftoff);
             Assert.That(backlash.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.MediaBacklash));
-            Assert.That(publicModel.PendingLaunchEffectsText, Does.Contain("공개 보상 배율 -0.25"));
+            Assert.That(publicModel.PendingLaunchEffectsText, Does.Contain("공개 성공 이벤트 연구비 -25%"));
 
             BeginLaunch(publicModel, TestVisibility.Public);
-            Assert.That(publicModel.PendingLaunchEffectsText, Does.Contain("이번 공개 발사 보상 배율 -0.25 적용"));
+            Assert.That(publicModel.PendingLaunchEffectsText, Does.Contain("이번 공개 발사 성공 이벤트 연구비 -25% 적용"));
             Assert.That(publicModel.CompleteLaunch(true, LaunchTerminationReason.Succeeded, out ResearchLaunchResultData penalized), Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(penalized.ImmediateFunding, Is.EqualTo(500));
-            Assert.That(penalized.QuarterlyFundingDelta, Is.EqualTo(63));
-            Assert.That(publicModel.PendingLaunchEffectsText, Does.Not.Contain("공개 보상 배율 -0.25"));
+            Assert.That(penalized.ImmediateFunding, Is.Zero);
+            Assert.That(penalized.QuarterlyFundingDelta, Is.Zero);
+            Assert.That(penalized.OutcomeEvent.EffectsText, Does.Contain("연구비 +375"));
+            Assert.That(penalized.OutcomeEvent.EffectsText, Does.Contain("분기 연구비 +75"));
+            Assert.That(publicModel.PendingLaunchEffectsText, Does.Not.Contain("공개 성공 이벤트 연구비 -25%"));
 
             var privateModel = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: AlwaysFirst);
             Launch(privateModel, TestVisibility.Public, false, LaunchTerminationReason.NoLiftoff);
             BeginLaunch(privateModel, TestVisibility.Private);
-            Assert.That(privateModel.PendingLaunchEffectsText, Does.Not.Contain("공개 보상 배율 -0.25"));
-            Assert.That(privateModel.PendingLaunchEffectsText, Does.Not.Contain("이번 공개 발사 보상 배율 -0.25 적용"));
+            Assert.That(privateModel.PendingLaunchEffectsText, Does.Not.Contain("공개 성공 이벤트 연구비 -25%"));
+            Assert.That(privateModel.PendingLaunchEffectsText, Does.Not.Contain("이번 공개 발사 성공 이벤트 연구비 -25% 적용"));
             Assert.That(privateModel.CompleteLaunch(true, LaunchTerminationReason.Succeeded, out ResearchLaunchResultData privateSuccess), Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(privateSuccess.ImmediateFunding, Is.EqualTo(200));
-            Assert.That(privateSuccess.QuarterlyFundingDelta, Is.EqualTo(25));
+            Assert.That(privateSuccess.ImmediateFunding, Is.Zero);
+            Assert.That(privateSuccess.QuarterlyFundingDelta, Is.Zero);
+            Assert.That(privateSuccess.OutcomeEvent.EffectsText, Does.Contain("연구비 +100"));
         }
 
         [Test]
@@ -419,16 +422,16 @@ namespace Border.Research.Tests
             var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: Sequence(2, 0, 0, 0));
             Launch(model, TestVisibility.Public, true, LaunchTerminationReason.Succeeded);
             LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Private, false, LaunchTerminationReason.GroundCrash);
-            LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Private, false, LaunchTerminationReason.GroundCrash);
+            LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash);
             int baseCost = ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.LowAltitude).LaunchCost;
 
-            Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(baseCost - 100));
-            Assert.That(model.PendingLaunchEffectsText, Does.Contain("설계 진입 시 비용 -100"));
-            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 -150"));
-            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 +150"));
+            Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(0));
+            Assert.That(model.PendingLaunchEffectsText, Does.Contain("설계 진입 시 비용 -50"));
+            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 -50"));
+            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 +50"));
 
             Assert.That(model.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, TestVisibility.Private, out ResearchDesignEntryData entry), Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(entry.LaunchCost, Is.EqualTo(baseCost - 100));
+            Assert.That(entry.LaunchCost, Is.EqualTo(0));
             Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(baseCost));
             Assert.That(model.PendingLaunchEffectsText, Does.Not.Contain("설계 진입"));
         }
@@ -437,18 +440,18 @@ namespace Border.Research.Tests
         public void PendingEntryEffectSameTypeRefreshesWithoutStackingWhileDifferentTypesCoexist()
         {
             var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: Sequence(1, 0, 1, 0, 0));
-            LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Private, false, LaunchTerminationReason.GroundCrash);
+            LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash);
             LaunchPaid(model, LaunchMissionId.LowPowerZoneHold, TestVisibility.FinalMission, false, LaunchTerminationReason.GroundCrash);
-            LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Private, false, LaunchTerminationReason.GroundCrash);
+            LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Public, false, LaunchTerminationReason.GroundCrash);
             int baseCost = ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.LowAltitude).LaunchCost;
 
-            Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(baseCost + 150));
-            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 +150"));
+            Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(baseCost + 50));
+            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 +50"));
 
             LaunchPaid(model, LaunchMissionId.LowPowerZoneHold, TestVisibility.FinalMission, false, LaunchTerminationReason.GroundCrash);
             LaunchPaidWithEvent(model, LaunchMissionId.LowAltitude, TestVisibility.Private, false, LaunchTerminationReason.GroundCrash);
-            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 -150"));
-            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 +150"));
+            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 -50"));
+            Assert.That(model.PendingLaunchEffectsText, Does.Contain("다음 설계 진입 비용 +50"));
             Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(baseCost));
         }
 
@@ -493,10 +496,10 @@ namespace Border.Research.Tests
             var model = CreatePressureModel();
             int baseCost = ResearchPrototypeModel.GetMissionConfig(LaunchMissionId.LowAltitude).LaunchCost;
             int funds = model.Funds;
-            Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(baseCost - 100));
+            Assert.That(model.GetDesignEntryCost(LaunchMissionId.LowAltitude), Is.EqualTo(0));
             Assert.That(model.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, TestVisibility.Private, out ResearchDesignEntryData entry), Is.EqualTo(ResearchActionResult.Success));
-            Assert.That(entry.LaunchCost, Is.EqualTo(baseCost - 100));
-            Assert.That(model.Funds, Is.EqualTo(funds - baseCost + 100));
+            Assert.That(entry.LaunchCost, Is.EqualTo(0));
+            Assert.That(model.Funds, Is.EqualTo(funds));
             Assert.That(model.PendingLaunchEffectsText, Does.Not.Contain("다음 행동"));
         }
 

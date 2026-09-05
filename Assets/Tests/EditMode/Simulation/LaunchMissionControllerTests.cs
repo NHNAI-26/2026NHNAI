@@ -181,10 +181,24 @@ namespace Simulation.Tests
             ReinitializeController(LaunchMissionId.TargetZone);
 
             Assert.That(_controller.UsesTargetBox, Is.True);
-            Assert.That(_controller.TargetBoxBounds.center, Is.EqualTo(new Vector3(0f, 260f, 100f)));
-            Assert.That(_controller.TargetBoxBounds.size, Is.EqualTo(new Vector3(100f, 120f, 100f)));
-            Assert.That(_object.GetComponent<LaunchTargetZoneGuide>(), Is.Not.Null);
-            Assert.That(_object.GetComponent<LaunchTargetZoneGuide>().IsVisible, Is.True);
+            Assert.That(_controller.TargetZoneCenter, Is.EqualTo(new Vector3(0f, 260f, 100f)));
+            Assert.That(_controller.TargetZoneRadius, Is.EqualTo(60f));
+            LaunchTargetZoneGuide guide = _object.GetComponent<LaunchTargetZoneGuide>();
+            Assert.That(guide, Is.Not.Null);
+            Assert.That(guide.IsVisible, Is.True);
+            Assert.That(guide.TargetBounds.size, Is.EqualTo(Vector3.one * 120f));
+            Assert.That(guide.TargetMaterial.shader.name, Is.EqualTo("Shader/Uber/3D Object"));
+            Assert.That(guide.TargetMaterial.GetFloat("_HologramEnabled"), Is.EqualTo(1f));
+            Assert.That(guide.TargetMaterial.GetFloat("_Surface"), Is.EqualTo(1f));
+            Assert.That(guide.TargetMaterial.renderQueue, Is.EqualTo((int)UnityEngine.Rendering.RenderQueue.Transparent));
+            Assert.That(guide.TargetMaterial.GetColor("_BaseColor").r, Is.GreaterThan(0.9f));
+            Assert.That(guide.TargetMaterial.GetColor("_BaseColor").g, Is.GreaterThan(0.7f));
+            Assert.That(guide.TargetMaterial.GetColor("_BaseColor").a, Is.GreaterThan(0.25f));
+            Assert.That(guide.TargetMaterial.GetColor("_BaseColor").a, Is.LessThan(0.5f));
+            Assert.That(guide.ArrowMaterial.renderQueue, Is.EqualTo((int)UnityEngine.Rendering.RenderQueue.Geometry));
+            Assert.That(guide.ArrowMaterial.color.a, Is.EqualTo(1f));
+            Assert.That(guide.ArrowMesh.bounds.size.z, Is.LessThan(1.3f));
+            Assert.That(guide.ArrowMesh.bounds.size.z / guide.ArrowMesh.bounds.size.x, Is.LessThan(1.1f));
         }
 
         [Test]
@@ -202,7 +216,7 @@ namespace Simulation.Tests
             collider.size = new Vector3(4f, 4f, 4f);
 
             _rocket.Launch();
-            _object.transform.position = new Vector3(0f, 198f, 50f);
+            _object.transform.position = new Vector3(0f, 198f, 100f);
             Physics.SyncTransforms();
             Invoke(_controller, "FixedUpdate");
 
@@ -218,7 +232,7 @@ namespace Simulation.Tests
             _object.AddComponent<BoxCollider>().size = Vector3.one;
 
             _rocket.Launch();
-            _object.transform.position = new Vector3(0f, 150f, 0f);
+            _object.transform.position = new Vector3(0f, 190f, 100f);
             Physics.SyncTransforms();
             Invoke(_controller, "FixedUpdate");
 

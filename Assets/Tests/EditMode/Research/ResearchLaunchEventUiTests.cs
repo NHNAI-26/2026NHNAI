@@ -98,7 +98,7 @@ namespace Border.Research.Tests
             Assert.That(body, Does.Not.Contain("미션:"));
             Assert.That(body, Does.Not.Contain("판정:"));
             Assert.That(body, Does.Not.Contain("종료 사유:"));
-            Assert.That(effects, Does.Contain("기본 보상: 즉시 지원금 +600 / 분기 연구비 +75"));
+            Assert.That(effects, Does.Contain("테스트 정산: 즉시 지원금 +600 / 분기 연구비 +75"));
             Assert.That(effects, Does.Contain(outcomeEvent.EffectsText));
             Assert.That(effects, Does.Not.Contain("성공 80%"));
             Assert.That(effects, Does.Not.Contain("부분 10%"));
@@ -163,11 +163,11 @@ namespace Border.Research.Tests
             var host = new GameObject("Research Launch Event UI Operation Fixture Test");
             createdObjects.Add(host);
             ResearchOperationUIController operation = host.AddComponent<ResearchOperationUIController>();
+
+            operation.InitializeForTests();
             ResearchPrototypeModel model = ResearchFlowSession.GetOrCreate().Model;
             SetPrivateField(model, "pendingFreeResearchEngine", EnginePresetId.Engine01);
             SetPrivateField(model, "pendingPublicPressure", true);
-
-            operation.InitializeForTests();
             operation.RefreshForTests();
 
             string normalResearch = FindButtonLabel(host, "NormalResearchButton").text;
@@ -184,7 +184,7 @@ namespace Border.Research.Tests
         {
             string status = (string)typeof(ResearchDesignScreenController)
                 .GetMethod("FormatDesignStatusText", BindingFlags.Static | BindingFlags.NonPublic)
-                .Invoke(null, new object[] { true, "다음 설계 진입 비용 -150" });
+                .Invoke(null, new object[] { true, "다음 설계 진입 비용 -50" });
 
             Assert.That(status, Does.Contain("남은 이벤트 효과:"));
             Assert.That(status, Does.Not.Contain("예상 이벤트 효과"));
@@ -305,21 +305,21 @@ namespace Border.Research.Tests
             switch (id)
             {
                 case LaunchOutcomeEventId.SponsorBoost:
-                    return "연구비 +300\n분기 연구비 +50";
+                    return "연구비 +500\n분기 연구비 +100";
                 case LaunchOutcomeEventId.CleanTelemetry:
-                    return "1번 엔진 완성도 +5\n1번 엔진 연료 탱크 용량 +4\n1번 엔진 다음 일반 연구 시간 면제 (비용 정상 지불)";
+                    return "연구비 +100\n1번 엔진 완성도 +5\n1번 엔진 연료 탱크 용량 +4\n1번 엔진 다음 일반 연구 시간 면제 (비용 정상 지불)";
                 case LaunchOutcomeEventId.PublicPressure:
-                    return "연구비 +250\n다음 행동이 대기면 분기 예산 -50 / 설계 진입이면 비용 -100";
+                    return "연구비 +350\n다음 행동이 대기면 분기 예산 -50 / 설계 진입이면 비용 -50";
                 case LaunchOutcomeEventId.NearMissInspection:
-                    return "다음 설계 진입 비용 -150\n1번 엔진 완성도 +3";
+                    return "다음 설계 진입 비용 -50\n1번 엔진 완성도 +3";
                 case LaunchOutcomeEventId.RecoveredPayload:
                     return "저고도 안정화 다음 설치비 -20% (최대 300)";
                 case LaunchOutcomeEventId.PadDamage:
-                    return "연구비 -200\n다음 설계 진입 비용 +150\n1번 엔진 완성도 -3";
+                    return "연구비 -200\n다음 설계 진입 비용 +50\n1번 엔진 완성도 -3";
                 case LaunchOutcomeEventId.QuietLessons:
                     return "1번 엔진 완성도 +4\n1번 엔진 냉각 능력 +3";
                 case LaunchOutcomeEventId.MediaBacklash:
-                    return "분기 연구비 -100\n다음 발사: 공개 보상 배율 -0.25 / 비공개 선택 시 소멸";
+                    return "분기 연구비 -150\n다음 발사: 공개 성공 이벤트 연구비 -25% / 비공개 선택 시 소멸";
                 case LaunchOutcomeEventId.FinalProof:
                     return "효율 검증 통과 · 최종 미션 성공\n1번 엔진 완성도 +10\n1번 엔진 연료 탱크 용량 +5";
                 default:

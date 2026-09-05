@@ -33,11 +33,11 @@ namespace Border.Research.Tests
             if (channel != null) Object.DestroyImmediate(channel);
         }
 
-        [TestCase(TestVisibility.Public, true, 600, 75)]
-        [TestCase(TestVisibility.Private, true, 200, 25)]
-        [TestCase(TestVisibility.Public, false, 0, -150)]
-        [TestCase(TestVisibility.Private, false, 0, -50)]
-        public void PhysicalResult_UsesSelectedEconomicsOnly(TestVisibility visibility, bool success, int funding, int delta)
+        [TestCase(TestVisibility.Public, true)]
+        [TestCase(TestVisibility.Private, true)]
+        [TestCase(TestVisibility.Public, false)]
+        [TestCase(TestVisibility.Private, false)]
+        public void PhysicalResult_UsesEventSettlementOnlyForRegularVisibility(TestVisibility visibility, bool success)
         {
             var model = new ResearchPrototypeModel();
             Assert.That(model.TryEnterDesign(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, visibility, out var entry), Is.EqualTo(ResearchActionResult.Success));
@@ -48,8 +48,9 @@ namespace Border.Research.Tests
             Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(model.CompleteLaunch(success, out var result), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(result.Grade, Is.EqualTo(success ? ResearchGrade.B : ResearchGrade.F));
-            Assert.That(result.ImmediateFunding, Is.EqualTo(funding));
-            Assert.That(result.QuarterlyFundingDelta, Is.EqualTo(delta));
+            Assert.That(result.ImmediateFunding, Is.Zero);
+            Assert.That(result.QuarterlyFundingDelta, Is.Zero);
+            Assert.That(result.OutcomeEvent, Is.Not.Null);
         }
 
         [Test]
@@ -81,6 +82,22 @@ namespace Border.Research.Tests
             dialog.Open(model, model.GetCurrentMission(), _ => ResearchActionResult.Success);
             Assert.That(Find<Toggle>("PrivateToggle").isOn, Is.True);
             Assert.That(dialogObject.GetComponentsInChildren<Transform>(true).Length, Is.EqualTo(objects));
+        }
+
+        [Test]
+        public void Dialog_DescribesEventDrivenPublicAndPrivateOutcomes()
+        {
+            var model = new ResearchPrototypeModel();
+            var dialog = CreateDialog();
+
+            dialog.Open(model, model.GetCurrentMission(), _ => ResearchActionResult.Success);
+
+            Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Contain("투자 혹은 연구비 지원"));
+            Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Contain("연구비가 줄어들수도"));
+            Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Contain("성공 보수가 적지만"));
+            Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Contain("위험 부담도 적습니다"));
+            Assert.That(Find<TMP_Text>("PublicDetails").text, Does.Not.Contain("보상 ×"));
+            Assert.That(Find<TMP_Text>("PrivateDetails").text, Does.Not.Contain("실패 시 분기 연구비"));
         }
 
         [Test]
@@ -211,7 +228,7 @@ namespace Border.Research.Tests
             listener.Succeeded.AddListener(() => counts[0]++);
             listener.PartiallySucceeded.AddListener(() => counts[1]++);
             listener.Failed.AddListener(() => counts[2]++);
-            var result = new ResearchLaunchResultData(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, 2020, 1, 800, 0, TestVisibility.Public, 50, 40, 40, 0, 0, 0, 0, grade, 0, 0, false, false);
+            var result = new ResearchLaunchResultData(LaunchMissionId.LowAltitude, EnginePresetId.Engine01, 2020, 1, 50, 0, TestVisibility.Public, 50, 40, 40, 0, 0, 0, 0, grade, 0, 0, false, false);
             channel.RaiseEvent(new ResearchLaunchOutcomeData(result, "sample"));
             Assert.That(counts.Sum(), Is.EqualTo(1));
             Assert.That(counts[expected], Is.EqualTo(1));

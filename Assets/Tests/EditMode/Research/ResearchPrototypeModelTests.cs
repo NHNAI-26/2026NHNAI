@@ -245,7 +245,7 @@ namespace Border.Research.Tests
             Assert.That(engine.Completion, Is.EqualTo(completion));
             Assert.That(data.MissionId, Is.EqualTo(LaunchMissionId.LowAltitude));
             Assert.That(data.SelectedEnginePresetId, Is.EqualTo(EnginePresetId.Engine03));
-            Assert.That(data.LaunchCost, Is.EqualTo(800));
+            Assert.That(data.LaunchCost, Is.EqualTo(50));
             Assert.That(data.ReservedInstallCost, Is.EqualTo(model.GetEngineInstallCost(EnginePresetId.Engine03)));
             Assert.That(data.LaunchCostPaid, Is.True);
             Assert.That(data.TargetPathId, Is.Not.Empty);

@@ -425,7 +425,8 @@ namespace Border.Research
                 : result.DeadlineMissed
                     ? "마감 실패"
                     : "연구 화면 복귀";
-            return $"{result.MissionId} 발사 결과 {result.Grade}. 실제 판정 {outcome}. 기본 보상 +{result.ImmediateFunding}, 기본 분기 예산 {result.QuarterlyFundingDelta:+#;-#;0}. {FormatOutcomeEventSummary(result.OutcomeEvent)}. {ending}.";
+            string settlementLabel = result.Visibility == TestVisibility.FinalMission ? "기본 보상" : "테스트 정산";
+            return $"{result.MissionId} 발사 결과 {result.Grade}. 실제 판정 {outcome}. {settlementLabel} +{result.ImmediateFunding}, 분기 예산 {result.QuarterlyFundingDelta:+#;-#;0}. {FormatOutcomeEventSummary(result.OutcomeEvent)}. {ending}.";
         }
 
         private static string FormatDesignStatusText(bool launchCostPaid, string pendingEffectsText)

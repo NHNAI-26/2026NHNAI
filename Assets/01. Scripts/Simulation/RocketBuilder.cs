@@ -170,11 +170,16 @@ namespace Simulation
         private float _launchYaw;
         private float _launchAltitude;
         private bool _launchViewSwapped;
-        private bool _hasPendingLaunchTargetPreview;
-        private Vector3 _launchTargetPreviewCenter;
-        private float _launchTargetPreviewHoldSeconds = 3f;
-        private float _launchTargetPreviewStartTime;
-        private float _launchTargetPreviewBlendSeconds = 0.75f;
+        private bool _hasPendingDesignTargetIntro;
+        private bool _designTargetIntroActive;
+        private Bounds _designTargetIntroBounds;
+        private Vector3 _designTargetIntroStartPosition;
+        private Vector3 _designTargetIntroEndPosition;
+        private Quaternion _designTargetIntroStartRotation;
+        private Quaternion _designTargetIntroEndRotation;
+        private float _designTargetIntroStartTime;
+        private float _designTargetIntroHoldSeconds = 3f;
+        private float _designTargetIntroTravelSeconds = 1.1f;
         private ParticleSystem _trail;
         private ParticleSystem.Particle[] _trailParticles;
 
@@ -241,6 +246,7 @@ namespace Simulation
 
             CacheBodyShape();
             BuildGizmo();
+            if (_hasPendingDesignTargetIntro) BeginDesignTargetIntro();
         }
 
         private void Update()
@@ -267,6 +273,12 @@ namespace Simulation
             // 패널 위에서 시작한 입력은 3D 로 새면 안 된다 — 패널을 드래그하면 카메라가 돌아버린다.
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
             RequestCursor(overUI, position);
+
+            if (_designTargetIntroActive && !rocket.Launched)
+            {
+                _lastMouse = position;
+                return;
+            }
 
             // 핸들을 잡은 동안에는 카메라를 묶는다. 잡을 때의 t·각도는 고정이지만 광선은 아니라,
             // 궤도 회전이나 휠 줌이 끼어들면 부품이 한 프레임에 튄다.
@@ -327,26 +339,29 @@ namespace Simulation
             EnsureTrajectoryTrail();
             _pipCamera.enabled = true;
             _trail.Play();
-            if (_hasPendingLaunchTargetPreview)
-            {
-                _launchTargetPreviewStartTime = Time.time;
-            }
             ApplyLaunchViews();
         }
 
-        public void PreviewLaunchTarget(Vector3 targetCenter, float holdSeconds = 3f)
+        public void PreviewDesignTarget(Bounds targetBounds, float holdSeconds = 3f, float travelSeconds = 1.1f)
         {
-            _hasPendingLaunchTargetPreview = true;
-            _launchTargetPreviewCenter = targetCenter;
-            _launchTargetPreviewHoldSeconds = Mathf.Max(0f, holdSeconds);
-            if (rocket != null && rocket.Launched) _launchTargetPreviewStartTime = Time.time;
+            _designTargetIntroBounds = targetBounds;
+            _designTargetIntroHoldSeconds = Mathf.Max(0f, holdSeconds);
+            _designTargetIntroTravelSeconds = Mathf.Max(0.01f, travelSeconds);
+            if (rocket == null || designCam == null)
+            {
+                _hasPendingDesignTargetIntro = true;
+                return;
+            }
+
+            BeginDesignTargetIntro();
         }
 
         public void ReturnToDesign()
         {
             launchCam.Priority = 0;
             _launchViewSwapped = false;
-            _hasPendingLaunchTargetPreview = false;
+            _designTargetIntroActive = false;
+            _hasPendingDesignTargetIntro = false;
             if (_pipCamera != null) _pipCamera.enabled = false;
             if (_trail != null) _trail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             Select(null);
@@ -444,10 +459,10 @@ namespace Simulation
             float pullback = PullbackDistance(rocket.transform.position.y - _launchAltitude,
                 pullbackNearDistance, pullbackGrowth, pullbackFarDistance);
 
-            PlaceLaunchCameraView(launchCam.transform, _launchViewSwapped ? pullback : chaseDistance, true);
+            PlaceLaunchCameraView(launchCam.transform, _launchViewSwapped ? pullback : chaseDistance);
             if (_pipCamera != null)
             {
-                PlaceLaunchCameraView(_pipCamera.transform, _launchViewSwapped ? chaseDistance : pullback, false);
+                PlaceLaunchCameraView(_pipCamera.transform, _launchViewSwapped ? chaseDistance : pullback);
             }
 
             UpdateTrailDotSize(pullback);
@@ -491,7 +506,7 @@ namespace Simulation
         /// 한가운데 남는다. 두 뷰의 차이는 거리 하나뿐이고, 상태를 두지 않으므로 스왑으로 담당 카메라가
         /// 바뀌어도 한 프레임에 맞는다.
         /// </summary>
-        private void PlaceLaunchCameraView(Transform view, float distance, bool allowTargetPreview)
+        private void PlaceLaunchCameraView(Transform view, float distance)
         {
             Quaternion rotation = Quaternion.Euler(0f, _launchYaw, 0f);
             Vector3 target = rocket.transform.position;
@@ -504,45 +519,7 @@ namespace Simulation
                 TrailDotWorldSize(shakeScreenAmplitude, distance, cam.fieldOfView) * rocket.ThrustFraction,
                 Time.time, shakeFrequency);
             Vector3 position = target + rotation * (new Vector3(0f, 0f, -distance) + shake);
-            Quaternion finalRotation = rotation;
-            if (allowTargetPreview && TryGetLaunchTargetPreviewRotation(position, rotation, out Quaternion preview))
-                finalRotation = preview;
-            view.SetPositionAndRotation(position, finalRotation);
-        }
-
-        private bool TryGetLaunchTargetPreviewRotation(Vector3 cameraPosition, Quaternion finalRotation,
-            out Quaternion rotation)
-        {
-            rotation = finalRotation;
-            if (!_hasPendingLaunchTargetPreview) return false;
-
-            float elapsed = Time.time - _launchTargetPreviewStartTime;
-            if (elapsed < _launchTargetPreviewHoldSeconds)
-            {
-                rotation = LookAtLaunchTarget(cameraPosition);
-                return true;
-            }
-
-            float blendElapsed = elapsed - _launchTargetPreviewHoldSeconds;
-            if (blendElapsed >= _launchTargetPreviewBlendSeconds)
-            {
-                _hasPendingLaunchTargetPreview = false;
-                return false;
-            }
-
-            float t = _launchTargetPreviewBlendSeconds <= 0f
-                ? 1f
-                : Mathf.SmoothStep(0f, 1f, blendElapsed / _launchTargetPreviewBlendSeconds);
-            rotation = Quaternion.Slerp(LookAtLaunchTarget(cameraPosition), finalRotation, t);
-            return true;
-        }
-
-        private Quaternion LookAtLaunchTarget(Vector3 cameraPosition)
-        {
-            Vector3 direction = _launchTargetPreviewCenter - cameraPosition;
-            return direction.sqrMagnitude < 0.0001f
-                ? Quaternion.Euler(0f, _launchYaw, 0f)
-                : Quaternion.LookRotation(direction.normalized, Vector3.up);
+            view.SetPositionAndRotation(position, rotation);
         }
 
         /// <summary>
@@ -581,6 +558,74 @@ namespace Simulation
             return visible ? cullingMask | bit : cullingMask & ~bit;
         }
 
+        private void BeginDesignTargetIntro()
+        {
+            _hasPendingDesignTargetIntro = false;
+            if (rocket == null || designCam == null || rocket.Launched)
+            {
+                return;
+            }
+
+            _designTargetIntroActive = true;
+            _designTargetIntroStartTime = Time.time;
+            _designTargetIntroEndRotation = Quaternion.Euler(_pitch, _yaw, 0f);
+            _designTargetIntroEndPosition =
+                rocket.transform.position + _designTargetIntroEndRotation * new Vector3(0f, 0f, -_distance);
+
+            Vector3 fromPad = _designTargetIntroBounds.center - rocket.transform.position;
+            fromPad.y = 0f;
+            if (fromPad.sqrMagnitude < 0.0001f) fromPad = Vector3.forward;
+            Vector3 targetDirection = fromPad.normalized;
+            Vector3 side = Vector3.Cross(Vector3.up, targetDirection).normalized;
+            float backDistance = Mathf.Max(_designTargetIntroBounds.extents.z * 1.4f, 90f);
+            float lift = Mathf.Max(_designTargetIntroBounds.extents.y * 0.55f, 40f);
+
+            _designTargetIntroStartPosition = _designTargetIntroBounds.center
+                + targetDirection * backDistance
+                + side * (_designTargetIntroBounds.extents.x * 0.35f)
+                + Vector3.up * lift;
+            _designTargetIntroStartRotation = LookAt(_designTargetIntroStartPosition, _designTargetIntroBounds.center);
+        }
+
+        private bool TryApplyDesignTargetIntro()
+        {
+            if (!_designTargetIntroActive) return false;
+            if (rocket.Launched)
+            {
+                _designTargetIntroActive = false;
+                return false;
+            }
+
+            float elapsed = Time.time - _designTargetIntroStartTime;
+            if (elapsed < _designTargetIntroHoldSeconds)
+            {
+                designCam.transform.SetPositionAndRotation(_designTargetIntroStartPosition,
+                    _designTargetIntroStartRotation);
+                return true;
+            }
+
+            float travelElapsed = elapsed - _designTargetIntroHoldSeconds;
+            if (travelElapsed >= _designTargetIntroTravelSeconds)
+            {
+                _designTargetIntroActive = false;
+                return false;
+            }
+
+            float t = Mathf.SmoothStep(0f, 1f, travelElapsed / _designTargetIntroTravelSeconds);
+            designCam.transform.SetPositionAndRotation(
+                Vector3.Lerp(_designTargetIntroStartPosition, _designTargetIntroEndPosition, t),
+                Quaternion.Slerp(_designTargetIntroStartRotation, _designTargetIntroEndRotation, t));
+            return true;
+        }
+
+        private static Quaternion LookAt(Vector3 position, Vector3 target)
+        {
+            Vector3 direction = target - position;
+            return direction.sqrMagnitude < 0.0001f
+                ? Quaternion.identity
+                : Quaternion.LookRotation(direction.normalized, Vector3.up);
+        }
+
         /// <summary>큰 화면과 작은 화면의 역할을 맞바꾼다. 작은 화면 클릭이 이걸 부른다.</summary>
         public void ToggleLaunchView()
         {
@@ -605,9 +650,12 @@ namespace Simulation
             }
             else
             {
-                Quaternion rotation = Quaternion.Euler(_pitch, _yaw, 0f);
-                designCam.transform.SetPositionAndRotation(
-                    rocket.transform.position + rotation * new Vector3(0f, 0f, -_distance), rotation);
+                if (!TryApplyDesignTargetIntro())
+                {
+                    Quaternion rotation = Quaternion.Euler(_pitch, _yaw, 0f);
+                    designCam.transform.SetPositionAndRotation(
+                        rocket.transform.position + rotation * new Vector3(0f, 0f, -_distance), rotation);
+                }
             }
 
             // vcam 을 옮긴 뒤에 돌려야 cam 이 이번 프레임 자세를 갖는다.

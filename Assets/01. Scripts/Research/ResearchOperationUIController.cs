@@ -706,7 +706,8 @@ namespace Border.Research
 
             // 둘째 줄(비용/소요 분기)은 리치텍스트 size 태그로 줄인다 — 라벨 하나 안에서 줄마다 크기를
             // 달리 하려면 TMP 태그밖에 방법이 없다. 태그가 먹으려면 해당 Label의 Auto Size가 꺼져 있어야 한다.
-            normalResearchButtonText.text = $"기본연구\n<size=13>-{model.ConfiguredEngineNormalResearchCost}$ / +1분기</size>";
+            string normalResearchTime = model.HasFreeNormalResearch(selectedEnginePreset) ? "시간 0분기" : "+1분기";
+            normalResearchButtonText.text = $"기본연구\n<size=13>-{model.ConfiguredEngineNormalResearchCost}$ / {normalResearchTime}</size>";
             focusedResearchButtonText.text = $"집중연구\n<size=13>-{model.ConfiguredEngineFocusedResearchCost}$ / +1분기</size>";
             SetSelectedTint(normalResearchButton, !focusedResearchSelected);
             SetSelectedTint(focusedResearchButton, focusedResearchSelected);
@@ -714,7 +715,7 @@ namespace Border.Research
                 ? "새로운 엔진 개발 최대 10개"
                 : $"새로운 엔진 개발 -{model.ConfiguredNewEnginePresetCost}$";
             partDevelopmentButtonText.text = $"부품 개발\n<size=15>-{model.ConfiguredEngineNormalResearchCost}$~</size>";
-            enterDesignButtonText.text = $"로켓 설계\n<size=15>-{designEntryCost}$ / +1분기</size>";
+            enterDesignButtonText.text = $"로켓 설계\n<size=15>-{designEntryCost}$ / 시간 0</size>";
             waitButtonText.text = $"건너뛰기\n<size=15>+{model.NextWaitFunding}$ / +1분기</size>";
 
             RefreshPendingEffects();

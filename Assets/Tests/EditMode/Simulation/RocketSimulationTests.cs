@@ -1237,6 +1237,37 @@ namespace Simulation.Tests
             Assert.AreEqual(0f, instance.GetFloat("_HologramEnabled"), 1e-4f);
         }
 
+        [Test]
+        public void OverheatVisual_UsesRedFresnelRimAndResetsOnShutdown()
+        {
+            RocketPart part = CreateEngine(Stats(fuel: 100f, cooling: 0f, output: BaselineOutput, ignition: 100f));
+            Material shared = Track(new Material(Shader.Find("Shader/Uber/3D Object")));
+            part.gameObject.AddComponent<MeshRenderer>().sharedMaterial = shared;
+
+            // EditMode 에서는 renderer.materials 인스턴스화가 에러 로그를 남긴다. 플레이 중에는 정상 경로다.
+            LogAssert.Expect(LogType.Error, new Regex("Instantiating material"));
+
+            part.Prepare(new DeterministicRng());
+            part.Tick(0.5f);
+            Material instance = part.GetComponent<MeshRenderer>().sharedMaterial;
+            float warmIntensity = instance.GetFloat("_RimIntensity");
+
+            part.Tick(0.5f);
+
+            Assert.AreNotSame(shared, instance, "공유 머티리얼을 건드리면 붙어 있는 엔진 전부가 같이 빨개진다.");
+            Assert.IsTrue(instance.IsKeywordEnabled("_RIM_ON"));
+            Assert.AreEqual(1f, instance.GetFloat("_RimEnabled"), 1e-4f);
+            Assert.That(instance.GetColor("_RimColor").r, Is.GreaterThan(instance.GetColor("_RimColor").g));
+            Assert.That(instance.GetFloat("_RimIntensity"), Is.GreaterThan(warmIntensity));
+            Assert.That(instance.GetFloat("_RimPower"), Is.LessThan(5.5f));
+
+            part.Shutdown();
+
+            Assert.IsFalse(instance.IsKeywordEnabled("_RIM_ON"));
+            Assert.AreEqual(0f, instance.GetFloat("_RimEnabled"), 1e-4f);
+            Assert.AreEqual(0f, instance.GetFloat("_RimIntensity"), 1e-4f);
+        }
+
         private RocketPart CreateEngine(EngineStatsSO stats)
         {
             // RocketPart 의 RequireComponent(Collider) 는 추상 타입이라 자동 추가되지 않는다.

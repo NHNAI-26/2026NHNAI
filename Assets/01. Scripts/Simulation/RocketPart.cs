@@ -34,9 +34,19 @@ namespace Simulation
         // 블록으로는 못 바꾼다. 그래서 렌더러당 머티리얼 인스턴스를 하나 만들어 들고 있는다.
         private static readonly int OutlineEnabledId = Shader.PropertyToID("_StencilOutlineEnabled");
         private static readonly int HologramEnabledId = Shader.PropertyToID("_HologramEnabled");
+        private static readonly int RimEnabledId = Shader.PropertyToID("_RimEnabled");
+        private static readonly int RimColorId = Shader.PropertyToID("_RimColor");
+        private static readonly int RimPowerId = Shader.PropertyToID("_RimPower");
+        private static readonly int RimIntensityId = Shader.PropertyToID("_RimIntensity");
         private const string OutlineKeyword = "_STENCIL_OUTLINE_ON";
         private const string HologramKeyword = "_HOLOGRAM_ON";
+        private const string RimKeyword = "_RIM_ON";
         private const string OutlinePass = "StencilOutline";
+        private const float OverheatVisualMaxIntensity = 8f;
+        private const float OverheatVisualColdPower = 5.5f;
+        private const float OverheatVisualHotPower = 1.4f;
+        private static readonly Color WarmRimColor = new(1.8f, 0.42f, 0.06f, 1f);
+        private static readonly Color CriticalRimColor = new(3.2f, 0.02f, 0f, 1f);
 
         // 로컬 bounds 여덟 꼭짓점의 부호. 회전에 안전한 bounds 환산에 쓴다.
         private static readonly Vector3[] BoundsCorners =
@@ -217,6 +227,7 @@ namespace Simulation
             _ignited = false;
             SetFlame(false, 0f);
             SetEmission(smokeFail, false);
+            SetOverheatVisual(0f);
         }
 
         /// <summary>
@@ -226,6 +237,7 @@ namespace Simulation
         public void Prepare(DeterministicRng rng)
         {
             _temperature = 0f;
+            SetOverheatVisual(0f);
             SetFlame(false, 0f);
             if (smokeSingle != null)
                 smokeSingle.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -257,7 +269,11 @@ namespace Simulation
         /// </summary>
         public bool Tick(float deltaTime, float thrustScale = 1f)
         {
-            if (stats == null) return false;
+            if (stats == null)
+            {
+                SetOverheatVisual(0f);
+                return false;
+            }
 
             bool burning = _ignited && _remaining > 0f;
             // 한 스텝 안에서는 출력이 하나여야 한다 — 연소와 발열이 다른 값을 보면 램프가 반만 걸린다.
@@ -268,6 +284,7 @@ namespace Simulation
             // 꺼진 엔진은 발열이 0이라 냉각만 남는다 — ON/OFF 타이밍이 곧 과열 관리 수단이다.
             float heat = burning ? stats.HeatRateAt(output) : 0f;
             _temperature = Mathf.Max(0f, _temperature + (heat - stats.Cooling) * deltaTime);
+            SetOverheatVisual(_temperature / EngineStatsSO.CriticalTemperature);
 
             SetFlame(burning && HasFuel, thrustScale);
             return burning;
@@ -299,6 +316,25 @@ namespace Simulation
                 material.SetFloat(HologramEnabledId, on ? 1f : 0f);
                 if (on) material.EnableKeyword(HologramKeyword);
                 else material.DisableKeyword(HologramKeyword);
+            }
+        }
+
+        private void SetOverheatVisual(float heat)
+        {
+            float t = Mathf.Clamp01(heat);
+            bool on = t > 0.001f;
+            float intensity = OverheatVisualMaxIntensity * t * t;
+            float power = Mathf.Lerp(OverheatVisualColdPower, OverheatVisualHotPower, t);
+            Color color = Color.Lerp(WarmRimColor, CriticalRimColor, t);
+
+            foreach (Material material in UberMaterials)
+            {
+                if (material.HasProperty(RimEnabledId)) material.SetFloat(RimEnabledId, on ? 1f : 0f);
+                if (material.HasProperty(RimColorId)) material.SetColor(RimColorId, color);
+                if (material.HasProperty(RimPowerId)) material.SetFloat(RimPowerId, power);
+                if (material.HasProperty(RimIntensityId)) material.SetFloat(RimIntensityId, intensity);
+                if (on) material.EnableKeyword(RimKeyword);
+                else material.DisableKeyword(RimKeyword);
             }
         }
 
