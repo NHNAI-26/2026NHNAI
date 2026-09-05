@@ -22,7 +22,10 @@ namespace Simulation
         public float MaxHoldSpeed { get; set; } = 50f;
         public float MaxBurnSeconds { get; set; } = 8f;
         public float FailureSpeed { get; set; } = 1f;
-        public float NoLiftoffTimeout { get; set; } = 3f;
+        public float NoLiftoffTimeout { get; set; } = 10f;
+        public float FailureGraceSeconds { get; set; } = 3f;
+        public float LiftoffAltitude { get; set; } = 3f;
+        public float LowSpeedSeconds { get; set; } = 0.1f;
 
         internal LaunchMissionRules Snapshot()
         {
@@ -38,11 +41,14 @@ namespace Simulation
             RequireNonnegative(copy.MaxBurnSeconds, nameof(MaxBurnSeconds));
             RequireNonnegative(copy.FailureSpeed, nameof(FailureSpeed));
             RequireNonnegative(copy.NoLiftoffTimeout, nameof(NoLiftoffTimeout));
+            RequireNonnegative(copy.FailureGraceSeconds, nameof(FailureGraceSeconds));
+            RequireNonnegative(copy.LiftoffAltitude, nameof(LiftoffAltitude));
+            RequireNonnegative(copy.LowSpeedSeconds, nameof(LowSpeedSeconds));
             if (copy.TargetHorizontalMax < copy.TargetHorizontalMin)
                 throw new ArgumentException("Target horizontal maximum must be at least the minimum.");
             if (copy.HighAltitude < copy.LowAltitude)
                 throw new ArgumentException("High altitude must be at least low altitude.");
-            if (copy.RequiredHoldSeconds == 0f || copy.NoLiftoffTimeout == 0f)
+            if (copy.RequiredHoldSeconds == 0f || copy.NoLiftoffTimeout == 0f || copy.LowSpeedSeconds == 0f)
                 throw new ArgumentException("Hold duration and liftoff timeout must be positive.");
             return copy;
         }
@@ -60,7 +66,9 @@ namespace Simulation
         private readonly LaunchMissionId _missionId;
         private readonly LaunchMissionRules _rules;
         private float _elapsedSeconds;
-        private bool _hasExceededFailureSpeed;
+        private bool _hasLiftedOff;
+        private float _previousAltitude;
+        private float _lowSpeedSeconds;
 
         public LaunchMissionOutcome Outcome { get; private set; }
         public float HoldSeconds { get; private set; }
@@ -88,7 +96,9 @@ namespace Simulation
             LaunchMissionRules.RequireNonnegative(totalBurnSeconds, nameof(totalBurnSeconds));
 
             _elapsedSeconds += deltaTime;
-            _hasExceededFailureSpeed |= speed > _rules.FailureSpeed;
+            _hasLiftedOff |= altitude >= _rules.LiftoffAltitude;
+            bool rising = altitude > _previousAltitude + 0.001f;
+            _previousAltitude = altitude;
             bool inZone = altitude >= _rules.TargetAltitude
                 && horizontalDistance >= _rules.TargetHorizontalMin
                 && horizontalDistance <= _rules.TargetHorizontalMax;
@@ -98,6 +108,9 @@ namespace Simulation
                 && speed <= _rules.MaxHoldSpeed
                 && (_missionId != LaunchMissionId.LowPowerZoneHold || totalBurnSeconds <= _rules.MaxBurnSeconds);
             HoldSeconds = holding ? HoldSeconds + deltaTime : 0f;
+            bool lowSpeed = evaluateFailure && _elapsedSeconds >= _rules.FailureGraceSeconds
+                && _hasLiftedOff && !holding && !rising && speed <= _rules.FailureSpeed;
+            _lowSpeedSeconds = lowSpeed ? _lowSpeedSeconds + deltaTime : 0f;
 
             bool succeeded;
             switch (_missionId)
@@ -118,9 +131,10 @@ namespace Simulation
 
             if (succeeded)
                 Outcome = LaunchMissionOutcome.Succeeded;
-            else if (evaluateFailure && !holding && _hasExceededFailureSpeed && speed <= _rules.FailureSpeed)
+            else if (lowSpeed && _lowSpeedSeconds >= _rules.LowSpeedSeconds)
                 Fail("로켓 속력이 실패 기준 이하로 떨어졌습니다.");
-            else if (evaluateFailure && !holding && !_hasExceededFailureSpeed && _elapsedSeconds >= _rules.NoLiftoffTimeout)
+            else if (evaluateFailure && !holding && !_hasLiftedOff
+                && _elapsedSeconds >= Math.Max(_rules.NoLiftoffTimeout, _rules.FailureGraceSeconds))
                 Fail("제한 시간 안에 이륙하지 못했습니다.");
             return Outcome;
         }

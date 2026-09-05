@@ -89,7 +89,7 @@ namespace Simulation.Tests
         public void Launch_FailsAtNoLiftoffTimeout()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.LowAltitude);
-            evaluator.Step(2f, 0f, 0f, 0f, 0f, 0f);
+            evaluator.Step(9f, 0f, 0f, 0f, 0f, 0f);
             Assert.That(evaluator.Step(1f, 0f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
             Assert.That(evaluator.FailureReason, Is.Not.Empty);
         }
@@ -98,8 +98,9 @@ namespace Simulation.Tests
         public void Flight_FailsWhenSpeedFallsToInclusiveThreshold()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
-            evaluator.Step(0.1f, 1f, 0f, 2f, 0f, 0f);
-            Assert.That(evaluator.Step(0.1f, 50f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+            evaluator.Step(3f, 50f, 0f, 2f, 0f, 0f);
+            Assert.That(evaluator.Step(0.05f, 50f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(0.05f, 50f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
         }
 
         [TestCase(LaunchMissionId.ZoneHold)]
@@ -125,8 +126,40 @@ namespace Simulation.Tests
         public void BrokenHold_AtLowSpeedFails()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold);
+            evaluator.Step(3f, 199f, 100f, 10f, 0f, 0f);
             evaluator.Step(1f, 200f, 100f, 10f, 0f, 0f);
             Assert.That(evaluator.Step(1f, 199f, 100f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+        }
+
+        [Test]
+        public void PadSpeedSpike_DoesNotCountAsLiftoff()
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.LowAltitude);
+            evaluator.Step(0.02f, 0f, 0f, 2f, 0f, 0f);
+            Assert.That(evaluator.Step(4f, 0f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(6f, 0f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+        }
+
+        [Test]
+        public void EarlyLiftoffDip_HasGraceAndResetsLowSpeedTimer()
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
+            evaluator.Step(1f, 4f, 0f, 4f, 0f, 0f);
+            Assert.That(evaluator.Step(1f, 4f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(1f, 5f, 0f, 2f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(0.06f, 5f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            evaluator.Step(0.02f, 5f, 0f, 2f, 0f, 0f);
+            Assert.That(evaluator.Step(0.06f, 5f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(0.05f, 5f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+        }
+
+        [Test]
+        public void SlowAscent_DoesNotFailBelowSpeedThreshold()
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
+            evaluator.Step(3f, 3f, 0f, 0.5f, 0f, 0f);
+            for (int i = 1; i <= 20; i++)
+                Assert.That(evaluator.Step(1f, 3f + i * 0.5f, 0f, 0.5f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
         }
 
         [Test]

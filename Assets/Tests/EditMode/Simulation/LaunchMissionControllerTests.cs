@@ -177,14 +177,17 @@ namespace Simulation.Tests
         }
 
         [Test]
-        public void NoLiftoff_KeepsFlightActiveAfterTimeout()
+        public void NoLiftoff_FailsAfterTenSeconds()
         {
             _rocket.Launch();
-            for (int i = 0; i < 1000; i++) Invoke(_controller, "FixedUpdate");
+            for (int i = 0; i < Mathf.FloorToInt(9f / Time.fixedDeltaTime); i++) Invoke(_controller, "FixedUpdate");
 
             Assert.That(_results, Is.Empty);
             Assert.That(_rocket.FlightStopped, Is.False);
             Assert.That(_controller.CanSelfDestruct, Is.True);
+            for (int i = 0; i < Mathf.CeilToInt(2f / Time.fixedDeltaTime); i++) Invoke(_controller, "FixedUpdate");
+            Assert.That(_results, Is.EqualTo(new[] { false }));
+            Assert.That(_rocket.FlightStopped, Is.True);
         }
 
         [Test]

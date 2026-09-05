@@ -9,9 +9,9 @@ namespace Simulation
     [RequireComponent(typeof(Rocket))]
     public sealed class LaunchMissionController : MonoBehaviour
     {
-        [SerializeField] private bool enableAutomaticFailure = false;
+        [SerializeField] private bool enableAutomaticFailure = true;
         [SerializeField, Min(0f)] private float failureSpeed = 1f;
-        [SerializeField, Min(0.1f)] private float noLiftoffTimeout = 3f;
+        [SerializeField, Min(0.1f)] private float noLiftoffTimeout = 10f;
         [SerializeField] private UnityEvent explosionRequested = new();
         [SerializeField] private bool waitForExplosionCompletion;
         [SerializeField, Min(0f)] private float placeholderExplosionSeconds = 0.5f;
