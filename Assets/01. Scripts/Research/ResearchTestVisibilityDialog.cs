@@ -1,4 +1,5 @@
 using System;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,6 +8,10 @@ namespace Border.Research
 {
     public sealed class ResearchTestVisibilityDialog : MonoBehaviour
     {
+        private const float PopInSeconds = 0.22f;
+        private const float PopInStartScale = 0.9f;
+
+
         [SerializeField] private Toggle publicToggle;
         [SerializeField] private Toggle privateToggle;
         [SerializeField] private TMP_Text missionText;
@@ -18,6 +23,8 @@ namespace Border.Research
         private Func<TestVisibility, ResearchActionResult> confirm;
         private ResearchPrototypeModel model;
         private bool confirming;
+        private CanvasGroup popGroup;
+        private Sequence popSequence;
         public bool IsOpen { get; private set; }
 
         public void Open(ResearchPrototypeModel currentModel, LaunchMissionId missionId, Func<TestVisibility, ResearchActionResult> onConfirm)
@@ -47,6 +54,43 @@ namespace Border.Research
             confirmButton.onClick.AddListener(Confirm);
             cancelButton.onClick.AddListener(Hide);
             gameObject.SetActive(true);
+            PlayPopIn();
+        }
+
+        private void PlayPopIn()
+        {
+            if (popGroup == null)
+            {
+                popGroup = GetComponent<CanvasGroup>();
+                if (popGroup == null) popGroup = gameObject.AddComponent<CanvasGroup>();
+            }
+
+            popSequence?.Kill();
+            popSequence = null;
+
+            // Edit mode tests drive this dialog through onClick directly and never tick DOTween, so a
+            // tween there would leave it stuck transparent and scaled down.
+            if (!Application.isPlaying)
+            {
+                ResetPopState();
+                return;
+            }
+
+            popGroup.alpha = 0f;
+            transform.localScale = Vector3.one * PopInStartScale;
+            popSequence = DOTween.Sequence()
+                .SetTarget(this)
+                .Join(DOTween.To(() => popGroup.alpha, value => popGroup.alpha = value, 1f, PopInSeconds).SetEase(Ease.OutQuad))
+                .Join(transform.DOScale(Vector3.one, PopInSeconds).SetEase(Ease.OutBack))
+                .OnComplete(() => popSequence = null);
+        }
+
+        private void ResetPopState()
+        {
+            popSequence?.Kill();
+            popSequence = null;
+            if (popGroup != null) popGroup.alpha = 1f;
+            transform.localScale = Vector3.one;
         }
 
         private static string Describe(TestVisibility visibility) => visibility == TestVisibility.Private
@@ -84,6 +128,7 @@ namespace Border.Research
 
         private void ClearBindings()
         {
+            ResetPopState();
             IsOpen = false;
             confirming = false;
             confirm = null;

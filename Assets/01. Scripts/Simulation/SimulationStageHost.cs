@@ -8,7 +8,7 @@ namespace Simulation
     /// <summary>
     /// 테스트용 미션 컨트롤 뷰: `01_Main` 위에 `SimulationTest` 씬을 additive 로 얹었다 내린다.
     /// 3D 는 시뮬레이션 카메라의 뷰포트 사각형(<see cref="Camera.rect"/>)으로 화면 가운데에만 그리고,
-    /// 가장자리는 <see cref="RocketDesignUI"/> 가 미션 컨트롤 모드로 만드는 UI 가 채운다.
+    /// 가장자리는 그 씬에 함께 들어오는 <see cref="RocketDesignUI"/> 프리팹 인스턴스가 채운다.
     /// 이 큰 화면이 RenderTexture 를 쓰지 않는 이유는 <c>docs/rocket-simulation.md</c> 참고 —
     /// 뷰포트 방식이면 <see cref="RocketBuilder"/> 의 집기·기즈모 좌표계가 손대지 않고 그대로 맞는다.
     /// 발사 후 우하단 작은 화면은 예외로 RenderTexture 다 — 입력을 전혀 받지 않는 표시 전용이라
@@ -57,8 +57,7 @@ namespace Simulation
 
         /// <summary>
         /// 설계 화면을 내리고 연구 화면으로 돌아간다. 코루틴은 호스트가 돌린다 —
-        /// <see cref="UnloadRoutine"/> 이 버튼을 품은 <see cref="RocketDesignUI"/> 를 파괴하므로
-        /// 버튼 쪽에서 돌리면 첫 프레임에 끊긴다.
+        /// <see cref="UnloadRoutine"/> 이 버튼을 품은 씬을 내리므로 버튼 쪽에서 돌리면 첫 프레임에 끊긴다.
         /// </summary>
         public static void CloseDesignStage()
         {
@@ -133,7 +132,8 @@ namespace Simulation
                 mission.Initialize(session.HasPendingDesignEntry ? session.PendingDesignEntry.MissionId : session.Model.GetCurrentMission(),
                     () => BeginLaunch(rocket), CompleteLaunch);
             }
-            designUI = RocketDesignUI.Spawn(true);
+            // 설계 UI 는 SimulationTest 씬에 프리팹 인스턴스로 놓여 있다 — 씬과 함께 들어오고 나간다.
+            designUI = FindFirstObjectByType<RocketDesignUI>();
 
             loaded = true;
             busy = false;
@@ -144,7 +144,7 @@ namespace Simulation
             busy = true;
             while (photoCapture != null && photoCapture.IsCapturing) yield return null;
 
-            if (designUI != null) Destroy(designUI.gameObject);
+            // 씬을 내리면 UI 도 같이 사라진다 — 따로 파괴하지 않는다.
             designUI = null;
 
             Scene scene = SceneManager.GetSceneByName(SimulationSceneName);

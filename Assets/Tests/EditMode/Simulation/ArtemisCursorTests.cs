@@ -12,6 +12,7 @@ namespace Simulation.Tests
     {
         private readonly List<GameObject> roots = new();
         private EventSystem previousEventSystem;
+        private bool previousCursorVisible;
         private EventSystem testEventSystem;
         private ArtemisCursor cursor;
         private Canvas canvas;
@@ -23,6 +24,7 @@ namespace Simulation.Tests
         public void SetUp()
         {
             previousEventSystem = EventSystem.current;
+            previousCursorVisible = Cursor.visible;
             testEventSystem = Root("CursorTestEvents").AddComponent<EventSystem>();
             // EventSystem does not run its lifecycle automatically in EditMode.
             typeof(EventSystem).GetMethod("OnEnable", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -59,6 +61,7 @@ namespace Simulation.Tests
             roots.Clear();
             renderTexture.Release();
             Object.DestroyImmediate(renderTexture);
+            Cursor.visible = previousCursorVisible;
             if (previousEventSystem != null) EventSystem.current = previousEventSystem;
         }
 
@@ -159,6 +162,24 @@ namespace Simulation.Tests
                 .GetField("sprites", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(cursor);
             object sprite = sprites[visual];
             Assert.That(sprite.GetType().GetProperty("Texture").GetValue(sprite), Is.SameAs(texture));
+        }
+
+        /// <summary>
+        /// 엔진 드래그는 전용 PNG 대신 OS 커서를 감춘다 — 커서가 돌아오는 경로가
+        /// <see cref="ArtemisCursor"/> 안에만 있어야 드래그가 어떻게 끝나든 새지 않는다.
+        /// </summary>
+        [Test]
+        public void HiddenVisual_HidesSystemCursorAndAnyOtherVisualRestoresIt()
+        {
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(ArtemisCursor).GetMethod("BuildSprites", flags).Invoke(cursor, null);
+            MethodInfo apply = typeof(ArtemisCursor).GetMethod("Apply", flags);
+
+            apply.Invoke(cursor, new object[] { ArtemisCursor.Visual.Hidden });
+            Assert.That(Cursor.visible, Is.False);
+
+            apply.Invoke(cursor, new object[] { ArtemisCursor.Visual.Default });
+            Assert.That(Cursor.visible, Is.True);
         }
 
         private bool Hovers()

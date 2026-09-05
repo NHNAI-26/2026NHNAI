@@ -1,3 +1,4 @@
+using System;
 using DG.Tweening;
 using UnityEngine;
 
@@ -7,10 +8,25 @@ namespace Border.Research
     public sealed class ResearchOperationTransitionAnimator : MonoBehaviour
     {
         private const string TopPanelName = "TopInfoBar";
+        private const string BottomPanelName = "HubActionBar";
         private const string LeftPanelName = "EnginePresetColumn";
         private const string RightPanelName = "DetailColumn";
 
+        /// <summary>Which panels one transition moves — the hub row and the two columns never travel together.</summary>
+        [Flags]
+        public enum PanelGroup
+        {
+            Top = 1,
+            Bottom = 2,
+            Left = 4,
+            Right = 8,
+            Hub = Top | Bottom,
+            Columns = Left | Right,
+            All = Hub | Columns
+        }
+
         [SerializeField] private RectTransform topPanel;
+        [SerializeField] private RectTransform bottomPanel;
         [SerializeField] private RectTransform leftPanel;
         [SerializeField] private RectTransform rightPanel;
         [SerializeField, Min(0f)] private float enterDuration = 0.55f;
@@ -18,6 +34,7 @@ namespace Border.Research
         [SerializeField, Min(0f)] private float offscreenPadding = 24f;
 
         private PanelMotion topMotion;
+        private PanelMotion bottomMotion;
         private PanelMotion leftMotion;
         private PanelMotion rightMotion;
         private bool hasCachedPositions;
@@ -31,27 +48,26 @@ namespace Border.Research
             }
 
             topPanel ??= FindChildRectTransform(root, TopPanelName);
+            bottomPanel ??= FindChildRectTransform(root, BottomPanelName);
             leftPanel ??= FindChildRectTransform(root, LeftPanelName);
             rightPanel ??= FindChildRectTransform(root, RightPanelName);
             CacheFinalPositions();
         }
 
-        public Sequence PlayEnter()
+        public Sequence PlayEnter(PanelGroup group, Action onComplete = null)
         {
             CacheFinalPositions();
             KillActiveSequence();
-            SetPanelState(topMotion, topMotion.StartPosition, 0f, false);
-            SetPanelState(leftMotion, leftMotion.StartPosition, 0f, false);
-            SetPanelState(rightMotion, rightMotion.StartPosition, 0f, false);
-            activeSequence = CreateSequence(enterDuration, Ease.OutCubic, useStartPosition: false, targetAlpha: 1f, blocksRaycasts: true);
+            ForEach(group, motion => SetPanelState(motion, motion.StartPosition, 0f, false));
+            activeSequence = CreateSequence(group, enterDuration, Ease.OutCubic, useStartPosition: false, targetAlpha: 1f, blocksRaycasts: true, onComplete);
             return activeSequence;
         }
 
-        public Sequence PlayExit()
+        public Sequence PlayExit(PanelGroup group, Action onComplete = null)
         {
             CacheFinalPositions();
             KillActiveSequence();
-            activeSequence = CreateSequence(exitDuration, Ease.InCubic, useStartPosition: true, targetAlpha: 0f, blocksRaycasts: false);
+            activeSequence = CreateSequence(group, exitDuration, Ease.InCubic, useStartPosition: true, targetAlpha: 0f, blocksRaycasts: false, onComplete);
             return activeSequence;
         }
 
@@ -59,9 +75,7 @@ namespace Border.Research
         {
             CacheFinalPositions();
             KillActiveSequence();
-            SetPanelState(topMotion, topMotion.FinalPosition, 1f, true);
-            SetPanelState(leftMotion, leftMotion.FinalPosition, 1f, true);
-            SetPanelState(rightMotion, rightMotion.FinalPosition, 1f, true);
+            ForEach(PanelGroup.All, motion => SetPanelState(motion, motion.FinalPosition, 1f, true));
         }
 
         public void CompleteActiveSequenceForTests()
@@ -77,21 +91,35 @@ namespace Border.Research
             KillActiveSequence();
         }
 
-        private Sequence CreateSequence(float duration, Ease ease, bool useStartPosition, float targetAlpha, bool blocksRaycasts)
+        private Sequence CreateSequence(
+            PanelGroup group,
+            float duration,
+            Ease ease,
+            bool useStartPosition,
+            float targetAlpha,
+            bool blocksRaycasts,
+            Action onComplete)
         {
             Sequence sequence = DOTween.Sequence().SetTarget(this);
-            AddPanelTween(sequence, topMotion, duration, ease, useStartPosition, targetAlpha, blocksRaycasts);
-            AddPanelTween(sequence, leftMotion, duration, ease, useStartPosition, targetAlpha, blocksRaycasts);
-            AddPanelTween(sequence, rightMotion, duration, ease, useStartPosition, targetAlpha, blocksRaycasts);
+            ForEach(group, motion => AddPanelTween(sequence, motion, duration, ease, useStartPosition, targetAlpha, blocksRaycasts));
+            // DOTween replaces the completion callback instead of chaining it, so the caller's callback has
+            // to be folded in here — a second OnComplete on the returned sequence would drop the raycast restore.
             sequence.OnComplete(() =>
             {
-                SetPanelRaycast(topMotion, blocksRaycasts);
-                SetPanelRaycast(leftMotion, blocksRaycasts);
-                SetPanelRaycast(rightMotion, blocksRaycasts);
+                ForEach(group, motion => SetPanelRaycast(motion, blocksRaycasts));
                 activeSequence = null;
+                onComplete?.Invoke();
             });
 
             return sequence;
+        }
+
+        private void ForEach(PanelGroup group, Action<PanelMotion> action)
+        {
+            if ((group & PanelGroup.Top) != 0) action(topMotion);
+            if ((group & PanelGroup.Bottom) != 0) action(bottomMotion);
+            if ((group & PanelGroup.Left) != 0) action(leftMotion);
+            if ((group & PanelGroup.Right) != 0) action(rightMotion);
         }
 
         private static void AddPanelTween(
@@ -138,6 +166,7 @@ namespace Border.Research
             }
 
             topMotion = CreatePanelMotion(topPanel, Direction.Top);
+            bottomMotion = CreatePanelMotion(bottomPanel, Direction.Bottom);
             leftMotion = CreatePanelMotion(leftPanel, Direction.Left);
             rightMotion = CreatePanelMotion(rightPanel, Direction.Right);
             hasCachedPositions = true;
@@ -158,11 +187,14 @@ namespace Border.Research
 
             Vector2 finalPosition = rectTransform.anchoredPosition;
             Vector2 size = rectTransform.rect.size;
+            // The resting offset counts as travel: HubActionBar rests 40px above its bottom anchor, so a
+            // plain height+padding slide would leave a strip of it on screen.
             Vector2 offset = direction switch
             {
-                Direction.Top => Vector2.up * (Mathf.Abs(size.y) + offscreenPadding),
-                Direction.Left => Vector2.left * (Mathf.Abs(size.x) + offscreenPadding),
-                Direction.Right => Vector2.right * (Mathf.Abs(size.x) + offscreenPadding),
+                Direction.Top => Vector2.up * (Mathf.Abs(size.y) + offscreenPadding + Mathf.Abs(finalPosition.y)),
+                Direction.Bottom => Vector2.down * (Mathf.Abs(size.y) + offscreenPadding + Mathf.Abs(finalPosition.y)),
+                Direction.Left => Vector2.left * (Mathf.Abs(size.x) + offscreenPadding + Mathf.Abs(finalPosition.x)),
+                Direction.Right => Vector2.right * (Mathf.Abs(size.x) + offscreenPadding + Mathf.Abs(finalPosition.x)),
                 _ => Vector2.zero
             };
 
@@ -236,6 +268,7 @@ namespace Border.Research
         private enum Direction
         {
             Top,
+            Bottom,
             Left,
             Right
         }

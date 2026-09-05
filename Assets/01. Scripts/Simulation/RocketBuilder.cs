@@ -1463,7 +1463,11 @@ namespace Simulation
 
             if (_dragged != null)
             {
-                ArtemisCursor.Request(_overRocket ? ArtemisCursor.Visual.AttachValid : ArtemisCursor.Visual.AttachInvalid, 20);
+                // 슬롭을 넘겨 실제로 끌기 시작하면 부품이 커서 자리를 대신한다 — 커서가 겹치면 부착 지점을
+                // 가린다. 붙는 자리인지 아닌지는 홀로그램이 알린다. 아직 안 움직인 클릭은 선택일 뿐이라
+                // 커서를 감추면 누를 때마다 깜빡인다.
+                if (_dragMoved) ArtemisCursor.Request(ArtemisCursor.Visual.Hidden, 20);
+                else ArtemisCursor.Request(_overRocket ? ArtemisCursor.Visual.AttachValid : ArtemisCursor.Visual.AttachInvalid, 20);
                 return;
             }
 

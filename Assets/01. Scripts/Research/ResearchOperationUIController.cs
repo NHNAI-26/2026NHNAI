@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using PanelGroup = Border.Research.ResearchOperationTransitionAnimator.PanelGroup;
 
 namespace Border.Research
 {
@@ -16,6 +17,8 @@ namespace Border.Research
         private const string OperationScreenPrefabPath = "ResearchUI/ResearchOperationScreen";
         private const string EnginePresetCardPrefabPath = "ResearchUI/EnginePresetCard";
         private const float DesignTransitionDelaySeconds = 1f;
+        private const float WaitFadeOutSeconds = 0.18f;
+        private const float WaitFadeInSeconds = 0.22f;
         private const string ResearchCinemachineCameraName = "Research Cinemachine Camera";
         private const int ResearchCinemachineCameraPriority = 20;
 
@@ -41,15 +44,18 @@ namespace Border.Research
         private LaunchMissionId selectedMission = LaunchMissionId.LowAltitude;
         private bool initialized;
         private RectTransform canvasTransform;
+        private CanvasGroup canvasGroup;
         private ResearchOperationTransitionAnimator operationTransitionAnimator;
         private ResearchDesignScreenController activeDesignController;
         private ResearchMiniGameController activeMiniGameController;
         private Sequence designTransitionSequence;
+        private Sequence waitFadeSequence;
         private Tween researchCameraDriftTween;
         private Quaternion researchCameraBaseLocalRotation;
         private bool hasResearchCameraBaseLocalRotation;
         private bool isTransitioningToDesign;
         private bool partDevelopmentOpen;
+        private bool closingPartDevelopment;
         private bool focusedResearchSelected;
 
         private readonly Button[] statButtons = new Button[StatCount];
@@ -71,6 +77,7 @@ namespace Border.Research
         private Button partDevelopmentButton;
         private TMP_Text partDevelopmentButtonText;
         private Button startDevelopmentButton;
+        private Button cancelDevelopmentButton;
         private Button normalResearchButton;
         private TMP_Text normalResearchButtonText;
         private Button focusedResearchButton;
@@ -138,6 +145,7 @@ namespace Border.Research
             IsPartDevelopmentOpen = false;
             if (initialized)
             {
+                KillWaitFade();
                 KillDesignTransition();
                 KillResearchCameraDrift(resetRotation: true);
                 HideEnginePreview();
@@ -187,7 +195,7 @@ namespace Border.Research
 
             initialized = true;
             Refresh();
-            PlayResearchEntryAnimation();
+            PlayResearchEntryAnimation(PanelGroup.Hub);
         }
 
         private bool BuildInterface()
@@ -247,6 +255,16 @@ namespace Border.Research
                 instance.AddComponent<GraphicRaycaster>();
             }
 
+            // Whole-screen fades (건너뛰기) ride on this group; the animator only owns the per-panel groups.
+            // ?? would accept Unity's fake-null from a missing component, so test the Unity way.
+            canvasGroup = instance.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = instance.AddComponent<CanvasGroup>();
+            }
+
+            canvasGroup.alpha = 1f;
+
             CanvasScaler scaler = instance.GetComponent<CanvasScaler>() ?? instance.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280f, 720f);
@@ -271,6 +289,7 @@ namespace Border.Research
             selectedEngineCompletion = completionGauge != null ? completionGauge.GetComponent<Slider>() : null;
             partDevelopmentButton = FindRequiredButton(canvasTransform, "PartDevelopmentButton");
             startDevelopmentButton = FindRequiredButton(canvasTransform, "StartDevelopmentButton");
+            cancelDevelopmentButton = FindRequiredButton(canvasTransform, "CancelDevelopmentButton");
             normalResearchButton = FindRequiredButton(canvasTransform, "NormalResearchButton");
             focusedResearchButton = FindRequiredButton(canvasTransform, "FocusedResearchButton");
             createEnginePresetButton = FindRequiredButton(canvasTransform, "CreateEnginePresetButton");
@@ -299,6 +318,7 @@ namespace Border.Research
                 || selectedStatText == null
                 || partDevelopmentButton == null
                 || startDevelopmentButton == null
+                || cancelDevelopmentButton == null
                 || normalResearchButton == null
                 || focusedResearchButton == null
                 || createEnginePresetButton == null
@@ -338,6 +358,7 @@ namespace Border.Research
 
             partDevelopmentButton.onClick.AddListener(() => SetPartDevelopmentOpen(true));
             startDevelopmentButton.onClick.AddListener(() => StartEngineResearch(focusedResearchSelected));
+            cancelDevelopmentButton.onClick.AddListener(() => SetPartDevelopmentOpen(false));
             normalResearchButton.onClick.AddListener(() => SelectResearchMode(false));
             focusedResearchButton.onClick.AddListener(() => SelectResearchMode(true));
             createEnginePresetButton.onClick.AddListener(CreateNewEnginePreset);
@@ -356,13 +377,36 @@ namespace Border.Research
 
         private void SetPartDevelopmentOpen(bool open)
         {
+            if (closingPartDevelopment) return;
+
+            // Closing runs the columns back out the way they came, then slides the hub row up from the bottom.
+            // The build path and edit-mode tests fall through to the immediate branch instead.
+            if (!open && partDevelopmentOpen && Application.isPlaying && operationTransitionAnimator != null)
+            {
+                closingPartDevelopment = true;
+                partDevelopmentOpen = false;
+                IsPartDevelopmentOpen = false;
+                operationTransitionAnimator.PlayExit(PanelGroup.Columns, () =>
+                {
+                    closingPartDevelopment = false;
+                    ApplyPartDevelopmentState(false);
+                    PlayResearchEntryAnimation(PanelGroup.Bottom);
+                });
+                return;
+            }
+
+            ApplyPartDevelopmentState(open);
+            if (open) PlayResearchEntryAnimation(PanelGroup.Columns);
+        }
+
+        private void ApplyPartDevelopmentState(bool open)
+        {
             partDevelopmentOpen = open;
             IsPartDevelopmentOpen = open;
             if (hubActionBar != null) hubActionBar.SetActive(!open);
             if (enginePresetColumnRoot != null) enginePresetColumnRoot.SetActive(open);
             if (detailColumnRoot != null) detailColumnRoot.SetActive(open);
             RefreshPendingEffects();
-            if (open) PlayResearchEntryAnimation();
         }
 
         private void SelectResearchMode(bool focused)
@@ -376,7 +420,7 @@ namespace Border.Research
         {
             // Runs after PauseMenuController.Update, which stands down while this panel owns escape.
             // The panel only owns it while actually on screen — the mini game hides the canvas without closing it.
-            if (!initialized || isTransitioningToDesign) return;
+            if (!initialized || isTransitioningToDesign || closingPartDevelopment) return;
             bool ownsEscape = partDevelopmentOpen && canvasTransform != null && canvasTransform.gameObject.activeInHierarchy;
             IsPartDevelopmentOpen = ownsEscape;
             if (ownsEscape && Border.UI.PauseMenuController.WasEscapePressed()) SetPartDevelopmentOpen(false);
@@ -518,7 +562,7 @@ namespace Border.Research
             ShowResearchLab();
             PlayResearchCameraDrift();
             Refresh();
-            PlayResearchEntryAnimation();
+            PlayResearchEntryAnimation(partDevelopmentOpen ? PanelGroup.Columns : PanelGroup.Hub);
         }
 
         private void EnterDesign()
@@ -554,14 +598,52 @@ namespace Border.Research
 
         private void WaitQuarter()
         {
-            if (isTransitioningToDesign)
+            if (isTransitioningToDesign || waitFadeSequence != null)
             {
                 return;
             }
 
+            // The quarter is spent on the click, not when the fade finishes — edit-mode tests read the
+            // model straight after invoking the button, and the ending screen must not wait on a tween.
             model.WaitQuarter();
             session.ClearPendingDesignEntry();
-            Refresh();
+            if (!Application.isPlaying || model.HasGameEnded || canvasGroup == null)
+            {
+                Refresh();
+                return;
+            }
+
+            waitFadeSequence = DOTween.Sequence()
+                .SetTarget(this)
+                .Append(FadeCanvas(0f, WaitFadeOutSeconds))
+                .AppendCallback(Refresh)
+                .Append(FadeCanvas(1f, WaitFadeInSeconds))
+                .OnComplete(() => waitFadeSequence = null);
+        }
+
+        private Tween FadeCanvas(float targetAlpha, float duration)
+        {
+            return DOTween.To(() => canvasGroup.alpha, value => canvasGroup.alpha = value, targetAlpha, duration)
+                .SetEase(Ease.InOutSine);
+        }
+
+        private void KillWaitFade()
+        {
+            if (waitFadeSequence != null)
+            {
+                waitFadeSequence.Kill();
+                waitFadeSequence = null;
+            }
+
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = 1f;
+            }
+        }
+
+        public void CompleteWaitFadeForTests()
+        {
+            waitFadeSequence?.Complete();
         }
 
         private void Refresh()
@@ -774,7 +856,9 @@ namespace Border.Research
 
             RequestedScreenName = ResearchFlowSession.ResearchScreenName;
             isTransitioningToDesign = false;
-            SetPartDevelopmentOpen(false);
+            // A hard reset back to the hub, not an animated close — the canvas is still off at this point.
+            closingPartDevelopment = false;
+            ApplyPartDevelopmentState(false);
             if (canvasTransform != null)
             {
                 canvasTransform.gameObject.SetActive(true);
@@ -784,7 +868,7 @@ namespace Border.Research
             if (initialized)
             {
                 Refresh();
-                PlayResearchEntryAnimation();
+                PlayResearchEntryAnimation(PanelGroup.Hub);
             }
         }
 
@@ -849,9 +933,11 @@ namespace Border.Research
         {
             if (visibilityDialog != null) visibilityDialog.Hide();
             KillDesignTransition();
+            KillWaitFade();
             isTransitioningToDesign = false;
             focusedResearchSelected = false;
-            SetPartDevelopmentOpen(false);
+            closingPartDevelopment = false;
+            ApplyPartDevelopmentState(false);
             resultReport?.Hide();
             endingScreen?.Hide();
             session.ResetResearch();
@@ -957,16 +1043,14 @@ namespace Border.Research
         private void BeginDesignTransition()
         {
             KillDesignTransition();
+            KillWaitFade();
             isTransitioningToDesign = true;
-            // The hub row is not one of the animator's panels, so hide it instead of leaving it behind.
-            if (hubActionBar != null) hubActionBar.SetActive(false);
             SetResearchControlsInteractable(false);
             ShowResearchLab();
             ResolveEnginePreview();
             KillResearchCameraDrift(resetRotation: false);
 
             EngineVisualArchetype archetype = GetSelectedEngineArchetype();
-            Sequence uiExitSequence = operationTransitionAnimator != null ? operationTransitionAnimator.PlayExit() : null;
             int pendingAnimations = 0;
             bool delayStarted = false;
 
@@ -985,10 +1069,10 @@ namespace Border.Research
                 }
             }
 
-            if (uiExitSequence != null)
+            if (operationTransitionAnimator != null)
             {
                 RegisterAnimation();
-                uiExitSequence.OnComplete(CompleteAnimation);
+                operationTransitionAnimator.PlayExit(PanelGroup.All, CompleteAnimation);
             }
 
             if (enginePreview != null)
@@ -1015,14 +1099,14 @@ namespace Border.Research
                 });
         }
 
-        private void PlayResearchEntryAnimation()
+        private void PlayResearchEntryAnimation(PanelGroup group)
         {
             if (operationTransitionAnimator == null || canvasTransform == null || !canvasTransform.gameObject.activeInHierarchy)
             {
                 return;
             }
 
-            operationTransitionAnimator.PlayEnter();
+            operationTransitionAnimator.PlayEnter(group);
         }
 
         private void PlayResearchCameraDrift()
@@ -1108,6 +1192,11 @@ namespace Border.Research
             if (startDevelopmentButton != null)
             {
                 startDevelopmentButton.interactable = interactable;
+            }
+
+            if (cancelDevelopmentButton != null)
+            {
+                cancelDevelopmentButton.interactable = interactable;
             }
 
             if (normalResearchButton != null)
