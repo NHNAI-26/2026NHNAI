@@ -207,6 +207,9 @@ namespace Border.Research
             }
 
             launchButtonText = launchButton.GetComponentInChildren<TMP_Text>(true);
+            ConfigureDynamicMultilineText(designDataText);
+            ConfigureDynamicMultilineText(installedEngineText);
+            ConfigureDynamicMultilineText(statusText);
             BuildPresetButtons(presetRow);
             backButton.onClick.AddListener(ReturnToResearch);
             launchButton.onClick.AddListener(Launch);
@@ -280,10 +283,11 @@ namespace Border.Research
                 return;
             }
 
-            LaunchMissionId MissionId = session.PendingDesignEntry.MissionId;
+            LaunchMissionId missionId = session.PendingDesignEntry.MissionId;
             bool launchCostPaid = session.PendingDesignEntry.LaunchCostPaid;
+            int paidEntryCost = session.PendingDesignEntry.LaunchCost;
             ClearLockedEngineCounts(installedEngineCounts);
-            ResearchDesignEntryData data = session.Model.CreateDesignEntry(MissionId, selectedEnginePreset, installedEngineCounts, designFit, visibility, launchCostPaid);
+            ResearchDesignEntryData data = session.Model.CreateDesignEntry(missionId, selectedEnginePreset, installedEngineCounts, designFit, visibility, launchCostPaid, paidEntryCost);
             session.UpdatePendingDesignEntry(data);
         }
 
@@ -324,19 +328,18 @@ namespace Border.Research
             ResearchDesignEntryData data = session.PendingDesignEntry;
             ResearchPrototypeModel model = session.Model;
             LaunchMissionConfig missionConfig = model.GetConfiguredMissionConfig(data.MissionId);
-            EnginePresetConfig engineConfig = ResearchPrototypeModel.GetEnginePresetConfig(data.SelectedEnginePresetId);
-            int remainingCost = data.ReservedInstallCost + (data.LaunchCostPaid ? 0 : data.LaunchCost);
+            int designEntryCost = data.LaunchCostPaid ? data.LaunchCost : model.GetDesignEntryCost(data.MissionId);
+            int remainingCost = model.GetLaunchPaymentCost(data);
             RefreshPresetButtons(model);
 
             headerText.text = $"{missionConfig.DisplayName} 설계";
             designDataText.text = $"날짜: {data.Year} Q{data.Quarter} / 맵 시드: {data.MapSeed} / 목표: {data.TargetPathId}\n"
-                + $"선택 프리셋: {engineConfig.DisplayName} / 완성도 {data.SelectedEngineCompletion} / 성능 {data.SelectedEngineScore}\n"
-                + $"설계 적합도: {data.DesignFit} / {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)}";
+                + $"선택 프리셋: {model.GetEnginePresetName(data.SelectedEnginePresetId)} / 완성도 {data.SelectedEngineCompletion} / 성능 {data.SelectedEngineScore}\n"
+                + $"설계 적합도: {data.DesignFit} / {ResearchPrototypeModel.GetVisibilityDisplayName(data.Visibility)}\n"
+                + $"설계 진입비 {designEntryCost} / 지불 확정비 {data.LaunchCost}";
             installedEngineText.text = $"설치 엔진: {FormatInstalledEngines(data)}\n"
-                + $"설치 엔진 점수 {data.InstalledEngineScore} / {(data.LaunchCostPaid ? "지불한" : "필요")} 예산 {data.LaunchCost} / 남은 설치비 {data.ReservedInstallCost}";
-            statusText.text = data.LaunchCostPaid
-                ? "발사 전입니다. 연구 단계로 돌아가면 예약 설치 비용은 버려지고 예산은 이미 지불된 상태입니다."
-                : "발사 전입니다. 발사 확정 시 예산과 예약 설치 비용을 함께 지불합니다.";
+                + $"설치 엔진 점수 {data.InstalledEngineScore} / 남은 발사비 {remainingCost} / 예약 설치비 {data.ReservedInstallCost}";
+            statusText.text = FormatDesignStatusText(data.LaunchCostPaid, model.PendingLaunchEffectsText);
             launchButtonText.text = $"발사\n남은 비용 {remainingCost} / 1분기";
             launchButton.interactable = model.Funds >= remainingCost && !model.DeadlineReached;
 
@@ -391,7 +394,7 @@ namespace Border.Research
             return actionResult;
         }
 
-        private static string FormatInstalledEngines(ResearchDesignEntryData data)
+        private string FormatInstalledEngines(ResearchDesignEntryData data)
         {
             if (data.MissionId == LaunchMissionId.StaticFire)
             {
@@ -407,7 +410,7 @@ namespace Border.Research
                     continue;
                 }
 
-                string name = ResearchPrototypeModel.GetEnginePresetConfig((EnginePresetId)i).DisplayName;
+                string name = session.Model.GetEnginePresetName((EnginePresetId)i);
                 text += string.IsNullOrEmpty(text) ? $"{name} x{count}" : $", {name} x{count}";
             }
 
@@ -416,12 +419,37 @@ namespace Border.Research
 
         private static string FormatLaunchResult(ResearchLaunchResultData result)
         {
+            string outcome = result.Grade <= ResearchGrade.B ? "성공" : result.Grade == ResearchGrade.C ? "부분 성공" : "실패";
             string ending = result.FinalMissionWon
                 ? "최종 미션 성공"
                 : result.DeadlineMissed
                     ? "마감 실패"
                     : "연구 화면 복귀";
-            return $"{result.MissionId} 발사 결과 {result.Grade}. 성공 {result.SuccessChance}%, 부분 {result.PartialChance}%, 실패 {result.FailureChance}%, 굴림 {result.Roll}. {ending}.";
+            return $"{result.MissionId} 발사 결과 {result.Grade}. 실제 판정 {outcome}. 기본 보상 +{result.ImmediateFunding}, 기본 분기 예산 {result.QuarterlyFundingDelta:+#;-#;0}. {FormatOutcomeEventSummary(result.OutcomeEvent)}. {ending}.";
+        }
+
+        private static string FormatDesignStatusText(bool launchCostPaid, string pendingEffectsText)
+        {
+            string baseText = launchCostPaid
+                ? "발사 전입니다. 연구 단계로 돌아가면 예약 설치 비용은 버려지고 예산은 이미 지불된 상태입니다."
+                : "발사 전입니다. 발사 확정 시 예산과 예약 설치 비용을 함께 지불합니다.";
+
+            if (string.IsNullOrWhiteSpace(pendingEffectsText))
+            {
+                return baseText;
+            }
+
+            return $"{baseText}\n남은 이벤트 효과: {pendingEffectsText}";
+        }
+
+        private static string FormatOutcomeEventSummary(LaunchOutcomeEventResult outcomeEvent)
+        {
+            if (outcomeEvent == null)
+            {
+                return "이벤트 효과 없음";
+            }
+
+            return $"이벤트 {outcomeEvent.Name}: {outcomeEvent.EffectsText}";
         }
 
         private static string GetLaunchFailureText(ResearchActionResult actionResult)
@@ -506,6 +534,20 @@ namespace Border.Research
             {
                 label.text = text;
             }
+        }
+
+        private static void ConfigureDynamicMultilineText(TMP_Text text)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.textWrappingMode = TextWrappingModes.Normal;
+            text.overflowMode = TextOverflowModes.Truncate;
+            text.enableAutoSizing = true;
+            text.fontSizeMin = text.fontSizeMin > 0f ? Math.Min(text.fontSizeMin, 12f) : 12f;
+            text.fontSizeMax = text.fontSize;
         }
 
         private static TMP_Text FindRequiredText(Transform root, string name)

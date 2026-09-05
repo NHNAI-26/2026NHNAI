@@ -358,6 +358,7 @@ namespace Border.Research
             if (hubActionBar != null) hubActionBar.SetActive(!open);
             if (enginePresetColumnRoot != null) enginePresetColumnRoot.SetActive(open);
             if (detailColumnRoot != null) detailColumnRoot.SetActive(open);
+            RefreshPendingEffects();
             if (open) PlayResearchEntryAnimation();
         }
 
@@ -625,13 +626,7 @@ namespace Border.Research
             enterDesignButtonText.text = $"로켓 설계\n{designEntryCost}";
             waitButtonText.text = $"건너뛰기\n+{model.NextWaitFunding}";
 
-            statusText.text = FormatResearchStatusText(model);
-            statusText.gameObject.SetActive(!string.IsNullOrEmpty(statusText.text));
-            RectTransform effectsRect = statusText.rectTransform;
-            effectsRect.anchorMin = effectsRect.anchorMax = new Vector2(0.5f, 0f);
-            effectsRect.pivot = new Vector2(0.5f, 0f);
-            effectsRect.anchoredPosition = partDevelopmentOpen ? new Vector2(-50f, 20f) : new Vector2(0f, 136f);
-            effectsRect.sizeDelta = new Vector2(partDevelopmentOpen ? 480f : 720f, 100f);
+            RefreshPendingEffects();
 
             partDevelopmentButton.interactable = !model.DeadlineReached && model.Funds >= model.ConfiguredEngineNormalResearchCost;
             startDevelopmentButton.interactable = CanResearch(selectedEngine, focusedResearchSelected
@@ -658,6 +653,18 @@ namespace Border.Research
         {
             return string.IsNullOrEmpty(source.PendingLaunchEffectsText)
                 ? string.Empty : $"남은 이벤트 효과:\n{source.PendingLaunchEffectsText}";
+        }
+
+        private void RefreshPendingEffects()
+        {
+            if (statusText == null || model == null) return;
+            statusText.text = FormatResearchStatusText(model);
+            statusText.gameObject.SetActive(!string.IsNullOrEmpty(statusText.text));
+            RectTransform effectsRect = statusText.rectTransform;
+            effectsRect.anchorMin = effectsRect.anchorMax = new Vector2(0.5f, 0f);
+            effectsRect.pivot = new Vector2(0.5f, 0f);
+            effectsRect.anchoredPosition = partDevelopmentOpen ? new Vector2(-50f, 20f) : new Vector2(0f, 136f);
+            effectsRect.sizeDelta = new Vector2(partDevelopmentOpen ? 480f : 720f, 100f);
         }
 
         private void RefreshEngineCard(EnginePresetConfig config)

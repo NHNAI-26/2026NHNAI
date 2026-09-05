@@ -76,6 +76,7 @@ namespace Simulation
         public LaunchMissionOutcome Outcome { get; private set; }
         public float HoldSeconds { get; private set; }
         public string FailureReason { get; private set; } = string.Empty;
+        public LaunchTerminationReason TerminationReason { get; private set; } = LaunchTerminationReason.Unknown;
 
         /// <summary>비행 단계의 이름. 관제 화면 스테퍼가 이 배열을 그대로 읽는다.</summary>
         public static readonly string[] StageNames = { "점화", "이륙", "상승", "목표 구역", "체류" };
@@ -162,12 +163,16 @@ namespace Simulation
             }
 
             if (succeeded)
+            {
                 Outcome = LaunchMissionOutcome.Succeeded;
+                TerminationReason = LaunchTerminationReason.Succeeded;
+            }
             else if (evaluateFailure && hasSplashed && _splashedSeconds >= _rules.SplashdownFailureSeconds)
-                Fail("로켓이 바다에 추락했습니다.");
+                Fail("로켓이 바다에 추락했습니다.", LaunchTerminationReason.Splashdown);
             else if (settled && _groundedSeconds >= _rules.GroundedFailureSeconds
                 && (_hasLiftedOff || _elapsedSeconds >= _rules.NoLiftoffTimeout))
-                Fail(_hasLiftedOff ? "로켓이 지면에 추락해 멈췄습니다." : "제한 시간 안에 이륙하지 못했습니다.");
+                Fail(_hasLiftedOff ? "로켓이 지면에 추락해 멈췄습니다." : "제한 시간 안에 이륙하지 못했습니다.",
+                    _hasLiftedOff ? LaunchTerminationReason.GroundCrash : LaunchTerminationReason.NoLiftoff);
             return Outcome;
         }
 
@@ -182,7 +187,7 @@ namespace Simulation
         public LaunchMissionOutcome SelfDestruct()
         {
             if (Outcome == LaunchMissionOutcome.Running)
-                Fail("자폭으로 미션을 종료했습니다.");
+                Fail("자폭으로 미션을 종료했습니다.", LaunchTerminationReason.SelfDestruct);
             return Outcome;
         }
 
@@ -205,9 +210,10 @@ namespace Simulation
             }
         }
 
-        private void Fail(string reason)
+        private void Fail(string reason, LaunchTerminationReason terminationReason)
         {
             FailureReason = reason;
+            TerminationReason = terminationReason;
             Outcome = LaunchMissionOutcome.Failed;
         }
 

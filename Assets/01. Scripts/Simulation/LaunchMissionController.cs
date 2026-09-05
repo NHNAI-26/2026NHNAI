@@ -29,6 +29,8 @@ namespace Simulation
         public bool CanSelfDestruct => rocket != null && rocket.Launched && !returning && !IsExploding;
         public string Objective { get; private set; }
         public string Status { get; private set; } = "발사 대기";
+        public LaunchTerminationReason TerminationReason =>
+            evaluator == null ? LaunchTerminationReason.Unknown : evaluator.TerminationReason;
         public float Altitude => Mathf.Max(0f, transform.position.y - origin.y);
 
         /// <summary>관제 화면 스테퍼가 읽는 진행 단계. 발사 전에는 0 이다.</summary>

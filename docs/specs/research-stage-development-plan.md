@@ -246,6 +246,8 @@ bestGrade
 
 ## 8. 현재 구현 메모
 
+점화 순서 미니게임은 `Reliability_Button/reliability.png` 배경과 `Button.png` 버튼을 사용한다. 버튼은 빨강, 주황, 청록, 파랑의 2x2 배치이며 `Border/UI/IgnitionButton` 셰이더가 `ButtonTintMask.png`로 버튼 중앙만 발광 색으로 바꾼다. `Border/Research/Apply Ignition UI Art` 메뉴로 기존 미니게임 프리팹에 다시 적용할 수 있다. 순서 생성과 점수 계산은 기존 미니게임 로직을 사용한다.
+
 현재 임시 구현은 실제 설계 담당자가 막히지 않도록 설계 화면을 단순 UI로 둔다. 진짜 설계 조작, 로켓 배치, 3D 연출은 별도 담당자가 교체할 수 있다.
 
 추천 구현 원칙:

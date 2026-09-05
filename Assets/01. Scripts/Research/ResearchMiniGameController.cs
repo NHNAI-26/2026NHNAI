@@ -1320,8 +1320,13 @@ namespace Border.Research
 
         private static Color GetIgniterColor(int index, bool active)
         {
-            Color color = index % 2 == 0 ? new Color(0.32f, 0.42f, 0.58f, 1f) : new Color(0.45f, 0.34f, 0.54f, 1f);
-            return active ? new Color(1f, 0.82f, 0.24f, 1f) : color;
+            switch (index)
+            {
+                case 0: return active ? new Color(1f, 0.38f, 0.18f) : new Color(0.62f, 0.12f, 0.08f);
+                case 1: return active ? new Color(1f, 0.88f, 0.12f) : new Color(0.75f, 0.35f, 0.06f);
+                case 2: return active ? new Color(0.25f, 1f, 0.82f) : new Color(0.08f, 0.48f, 0.43f);
+                default: return active ? new Color(0.35f, 0.7f, 1f) : new Color(0.12f, 0.32f, 0.58f);
+            }
         }
 
         private void SetFuelGaugeValue(float value)

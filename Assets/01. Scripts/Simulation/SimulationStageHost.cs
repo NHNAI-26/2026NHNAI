@@ -194,7 +194,7 @@ namespace Simulation
             }
             var entry = session.PendingDesignEntry;
             session.UpdatePendingDesignEntry(session.Model.CreateDesignEntry(entry.MissionId, entry.SelectedEnginePresetId,
-                counts, entry.DesignFit, entry.Visibility, entry.LaunchCostPaid));
+                counts, entry.DesignFit, entry.Visibility, entry.LaunchCostPaid, entry.LaunchCost));
             ResearchActionResult result = session.TryBeginPendingDesignLaunch();
             LaunchMessage = session.Model.LastMessage;
             return result == ResearchActionResult.Success;
@@ -203,9 +203,8 @@ namespace Simulation
         private void CompleteLaunch(bool succeeded)
         {
             var session = ResearchFlowSession.GetOrCreate();
-            if (session.CompleteActiveLaunch(succeeded, mission != null ? mission.Status : null, out _) != ResearchActionResult.Success) return;
-            // Physical missions return directly to research; keep the result available in its status panel.
-            session.AcknowledgeLaunchResult();
+            if (session.CompleteActiveLaunch(succeeded, mission != null ? mission.Status : null,
+                mission != null ? mission.TerminationReason : LaunchTerminationReason.Unknown, out _) != ResearchActionResult.Success) return;
             StartCoroutine(UnloadRoutine());
         }
 
