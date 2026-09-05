@@ -101,6 +101,7 @@ namespace Border.Rendering.Tests
             "_RGB_OVERRIDE_ON", "_PIXELATION_ON", "_COLOR_SCREEN_BLEND_ON",
             "_ORDERED_DITHER_ON", "_COLOR_QUANTIZATION_ON", "_GRADIENT_MAP_ON",
             "_OLD_FILM_ON", "_EDGE_FILTER_ON", "_ASCII_FILTER_ON", "_CRT_FILTER_ON",
+            "_WOBBLE_ON",
         };
 
         private static readonly string[] StructuralKeywords =

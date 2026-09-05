@@ -158,6 +158,45 @@ namespace Simulation.Tests
         }
 
         [Test]
+        public void Hold_KeepsRocketClamped_AndRestartsRampOnLiftoff()
+        {
+            var rocketGo = Track(new GameObject("hold rocket"));
+            var rocket = rocketGo.AddComponent<Rocket>();
+            var body = rocketGo.GetComponent<Rigidbody>();
+            Invoke(rocket, "Awake");
+            SetField(rocket, "holdSeconds", 0.1f);
+
+            RocketPart engine = CreateEngine(
+                Stats(fuel: 100f, cooling: 60f, output: BaselineOutput, ignition: 100f));
+            engine.transform.SetParent(rocketGo.transform);
+
+            rocket.Launch();
+            Assert.That(rocket.Holding, Is.True, "홀드가 있으면 발사는 클램프에서 시작한다.");
+            Assert.That(rocket.Lifted, Is.False);
+
+            Invoke(rocket, "FixedUpdate");
+
+            // 홀드는 연출이다 — 배기와 흔들림만 오르고 시뮬레이션은 아직 아무것도 소비하지 않는다.
+            Assert.That(body.isKinematic, Is.True, "홀드 중에는 발사대에 고정돼 있어야 한다.");
+            Assert.That(rocket.TotalBurnSeconds, Is.Zero, "홀드는 연료를 태우지 않는다.");
+            Assert.That(engine.Remaining, Is.EqualTo(100f).Within(1e-4f), "홀드 중 연료는 그대로다.");
+            Assert.That(engine.Temperature, Is.Zero, "홀드는 발열도 없다.");
+            Assert.That(rocket.ThrustFraction, Is.GreaterThan(0f), "화면에는 점화가 보여야 한다.");
+
+            for (int i = 0; i < 20 && rocket.Holding; i++) Invoke(rocket, "FixedUpdate");
+
+            Assert.That(rocket.Holding, Is.False, "홀드는 제한 시간 안에 끝나야 한다.");
+            Assert.That(rocket.Lifted, Is.True);
+            Assert.That(body.isKinematic, Is.False, "클램프가 풀리면 물리가 로켓을 넘겨받는다.");
+
+            // 클램프가 풀린 첫 스텝은 램프가 0 부터 다시 오르므로 홀드 끝의 세기보다 훨씬 약하다.
+            float atRelease = rocket.ThrustFraction;
+            Invoke(rocket, "FixedUpdate");
+            Assert.That(rocket.ThrustFraction, Is.LessThan(atRelease * 0.1f),
+                "이륙 추력 램프는 클램프 해제 시점부터 다시 시작한다.");
+        }
+
+        [Test]
         public void Align_SnapsHeightAndAzimuthIndependently_OnlyWithinTolerance()
         {
             // 방위각 90°, 높이 1 에 엔진 하나가 붙어 있는 상태.

@@ -1,4 +1,4 @@
-using Border.Settings;
+﻿using Border.Settings;
 using Border.Title;
 using Border.UI;
 using Border.Research;
@@ -38,22 +38,20 @@ namespace Border.Editor
             root.SetActive(false);
             var controller = root.AddComponent<ResearchTestVisibilityDialog>();
             RectTransform canvas = CanvasRoot(root.transform, "VisibilityCanvas", 35);
-            RectTransform panel = Panel(canvas, "VisibilityPanel", new Vector2(780, 420));
+            RectTransform panel = Panel(canvas, "VisibilityPanel", new Vector2(800, 460));
             Sprite frame = FindEngineSprite("engine_ui_01_0");
             panel.GetComponent<Image>().sprite = frame;
             panel.GetComponent<Image>().type = UnityEngine.UI.Image.Type.Sliced;
             panel.GetComponent<Image>().color = Color.white;
-            Text(panel, "Title", "테스트 방식 선택", new Vector2(720, 44), new Vector2(0, 162), 28);
-            TMP_Text mission = Text(panel, "Mission", string.Empty, new Vector2(720, 34), new Vector2(0, 112), 18);
+            Text(panel, "Title", "테스트 방식 선택", new Vector2(740, 44), new Vector2(0, 190), 28);
+            TMP_Text mission = Text(panel, "Mission", string.Empty, new Vector2(740, 34), new Vector2(0, 142), 18);
             var group = panel.gameObject.AddComponent<ToggleGroup>();
-            Toggle publicToggle = VisibilityToggle(panel, group, "PublicToggle", "공개 테스트", -190, false);
-            Toggle privateToggle = VisibilityToggle(panel, group, "PrivateToggle", "비공개 테스트", 190, true);
-            TMP_Text publicDetails = Text(panel, "PublicDetails", string.Empty, new Vector2(330, 110), new Vector2(-190, -15), 18);
-            TMP_Text privateDetails = Text(panel, "PrivateDetails", string.Empty, new Vector2(330, 110), new Vector2(190, -15), 18);
-            TMP_Text error = Text(panel, "Error", string.Empty, new Vector2(710, 42), new Vector2(0, -109), 16);
+            Toggle privateToggle = VisibilityCard(panel, group, "PrivateToggle", "비공개 테스트", "PrivateDetails", -185, true, out TMP_Text privateDetails);
+            Toggle publicToggle = VisibilityCard(panel, group, "PublicToggle", "공개 테스트", "PublicDetails", 185, false, out TMP_Text publicDetails);
+            TMP_Text error = Text(panel, "Error", string.Empty, new Vector2(740, 36), new Vector2(0, -126), 16);
             error.color = new Color(1f, 0.65f, 0.4f);
-            Button cancel = Button(panel, "CancelButton", "취소", new Vector2(190, 48), new Vector2(-108, -166));
-            Button confirm = Button(panel, "ConfirmButton", "설계 진입", new Vector2(190, 48), new Vector2(108, -166));
+            Button cancel = Button(panel, "CancelButton", "취소", new Vector2(190, 48), new Vector2(-108, -180));
+            Button confirm = Button(panel, "ConfirmButton", "설계 진입", new Vector2(190, 48), new Vector2(108, -180));
             foreach (Button button in new[] { cancel, confirm })
             {
                 Image image = button.GetComponent<Image>();
@@ -72,19 +70,30 @@ namespace Border.Editor
             Save(root, "ResearchTestVisibilityDialog");
         }
 
-        private static Toggle VisibilityToggle(Transform parent, ToggleGroup group, string name, string label, float x, bool selected)
+        private static Toggle VisibilityCard(Transform parent, ToggleGroup group, string name, string label,
+            string detailsName, float x, bool selected, out TMP_Text details)
         {
-            RectTransform row = Rect(parent, name, new Vector2(330, 40), new Vector2(x, 64));
-            var toggle = row.gameObject.AddComponent<Toggle>();
-            RectTransform box = Image(row, "Box", new Vector2(30, 30), new Vector2(-116, 0), Color.white);
-            box.GetComponent<Image>().sprite = FindEngineSprite("engine_ui_01_4");
-            box.GetComponent<Image>().type = UnityEngine.UI.Image.Type.Sliced;
-            RectTransform mark = Image(box, "Mark", new Vector2(12, 12), Vector2.zero, new Color(0.15f, 0.95f, 1f));
+            RectTransform card = Image(parent, name, new Vector2(350, 210), new Vector2(x, 10), Color.white);
+            Image cardImage = card.GetComponent<Image>();
+            cardImage.sprite = FindEngineSprite("engine_ui_01_0");
+            cardImage.type = UnityEngine.UI.Image.Type.Sliced;
+            var toggle = card.gameObject.AddComponent<Toggle>();
+            RectTransform box = Image(card, "Box", new Vector2(24, 24), new Vector2(-150, 76), Color.white);
+            Image boxImage = box.GetComponent<Image>();
+            boxImage.sprite = FindEngineSprite("engine_ui_01_4");
+            boxImage.type = UnityEngine.UI.Image.Type.Sliced;
+            boxImage.raycastTarget = false;
+            TMP_Text title = Text(card, "CardTitle", label, new Vector2(260, 34), new Vector2(12, 76), 22);
+            title.alignment = TextAlignmentOptions.Left;
+            details = Text(card, detailsName, string.Empty, new Vector2(310, 130), new Vector2(0, -30), 17);
+            details.textWrappingMode = TextWrappingModes.Normal;
+            RectTransform highlight = Image(card, "Selected", Vector2.zero, Vector2.zero, new Color(0.15f, 0.95f, 1f, 0.14f));
+            Stretch(highlight, 0);
+            highlight.GetComponent<Image>().raycastTarget = false;
+            RectTransform mark = Image(highlight, "Mark", new Vector2(12, 12), new Vector2(-150, 76), new Color(0.15f, 0.95f, 1f));
             mark.GetComponent<Image>().raycastTarget = false;
-            TMP_Text title = Text(row, "Label", label, new Vector2(220, 40), new Vector2(25, 0), 22);
-            title.raycastTarget = true;
-            toggle.targetGraphic = box.GetComponent<Image>();
-            toggle.graphic = mark.GetComponent<Image>();
+            toggle.targetGraphic = cardImage;
+            toggle.graphic = highlight.GetComponent<Image>();
             toggle.group = group;
             toggle.SetIsOnWithoutNotify(selected);
             return toggle;

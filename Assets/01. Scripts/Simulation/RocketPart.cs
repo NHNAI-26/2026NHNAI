@@ -16,6 +16,8 @@ namespace Simulation
         [SerializeField] private EngineStatsSO stats;
         [SerializeField, Range(0f, 1f)] private float throttle = 1f; // 설계 단계의 힘 슬라이더 자리
         [SerializeField] private ParticleSystem flame;
+        [Tooltip("배기 연기. 불꽃과 같은 규칙으로 켜지고 꺼진다. 비우면 불꽃만 나온다.")]
+        [SerializeField] private ParticleSystem smoke;
 
         // 프리셋 외형. 연구가 만든 프리셋은 스탯 구성에서 아키타입이 정해지고(EngineVisualClassifier),
         // 그 아키타입의 메시가 기본 메시(meshRoot)를 대체한다. 라이브러리가 비어 있으면 교체 자체가
@@ -42,6 +44,8 @@ namespace Simulation
         private float _remaining;
         private float _flameSpeed;
         private float _flameRate;
+        private float _smokeSpeed;
+        private float _smokeRate;
         private bool _flameCaptured;
         private float _temperature;
         private bool _ignited;
@@ -126,8 +130,10 @@ namespace Simulation
             box.center = Vector3.zero;
             box.size = bounds.size;
 
-            // 불꽃은 노즐 바닥에서 나온다. 프리팹 기본값 −0.5 는 길이 1 짜리 기본 메시의 바닥이었다.
-            if (flame != null) flame.transform.localPosition = new Vector3(0f, -bounds.extents.y, 0f);
+            // 배기는 노즐 바닥에서 나온다. 프리팹 기본값 −0.5 는 길이 1 짜리 기본 메시의 바닥이었다.
+            var nozzle = new Vector3(0f, -bounds.extents.y, 0f);
+            if (flame != null) flame.transform.localPosition = nozzle;
+            if (smoke != null) smoke.transform.localPosition = nozzle;
         }
 
         /// <summary>
@@ -299,42 +305,66 @@ namespace Simulation
         }
 
         /// <summary>
-        /// 불꽃은 추력이 실제로 나오는 동안에만 켜진다. 발사 전에는 <c>Tick</c> 이 호출되지 않고
+        /// 클램프 홀드 동안의 배기. 힘도 연료도 발열도 이륙부터라 여기서는 파티클만 켠다 —
+        /// 홀드는 연출 구간이고, 시뮬레이션은 <see cref="Tick"/> 이 도는 순간부터다.
+        /// </summary>
+        public void HoldExhaust(float scale) => SetFlame(_ignited, scale);
+
+        /// <summary>
+        /// 배기는 추력이 실제로 나오는 동안에만 켜진다. 발사 전에는 <c>Tick</c> 이 호출되지 않고
         /// 파티클의 Play On Awake 도 꺼져 있으므로 자동으로 꺼진 상태다.
+        /// 불꽃과 연기가 한 함수를 지나야 홀드·연소·셧다운 세 경로에서 둘이 어긋나지 않는다.
         /// </summary>
         private void SetFlame(bool on, float scale)
         {
-            if (flame == null) return;
-
-            // 배기는 추력을 따라 자란다 — 이륙 램프가 화면에 보이는 유일한 신호다. 파티클 트랜스폼
-            // 스케일이 아니라 배수를 쓴다: 루트 스케일은 노즐 위치·입자 크기와 얽혀 있어 손대면
-            // 예전의 비균등 스케일 상쇄 문제가 그대로 돌아온다.
-            if (on)
-            {
-                CaptureFlameDefaults();
-                ParticleSystem.MainModule main = flame.main;
-                main.startSpeedMultiplier = _flameSpeed * scale;
-                ParticleSystem.EmissionModule emission = flame.emission;
-                emission.rateOverTimeMultiplier = _flameRate * scale;
-            }
-
-            if (flame.isEmitting == on) return;
-
-            if (on) flame.Play();
-            else flame.Stop(true, ParticleSystemStopBehavior.StopEmitting); // 남은 입자는 수명대로 사라진다
+            CaptureExhaustDefaults();
+            SetExhaust(flame, on, _flameSpeed * scale, _flameRate * scale);
+            // 연기는 세기를 덜 타게 둔다 — 홀드는 진행도 0 에서 시작하므로 불꽃과 같은 곡선을 쓰면
+            // 준비 구간의 앞부분이 통째로 비어 보인다.
+            SetExhaust(smoke, on, _smokeSpeed * scale, _smokeRate * Mathf.Sqrt(scale));
         }
 
         /// <summary>
-        /// 프리팹이 저작한 불꽃 세기. 배수를 덮어쓰기 전에 한 번만 잡는다 — 이 컴포넌트에는 Awake 가
+        /// 파티클 하나의 세기와 재생 상태. 파티클 트랜스폼 스케일이 아니라 배수를 쓴다: 루트 스케일은
+        /// 노즐 위치·입자 크기와 얽혀 있어 손대면 예전의 비균등 스케일 상쇄 문제가 그대로 돌아온다.
+        /// </summary>
+        private static void SetExhaust(ParticleSystem system, bool on, float speed, float rate)
+        {
+            if (system == null) return;
+
+            if (on)
+            {
+                ParticleSystem.MainModule main = system.main;
+                main.startSpeedMultiplier = speed;
+                ParticleSystem.EmissionModule emission = system.emission;
+                emission.rateOverTimeMultiplier = rate;
+            }
+
+            if (system.isEmitting == on) return;
+
+            if (on) system.Play();
+            else system.Stop(true, ParticleSystemStopBehavior.StopEmitting); // 남은 입자는 수명대로 사라진다
+        }
+
+        /// <summary>
+        /// 프리팹이 저작한 배기 세기. 배수를 덮어쓰기 전에 한 번만 잡는다 — 이 컴포넌트에는 Awake 가
         /// 없고 EditMode 테스트도 Awake 를 돌리지 않으므로, 지연 캡처가 두 경로를 같이 만족시킨다.
         /// </summary>
-        private void CaptureFlameDefaults()
+        private void CaptureExhaustDefaults()
         {
             if (_flameCaptured) return;
 
             _flameCaptured = true;
-            _flameSpeed = flame.main.startSpeedMultiplier;
-            _flameRate = flame.emission.rateOverTimeMultiplier;
+            if (flame != null)
+            {
+                _flameSpeed = flame.main.startSpeedMultiplier;
+                _flameRate = flame.emission.rateOverTimeMultiplier;
+            }
+
+            if (smoke == null) return;
+
+            _smokeSpeed = smoke.main.startSpeedMultiplier;
+            _smokeRate = smoke.emission.rateOverTimeMultiplier;
         }
     }
 }

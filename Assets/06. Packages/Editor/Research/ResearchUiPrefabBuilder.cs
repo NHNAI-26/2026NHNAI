@@ -9,6 +9,11 @@ namespace Border.Research.Editor
     {
         private const string ResourceFolder = "Assets/03. Prefabs/UI/Resources/ResearchUI";
 
+        // 밑색. ResearchUiArtApplicator 가 스프라이트를 입히면서 흰색으로 덮어쓴다 —
+        // 시트를 읽지 못해 적용기가 통째로 넘어갔을 때 패널이 구분되도록 남겨 둔다.
+        private static readonly Color TopChipColor = new(0.11f, 0.13f, 0.17f, 1f);
+        private static readonly Color DetailPanelColor = new(0.18f, 0.22f, 0.27f, 1f);
+
         [InitializeOnLoadMethod]
         private static void RebuildMissingDefaultPrefabs()
         {
@@ -108,6 +113,8 @@ namespace Border.Research.Editor
                 && FindChild(designScreen.transform, "DesignPresetButton_Engine01") != null
                 && FindChild(operationScreen.transform, "EnginePreviewReservedArea") != null
                 && FindChild(operationScreen.transform, "HubActionBar") != null
+                && FindChild(operationScreen.transform, "EngineHeaderPanel") != null
+                && FindChild(operationScreen.transform, "ResetButton") == null
                 && FindChild(operationScreen.transform, "StatusPanel") == null
                 && FindChild(miniGameScreen.transform, "FuelOuterBand") != null
                 && FindChild(miniGameScreen.transform, "FuelPerfectBand") != null
@@ -244,22 +251,28 @@ namespace Border.Research.Editor
         {
             RectTransform root = CreateCanvasRoot("ResearchOperationScreen", new Vector2(1280f, 720f));
 
-            RectTransform topBar = CreatePanel("TopInfoBar", root, new Color(0.2f, 0.25f, 0.31f, 0.94f));
+            // 상단 바는 제목·날짜·자금 세 조각으로 나뉜다. 껍데기는 세 조각이 각자 갖고, 이 줄 자체는
+            // Image 가 없다 — 배경을 주면 조각을 나눈 것이 다시 한 판으로 보인다. 이름은 유지해야 한다:
+            // ResearchOperationTransitionAnimator 가 "TopInfoBar" 로 찾아 슬라이드·페이드한다.
+            RectTransform topBar = CreateGroup("TopInfoBar", root);
             topBar.anchorMin = new Vector2(0f, 1f);
             topBar.anchorMax = Vector2.one;
             topBar.pivot = new Vector2(0.5f, 1f);
             topBar.offsetMin = new Vector2(16f, -82f);
             topBar.offsetMax = new Vector2(-16f, -16f);
-            AddHorizontalLayout(topBar, 12f, 12f, 8f, 8f);
+            AddHorizontalLayout(topBar, 0f, 0f, 0f, 8f);
 
-            RectTransform titleGroup = CreateGroup("ProjectTitleGroup", topBar);
-            AddVerticalLayout(titleGroup, 0f, 0f, 0f, 2f);
+            RectTransform titleGroup = CreatePanel("ProjectTitleGroup", topBar, TopChipColor);
+            AddVerticalLayout(titleGroup, 14f, 14f, 8f, 2f);
             titleGroup.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            CreateText("Title", titleGroup, 27, FontStyles.Bold, TextAlignmentOptions.Left, "ARTEMIS : 2026 연구실");
-            CreateInfoChip("Date", topBar);
-            CreateInfoChip("Funds", topBar);
-            CreateInfoChip("QuarterlyFunding", topBar);
-            CreateButton("ResetButton", topBar, "초기화", 86f, 50f);
+            CreateText("Title", titleGroup, 24, FontStyles.Bold, TextAlignmentOptions.Left, "ARTEMIS : 2026 연구실");
+
+            CreateInfoChip("Date", topBar, 210f);
+
+            // 분기 예산은 자기 칩을 잃고 보유 자금 칩의 둘째 줄이 된다. 텍스트 노드 이름은 그대로 둔다 —
+            // 컨트롤러가 "QuarterlyFunding" 을 필수로 찾고, 없으면 화면 초기화 자체가 실패한다.
+            RectTransform fundsChip = CreateInfoChip("Funds", topBar, 200f).transform.parent as RectTransform;
+            CreateText("QuarterlyFunding", fundsChip, 12, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
 
             RectTransform previewReservedArea = CreateGroup("EnginePreviewReservedArea", root);
             previewReservedArea.anchorMin = Vector2.zero;
@@ -464,15 +477,36 @@ namespace Border.Research.Editor
             group.gameObject.SetActive(false);
         }
 
+        /// <summary>
+        /// 엔진 상세를 세 패널로 나눈다: 머리말(이름·성능·설치비·완성도), 스탯 슬라이더, 연구 조작.
+        /// 예전에는 SelectedPanel 한 장이 전부를 담았고 이름·성능·비용이 TMP 하나에 문자열로 뭉쳐 있어
+        /// 좌우 정렬을 나눌 수 없었다. 노드 이름은 곧 계약이다 — 컨트롤러가 이름으로만 찾는다.
+        /// </summary>
         private static void CreateOperationDetails(RectTransform parent)
         {
-            RectTransform selectedPanel = CreatePanel("SelectedPanel", parent, new Color(0.18f, 0.22f, 0.27f, 1f));
-            AddVerticalLayout(selectedPanel, 12f, 12f, 10f, 7f);
-            selectedPanel.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
-            CreateText("SelectedEngineText", selectedPanel, 15, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
+            RectTransform headerPanel = CreatePanel("EngineHeaderPanel", parent, DetailPanelColor);
+            AddVerticalLayout(headerPanel, 12f, 12f, 10f, 6f);
 
-            // SelectedEngineCompletion is inserted here (sibling index 1) by ResearchUiArtApplicator.
-            RectTransform statRows = CreateGroup("StatRows", selectedPanel);
+            RectTransform headerRow = CreateGroup("EngineHeaderRow", headerPanel);
+            AddHorizontalLayout(headerRow, 0f, 0f, 0f, 8f);
+            LayoutElement headerRowLayout = headerRow.gameObject.AddComponent<LayoutElement>();
+            headerRowLayout.preferredHeight = 26f;
+            headerRowLayout.flexibleHeight = 0f;
+            TMP_Text engineName = CreateText("SelectedEngineName", headerRow, 18, FontStyles.Bold,
+                TextAlignmentOptions.Left, string.Empty);
+            engineName.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            CreateText("SelectedEnginePerformance", headerRow, 15, FontStyles.Bold,
+                TextAlignmentOptions.Right, string.Empty);
+
+            CreateText("SelectedEngineInstallCost", headerPanel, 12, FontStyles.Normal,
+                TextAlignmentOptions.Left, string.Empty);
+            CreateText("SelectedEngineText", headerPanel, 13, FontStyles.Normal,
+                TextAlignmentOptions.Left, string.Empty);
+            // SelectedEngineCompletion 슬라이더는 ResearchUiArtApplicator 가 이 패널의 마지막 자식으로 넣는다.
+
+            RectTransform statsPanel = CreatePanel("EngineStatsPanel", parent, DetailPanelColor);
+            AddVerticalLayout(statsPanel, 12f, 12f, 10f, 4f);
+            RectTransform statRows = CreateGroup("StatRows", statsPanel);
             AddVerticalLayout(statRows, 0f, 0f, 0f, 4f);
             LayoutElement statRowsLayout = statRows.gameObject.AddComponent<LayoutElement>();
             statRowsLayout.preferredHeight = 100f;
@@ -490,7 +524,12 @@ namespace Border.Research.Editor
                 statLabelLayout.flexibleWidth = 0f;
             }
 
-            RectTransform statRow = CreateGroup("StatButtons", selectedPanel);
+            RectTransform researchPanel = CreatePanel("EngineResearchPanel", parent, DetailPanelColor);
+            AddVerticalLayout(researchPanel, 12f, 12f, 10f, 7f);
+            CreateText("SelectedStatText", researchPanel, 12, FontStyles.Normal,
+                TextAlignmentOptions.Left, string.Empty);
+
+            RectTransform statRow = CreateGroup("StatButtons", researchPanel);
             AddHorizontalLayout(statRow, 0f, 0f, 0f, 6f);
             LayoutElement statRowLayout = statRow.gameObject.AddComponent<LayoutElement>();
             statRowLayout.preferredHeight = 36f;
@@ -500,7 +539,7 @@ namespace Border.Research.Editor
             CreateButton("StatButton_MaxOutput", statRow, "최대 출력", 0f, 36f);
             CreateButton("StatButton_IgnitionReliability", statRow, "점화 신뢰도", 0f, 36f);
 
-            RectTransform modeRow = CreateGroup("ResearchModeButtons", selectedPanel);
+            RectTransform modeRow = CreateGroup("ResearchModeButtons", researchPanel);
             AddHorizontalLayout(modeRow, 0f, 0f, 0f, 8f);
             LayoutElement modeRowLayout = modeRow.gameObject.AddComponent<LayoutElement>();
             modeRowLayout.preferredHeight = 52f;
@@ -508,9 +547,9 @@ namespace Border.Research.Editor
             CreateButton("NormalResearchButton", modeRow, string.Empty, 0f, 52f);
             CreateButton("FocusedResearchButton", modeRow, string.Empty, 0f, 52f);
 
-            CreateGroup("DetailSpacer", selectedPanel).gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            CreateGroup("DetailSpacer", parent).gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
-            RectTransform startRow = CreateGroup("StartDevelopmentRow", selectedPanel);
+            RectTransform startRow = CreateGroup("StartDevelopmentRow", parent);
             AddHorizontalLayout(startRow, 0f, 0f, 0f, 0f);
             startRow.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleRight;
             LayoutElement startRowLayout = startRow.gameObject.AddComponent<LayoutElement>();
@@ -569,11 +608,11 @@ namespace Border.Research.Editor
             CreateText("StatusText", infoPanel, 14, FontStyles.Normal, TextAlignmentOptions.Left, string.Empty);
         }
 
-        private static TMP_Text CreateInfoChip(string name, Transform parent)
+        private static TMP_Text CreateInfoChip(string name, Transform parent, float preferredWidth)
         {
-            RectTransform chip = CreatePanel($"{name}Chip", parent, new Color(0.11f, 0.13f, 0.17f, 1f));
-            AddVerticalLayout(chip, 6f, 6f, 5f, 2f);
-            chip.gameObject.AddComponent<LayoutElement>().preferredWidth = 112f;
+            RectTransform chip = CreatePanel($"{name}Chip", parent, TopChipColor);
+            AddVerticalLayout(chip, 10f, 10f, 8f, 2f);
+            chip.gameObject.AddComponent<LayoutElement>().preferredWidth = preferredWidth;
             return CreateText(name, chip, 13, FontStyles.Bold, TextAlignmentOptions.Center, string.Empty);
         }
 

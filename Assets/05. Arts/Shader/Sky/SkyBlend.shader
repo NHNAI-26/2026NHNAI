@@ -12,17 +12,6 @@ Shader "Sky/AtmosphereNebulaBlend"
         [NoScaleOffset] _SpaceCube("Space Cubemap", Cube) = "black" {}
         _SpaceBlend("Space Blend", Range(0, 1)) = 0
         _SpaceExposure("Space Exposure", Range(0, 8)) = 1
-
-        // 별은 파티클 껍질이 아니라 여기서 그린다. 유한한 껍질은 큰 화면과 후퇴 뷰가 최대 488 유닛
-        // 떨어져 있어 한쪽에서 반드시 '공'으로 보인다 — 스카이박스는 무한원이라 카메라마다 맞는다.
-        _StarBrightness("Star Brightness", Range(0, 4)) = 1
-        _StarDensity("Star Density", Range(20, 400)) = 180
-        _StarCoverage("Star Coverage", Range(0, 0.2)) = 0.02
-        _StarGlow("Star Glow", Range(1, 400)) = 90
-        _StarTwinkle("Star Twinkle", Range(0, 1)) = 0.3
-        _StarWashout("Star Washout", Range(0, 8)) = 3
-        _StarWarm("Star Warm Tint", Color) = (1, 0.87, 0.74, 1)
-        _StarCool("Star Cool Tint", Color) = (0.78, 0.87, 1, 1)
     }
 
     SubShader
@@ -52,61 +41,7 @@ Shader "Sky/AtmosphereNebulaBlend"
                 half _AtmosphereThickness;
                 half _SpaceBlend;
                 half _SpaceExposure;
-                half _StarBrightness;
-                half _StarDensity;
-                half _StarCoverage;
-                half _StarGlow;
-                half _StarTwinkle;
-                half _StarWashout;
-                half4 _StarWarm;
-                half4 _StarCool;
             CBUFFER_END
-
-            // Dave Hoskins hash33. 격자 칸 하나에서 밝기·칸 안 위치·색·반짝임 위상을 한 번에 뽑는다.
-            float3 Hash3(float3 p)
-            {
-                p = frac(p * float3(0.1031, 0.1030, 0.0973));
-                p += dot(p, p.yxz + 33.33);
-                return frac((p.xxy + p.yzz) * p.zyx);
-            }
-
-            // 방향을 큐브 면 uv 로 편다. 방향 벡터를 그대로 격자에 넣으면 극에서 별이 뭉치고 면 경계에서
-            // 격자가 끊긴다. 면 번호를 해시에 같이 넣어야 이웃 면이 같은 별을 복제하지 않는다.
-            half3 StarField(float3 dir)
-            {
-                float3 a = abs(dir);
-                float m = max(a.x, max(a.y, a.z));
-                float3 s = dir / max(m, 1e-5);
-
-                float2 uv;
-                float face;
-                if (m == a.x)      { uv = s.zy; face = s.x > 0 ? 0.0 : 1.0; }
-                else if (m == a.y) { uv = s.xz; face = s.y > 0 ? 2.0 : 3.0; }
-                else               { uv = s.xy; face = s.z > 0 ? 4.0 : 5.0; }
-                uv = uv * 0.5 + 0.5;
-
-                float2 grid = uv * _StarDensity;
-                float3 h = Hash3(float3(floor(grid), face));
-
-                // 상위 _StarCoverage 비율의 칸만 별이 된다. 세제곱으로 치우쳐 밝은 별은 소수,
-                // 흐린 별이 다수가 되게 한다 — 균일한 밝기는 밤하늘이 아니라 점 무늬로 보인다.
-                float mag = saturate((h.x - (1.0 - _StarCoverage)) / max(_StarCoverage, 1e-4));
-                mag = mag * mag * mag;
-
-                // 칸 정중앙에 찍으면 격자가 그대로 드러난다. 칸 안에서 흔든다.
-                float2 offset = frac(grid) - (0.5 + (h.yz - 0.5) * 0.6);
-                float d2 = dot(offset, offset);
-                // 프로젝트에 블룸이 없다(유효 볼륨 프로파일 intensity 0). 발광은 전적으로 이 감쇠가
-                // 만든다 — 좁은 코어에 넓고 약한 헤일로를 겹친다.
-                float glow = exp2(-d2 * _StarGlow) + exp2(-d2 * _StarGlow * 0.06) * 0.2;
-
-                // 별마다 주기와 위상이 달라야 개별로 반짝인다. 하나로 묶으면 하늘이 통째로 깜빡인다.
-                float twinkle = 1.0 - _StarTwinkle
-                    * (0.5 + 0.5 * sin(_Time.y * (1.2 + h.y * 2.6) + h.z * 6.2831853));
-
-                return lerp(_StarWarm.rgb, _StarCool.rgb, h.z)
-                       * (glow * mag * twinkle * _StarBrightness);
-            }
 
             struct Attributes
             {
@@ -141,15 +76,7 @@ Shader "Sky/AtmosphereNebulaBlend"
                 half3 atmosphere = lerp(_HorizonColor.rgb, _SkyTint.rgb, t) * _Exposure;
 
                 half3 space = SAMPLE_TEXTURECUBE(_SpaceCube, sampler_SpaceCube, dir).rgb * _SpaceExposure;
-                half3 sky = lerp(atmosphere, space, _SpaceBlend);
-
-                // 별은 늘 그 자리에 있다. 알파로 켜지 않고 밝은 하늘이 씻어내게 둔다 — 고도가 오르며
-                // skyExposure 가 0 으로 가면 저절로 드러나서, 해질녘에 하나둘 보이는 그림이 된다.
-                // 점 전체를 동시에 올리는 알파 램프가 '페이드로 생긴다'로 읽히던 것을 여기서 없앤다.
-                half skyLum = dot(atmosphere, half3(0.2126, 0.7152, 0.0722));
-                half3 stars = StarField(dir) * saturate(1.0 - skyLum * _StarWashout);
-
-                return half4(sky + stars, 1.0);
+                return half4(lerp(atmosphere, space, _SpaceBlend), 1.0);
             }
             ENDHLSL
         }

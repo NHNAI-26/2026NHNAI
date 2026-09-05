@@ -205,17 +205,15 @@ namespace Border.Research.Editor
         {
             Sprite[] sprites = LoadSprites();
             if (sprites == null) return;
-            foreach (string name in new[] { "TopInfoBar", "EnginePresetColumn", "DetailColumn" })
+            // Every panel that reads as its own card gets the frame art. TopInfoBar is deliberately
+            // absent: it is a bare layout row so its three chips read as separate pieces, not one bar.
+            foreach (string name in new[]
+                     {
+                         "EnginePresetColumn", "DetailColumn",
+                         "ProjectTitleGroup", "DateChip", "FundsChip",
+                         "EngineHeaderPanel", "EngineStatsPanel", "EngineResearchPanel",
+                     })
                 Skin(Find(root.transform, name)?.GetComponent<Image>(), sprites[0]);
-
-            // The outer frames carry the artwork; keep the inner content groups unframed.
-            foreach (string name in new[] { "SelectedPanel", "DateChip", "FundsChip", "QuarterlyFundingChip" })
-            {
-                Image image = Find(root.transform, name)?.GetComponent<Image>();
-                if (image == null) continue;
-                image.color = Color.clear;
-                image.raycastTarget = false;
-            }
 
             foreach (Button button in root.GetComponentsInChildren<Button>(true))
             {
@@ -224,13 +222,17 @@ namespace Border.Research.Editor
                     : button.name is "NormalResearchButton" or "FocusedResearchButton" or "StartDevelopmentButton"
                         or "PartDevelopmentButton" or "EnterDesignButton" or "WaitQuarterButton" ? 5 : 6]);
             }
-            Transform selectedPanel = Find(root.transform, "SelectedPanel");
-            if (selectedPanel != null) AddGauge(selectedPanel, "SelectedEngineCompletion", ResearchPrototypeModel.MaxEngineCompletion, sprites);
+            // The completion gauge sits under the completion text, i.e. last in the header panel.
+            Transform headerPanel = Find(root.transform, "EngineHeaderPanel");
+            if (headerPanel != null)
+                AddGauge(headerPanel, "SelectedEngineCompletion", ResearchPrototypeModel.MaxEngineCompletion,
+                    sprites, headerPanel.childCount);
             foreach (EngineStatId stat in System.Enum.GetValues(typeof(EngineStatId)))
             {
                 Transform statRowTransform = Find(root.transform, $"StatRow_{stat}");
                 // Stats clamp to 0..100 in EnginePresetState.SetStat; there is no named constant for it.
-                if (statRowTransform != null) AddGauge(statRowTransform, $"StatGauge_{stat}", 100f, sprites);
+                // The gauge goes right of its label, so sibling index 1.
+                if (statRowTransform != null) AddGauge(statRowTransform, $"StatGauge_{stat}", 100f, sprites, 1);
             }
             LayoutElement statRow = Find(root.transform, "StatButtons")?.GetComponent<LayoutElement>();
             if (statRow != null) statRow.flexibleHeight = 0f;
@@ -303,13 +305,13 @@ namespace Border.Research.Editor
             ResearchUiPrefabBuilder.LayoutEngineNameEditor(root);
         }
 
-        private static void AddGauge(Transform parent, string name, float maxValue, Sprite[] sprites)
+        private static void AddGauge(Transform parent, string name, float maxValue, Sprite[] sprites, int siblingIndex)
         {
             Transform existing = parent.Find(name);
             GameObject root = existing != null ? existing.gameObject
                 : new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Slider), typeof(LayoutElement));
             root.transform.SetParent(parent, false);
-            root.transform.SetSiblingIndex(1);
+            root.transform.SetSiblingIndex(siblingIndex);
             LayoutElement layout = root.GetComponent<LayoutElement>();
             layout.minHeight = layout.preferredHeight = 18f;
             layout.flexibleWidth = 1f;

@@ -202,6 +202,12 @@ Material:
     - _SurfaceOptions: 1
     - _TextureBlendEnabled: 0
     - _UberQuality: 0
+    - _WobbleAmplitude: 0
+    - _WobbleEnabled: 0
+    - _WobbleFrequency: 6
+    - _WobbleHalfHeight: 0.5
+    - _WobbleHeight: 0.35
+    - _WobbleWaves: 1.5
     - _WorkflowMode: 1
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1
@@ -228,5 +234,6 @@ Material:
     - _RimColor: {r: 1, g: 1, b: 1, a: 1}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
     - _StencilOutlineColor: {r: 1, g: 0.72, b: 0.08, a: 1}
+    - _WobbleAxis: {r: 0, g: 1, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
