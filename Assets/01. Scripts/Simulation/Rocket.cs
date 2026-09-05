@@ -21,6 +21,7 @@ namespace Simulation
         [SerializeField] private float sinkDepth = 30f;
 
         private readonly List<RocketPart> _engines = new();
+        private readonly HashSet<(Collider Self, Collider Surface)> _groundContacts = new();
         private readonly DeterministicRng _rng = new();
         private Rigidbody _body;
         private float _bodyMass;
@@ -39,6 +40,41 @@ namespace Simulation
 
         /// <summary>수면 아래로 내려갔는지. 추력은 여기서 끝난다.</summary>
         public bool Splashed { get; private set; }
+
+        public bool IsGrounded
+        {
+            get
+            {
+                _groundContacts.RemoveWhere(pair => pair.Self == null || pair.Surface == null
+                    || !pair.Self.enabled || !pair.Surface.enabled
+                    || !pair.Self.gameObject.activeInHierarchy || !pair.Surface.gameObject.activeInHierarchy);
+                return _groundContacts.Count > 0;
+            }
+        }
+
+        private void OnCollisionEnter(Collision collision) => UpdateGroundContact(collision);
+        private void OnCollisionStay(Collision collision) => UpdateGroundContact(collision);
+
+        private void OnCollisionExit(Collision collision)
+        {
+            _groundContacts.RemoveWhere(pair => pair.Surface == collision.collider);
+        }
+
+        private void UpdateGroundContact(Collision collision)
+        {
+            _groundContacts.RemoveWhere(pair => pair.Surface == collision.collider);
+            if (collision.rigidbody == _body) return;
+            for (int i = 0; i < collision.contactCount; i++)
+            {
+                // Side impacts are not ground support. Keep each collider pair separately;
+                // sleeping rigidbodies stop sending Stay but remain supported until Exit.
+                ContactPoint contact = collision.GetContact(i);
+                if (Vector3.Dot(contact.normal, Vector3.up) < 0.5f) continue;
+                _groundContacts.Add((contact.thisCollider, contact.otherCollider));
+            }
+        }
+
+        private void OnDisable() => _groundContacts.Clear();
 
         private void Awake()
         {
@@ -67,6 +103,7 @@ namespace Simulation
             if (AuthorizeLaunch != null && !AuthorizeLaunch()) return;
 
             Launched = true;
+            _groundContacts.Clear();
             Overheated = false;
             _body.isKinematic = false;
             // 접지 속도가 90 m/s 를 넘는다. 0.02초 스텝이면 한 번에 1.8 m 이동이라
@@ -125,6 +162,7 @@ namespace Simulation
 
         public void ResetFlight(Vector3 position, Quaternion rotation)
         {
+            _groundContacts.Clear();
             foreach (RocketPart engine in _engines) engine.Shutdown();
             _body.isKinematic = false;
             _body.linearVelocity = Vector3.zero;

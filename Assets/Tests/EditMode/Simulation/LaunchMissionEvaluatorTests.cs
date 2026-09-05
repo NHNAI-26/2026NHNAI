@@ -13,7 +13,7 @@ namespace Simulation.Tests
             var evaluator = new LaunchMissionEvaluator(mission);
             Assert.That(evaluator.Step(0.1f, target - 0.01f, 0f, 10f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
             Assert.That(evaluator.Step(0.1f, target, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Succeeded),
-                "Success wins when the speed failure threshold is reached in the same sample.");
+                "Reaching the objective still succeeds at zero speed.");
         }
 
         [TestCase(80f)]
@@ -89,18 +89,19 @@ namespace Simulation.Tests
         public void Launch_FailsAtNoLiftoffTimeout()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.LowAltitude);
-            evaluator.Step(9f, 0f, 0f, 0f, 0f, 0f);
-            Assert.That(evaluator.Step(1f, 0f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+            Assert.That(evaluator.Step(9f, 0f, 0f, 0f, 0f, 0f, isGrounded: true), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(1f, 0f, 0f, 1f, 0f, 0f, isGrounded: true), Is.EqualTo(LaunchMissionOutcome.Failed));
             Assert.That(evaluator.FailureReason, Is.Not.Empty);
         }
 
         [Test]
-        public void Flight_FailsWhenSpeedFallsToInclusiveThreshold()
+        public void Flight_ApexHoverAndDescentNeverFailWithoutGroundOrWater()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
             evaluator.Step(3f, 50f, 0f, 2f, 0f, 0f);
-            Assert.That(evaluator.Step(0.05f, 50f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(0.05f, 50f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+            Assert.That(evaluator.Step(10f, 50f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(10f, 40f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(10f, -10f, 0f, 30f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
         }
 
         [TestCase(LaunchMissionId.ZoneHold)]
@@ -123,12 +124,13 @@ namespace Simulation.Tests
         }
 
         [Test]
-        public void BrokenHold_AtLowSpeedFails()
+        public void BrokenHold_AtLowSpeedKeepsFlying()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.ZoneHold);
             evaluator.Step(3f, 199f, 100f, 10f, 0f, 0f);
             evaluator.Step(1f, 200f, 100f, 10f, 0f, 0f);
-            Assert.That(evaluator.Step(1f, 199f, 100f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+            Assert.That(evaluator.Step(10f, 199f, 100f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.HoldSeconds, Is.Zero);
         }
 
         [Test]
@@ -136,21 +138,59 @@ namespace Simulation.Tests
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.LowAltitude);
             evaluator.Step(0.02f, 0f, 0f, 2f, 0f, 0f);
-            Assert.That(evaluator.Step(4f, 0f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(6f, 0f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+            Assert.That(evaluator.Step(4f, 0f, 0f, 0f, 0f, 0f, isGrounded: true), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(6f, 0f, 0f, 0f, 0f, 0f, isGrounded: true), Is.EqualTo(LaunchMissionOutcome.Failed));
+        }
+
+        [TestCase(false, 0f, 0f)]
+        [TestCase(true, 1.01f, 0f)]
+        [TestCase(true, 0f, 5.01f)]
+        public void GroundedTimer_ResetsOnBounceMotionOrRotation(bool grounded, float speed, float angularSpeed)
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
+            evaluator.Step(1f, 50f, 0f, 10f, 0f, 0f);
+            Assert.That(evaluator.Step(2f, 0f, 0f, 0f, 0f, 0f, isGrounded: true), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(1f, 0f, 0f, speed, 0f, 0f,
+                isGrounded: grounded, angularSpeed: angularSpeed), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(2.5f, 0f, 0f, 1f, 0f, 0f,
+                isGrounded: true, angularSpeed: 5f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(0.5f, 0f, 0f, 1f, 0f, 0f,
+                isGrounded: true, angularSpeed: 5f), Is.EqualTo(LaunchMissionOutcome.Failed));
+            Assert.That(evaluator.FailureReason, Does.Contain("지면"));
+            Assert.That(evaluator.Step(10f, 300f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
         }
 
         [Test]
-        public void EarlyLiftoffDip_HasGraceAndResetsLowSpeedTimer()
+        public void NoLiftoffTimeout_WaitsForGroundAndThreeSettledSeconds()
         {
             var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
-            evaluator.Step(1f, 4f, 0f, 4f, 0f, 0f);
-            Assert.That(evaluator.Step(1f, 4f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(1f, 5f, 0f, 2f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(0.06f, 5f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            evaluator.Step(0.02f, 5f, 0f, 2f, 0f, 0f);
-            Assert.That(evaluator.Step(0.06f, 5f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
-            Assert.That(evaluator.Step(0.05f, 5f, 0f, 1f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Failed));
+            Assert.That(evaluator.Step(12f, 1f, 0f, 0f, 0f, 0f), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(3f, 0f, 0f, 2f, 0f, 0f, isGrounded: true), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(2.5f, 0f, 0f, 0f, 0f, 0f, isGrounded: true), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(0.5f, 0f, 0f, 0f, 0f, 0f, isGrounded: true), Is.EqualTo(LaunchMissionOutcome.Failed));
+            Assert.That(evaluator.FailureReason, Does.Contain("이륙"));
+        }
+
+        [Test]
+        public void Splashdown_FailsAfterThreeSecondsEvenWithoutLiftoffOrLowSpeed()
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
+            Assert.That(evaluator.Step(2.5f, -10f, 0f, 20f, 90f, 0f, hasSplashed: true), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(0.5f, -20f, 0f, 10f, 90f, 0f, hasSplashed: true), Is.EqualTo(LaunchMissionOutcome.Failed));
+            Assert.That(evaluator.FailureReason, Does.Contain("바다"));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void DisabledAutomaticFailure_ClearsPendingTimers(bool splashed)
+        {
+            var evaluator = new LaunchMissionEvaluator(LaunchMissionId.HighAltitude);
+            evaluator.Step(1f, 50f, 0f, 10f, 0f, 0f);
+            evaluator.Step(2f, 0f, 0f, 0f, 0f, 0f, isGrounded: !splashed, hasSplashed: splashed);
+            Assert.That(evaluator.Step(20f, 0f, 0f, 0f, 0f, 0f, evaluateFailure: false,
+                isGrounded: !splashed, hasSplashed: splashed), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(2f, 0f, 0f, 0f, 0f, 0f, isGrounded: !splashed, hasSplashed: splashed), Is.EqualTo(LaunchMissionOutcome.Running));
+            Assert.That(evaluator.Step(1f, 0f, 0f, 0f, 0f, 0f, isGrounded: !splashed, hasSplashed: splashed), Is.EqualTo(LaunchMissionOutcome.Failed));
         }
 
         [Test]
