@@ -63,8 +63,8 @@ namespace Simulation
         [SerializeField] private Material trailMaterial;
         [Tooltip("점 사이 간격(유닛). 로켓이 이만큼 움직일 때마다 점 하나가 남는다.")]
         [SerializeField] private float trailDotSpacing = 3f;
-        [Tooltip("점 하나의 크기(유닛). 후퇴 뷰 거리에서 읽히는 크기를 기준으로 잡는다.")]
-        [SerializeField] private float trailDotSize = 2f;
+        [Tooltip("점 하나가 차지할 화면 높이 비율. 0.015 면 720p 에서 약 11 px — 카메라가 아무리 멀어져도 이 크기다.")]
+        [SerializeField] private float trailDotScreenSize = 0.015f;
         [Tooltip("궤적 레이어. 이 레이어를 후퇴 뷰를 맡은 카메라만 그린다.")]
         [SerializeField] private int trailLayer = 8; // Trajectory
 
@@ -154,6 +154,7 @@ namespace Simulation
         private float _launchAltitude;
         private bool _launchViewSwapped;
         private ParticleSystem _trail;
+        private ParticleSystem.Particle[] _trailParticles;
 
         public Camera Cam => cam;
 
@@ -335,7 +336,7 @@ namespace Simulation
             main.simulationSpace = ParticleSystemSimulationSpace.World; // 뿌린 점은 그 자리에 남는다
             main.startLifetime = TrailLifetimeSeconds;
             main.startSpeed = 0f;
-            main.startSize = trailDotSize;
+            main.startSize = 1f; // 실제 크기는 매 프레임 UpdateTrailDotSize 가 정한다
             main.gravityModifier = 0f;
             main.playOnAwake = false;
             main.maxParticles = 4096;
@@ -382,6 +383,40 @@ namespace Simulation
             {
                 PlaceView(_pipCamera.transform, _launchViewSwapped ? chaseDistance : pullback);
             }
+
+            UpdateTrailDotSize(pullback);
+        }
+
+        /// <summary>
+        /// 궤적 점을 화면에서 **항상 같은 크기**로 유지한다. 월드 크기를 고정하면 후퇴 뷰가 500 유닛까지
+        /// 빠지는 동안 점이 1 px 아래로 줄어 궤적이 통째로 사라진다 — 거리에 비례해 월드 크기를 키운다.
+        /// 기준 거리는 카메라에서 로켓까지다. 점은 발사대부터 로켓까지 흩어져 있지만 카메라가 그만큼
+        /// 멀리 있어 거리 편차가 5% 안쪽이라, 점마다 따로 재지 않고 한 값으로 밀어도 눈에 안 띈다.
+        /// </summary>
+        private void UpdateTrailDotSize(float distance)
+        {
+            if (_trail == null) return;
+
+            float size = TrailDotWorldSize(trailDotScreenSize, distance, cam.fieldOfView);
+
+            ParticleSystem.MainModule main = _trail.main;
+            main.startSize = size; // 앞으로 나올 점
+
+            // 이미 나온 점은 startSize 로 바뀌지 않는다 — 살아 있는 것들을 매 프레임 다시 쓴다.
+            _trailParticles ??= new ParticleSystem.Particle[main.maxParticles];
+
+            int count = _trail.GetParticles(_trailParticles);
+            for (int i = 0; i < count; i++) _trailParticles[i].startSize = size;
+            _trail.SetParticles(_trailParticles, count);
+        }
+
+        /// <summary>
+        /// 화면 높이의 <paramref name="screenFraction"/> 만큼을 차지하는 월드 크기.
+        /// 거리 d 에서 화면이 담는 세로 길이는 <c>2 · d · tan(FOV/2)</c> 다.
+        /// </summary>
+        public static float TrailDotWorldSize(float screenFraction, float distance, float verticalFov)
+        {
+            return screenFraction * 2f * distance * Mathf.Tan(verticalFov * 0.5f * Mathf.Deg2Rad);
         }
 
         /// <summary>

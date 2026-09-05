@@ -333,6 +333,15 @@ FOV 40 / 0.1 / 5000이고 브레인이 그 값을 카메라에 밀어넣으므�
 여기 적어 둔다. `RenderPipelineManager.beginCameraRendering` 으로 렌더러를 껐다 켜는 방법도 있지만
 정적 콜백이 늘고 씬 뷰 카메라까지 걸린다.
 
+점 크기는 **월드가 아니라 화면 기준**이다. 후퇴 뷰가 500 유닛까지 빠지는 동안 월드 크기를 고정하면
+점이 1 px 아래로 줄어 궤적이 통째로 사라진다. `TrailDotWorldSize` 가 거리에 비례해 월드 크기를 키워
+`trailDotScreenSize`(화면 높이의 1.5 %, 720p 에서 약 11 px)를 **거리와 무관하게 유지**한다.
+
+기준 거리는 카메라에서 로켓까지 하나뿐이다. 점은 발사대부터 로켓까지 흩어져 있지만 카메라가 그만큼
+멀리 있어 거리 편차가 5 % 안쪽이라(정점에서 418 대 437), 점마다 따로 재지 않고 한 값으로 민다.
+`startSize` 는 **앞으로 나올 점에만** 걸리므로 이미 뿌려진 점은 매 프레임 `GetParticles` /
+`SetParticles` 로 다시 쓴다 — 수십 개짜리라 버퍼 하나 재사용하면 끝이다.
+
 머티리얼은 새로 만들지 않고 `Assets/05. Arts/Material/Sky/Star.mat` 을 그대로 쓴다 — 이미 텍스처 없는
 흰 애디티브 URP Particles/Unlit 점이다. `SkyEnvironment` 가 별 색을 MaterialPropertyBlock 으로 바꾸므로
 공유해도 서로 간섭하지 않는다. 프리팹에 물려 두는 이유는 가이드 선과 같다: `Shader.Find` 폴백은
