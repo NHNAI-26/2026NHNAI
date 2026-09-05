@@ -26,6 +26,8 @@ namespace Border.Audio
 
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            if (GetComponent<Border.UI.UISelectableSoundHook>() == null)
+                gameObject.AddComponent<Border.UI.UISelectableSoundHook>();
         }
 
         private void OnDestroy()

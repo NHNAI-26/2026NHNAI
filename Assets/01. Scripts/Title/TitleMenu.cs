@@ -13,10 +13,14 @@ namespace Border.Title
         [SerializeField] private SimpleSettingsMenuController settingsMenu;
         [SerializeField] private string mainSceneName = "01_Main";
 
+        [SerializeField] private Border.Audio.SoundManager soundManagerPrefab;
+
         private bool loading;
 
         private void Awake()
         {
+            if (Border.Audio.SoundManager.Instance == null && soundManagerPrefab != null)
+                Instantiate(soundManagerPrefab);
             if (newGameButton != null) newGameButton.onClick.AddListener(NewGame);
             if (settingsButton != null) settingsButton.onClick.AddListener(OpenSettings);
             if (newGameButton == null || settingsButton == null || settingsMenu == null)

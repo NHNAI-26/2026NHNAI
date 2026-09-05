@@ -479,12 +479,12 @@ namespace Border.Research
                     return new EngineCardView(null, null, null);
                 }
 
-                button.onClick.RemoveAllListeners();
+                Border.UI.UISelectableSoundHook.ClearListeners(button);
                 return BindEngineCardButton(button, title, detail, config.Id);
             }
 
             ConfigureCardButton(button, 46f, out TMP_Text existingTitle, out TMP_Text existingDetail);
-            button.onClick.RemoveAllListeners();
+            Border.UI.UISelectableSoundHook.ClearListeners(button);
             return BindEngineCardButton(button, existingTitle, existingDetail, config.Id);
         }
 

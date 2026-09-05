@@ -1,0 +1,6 @@
+{
+    "name": "Prologue.PlayModeTests",
+    "references": ["Border", "Unity.TextMeshPro", "UnityEngine.UI"],
+    "optionalUnityReferences": ["TestAssemblies"],
+    "autoReferenced": false
+}

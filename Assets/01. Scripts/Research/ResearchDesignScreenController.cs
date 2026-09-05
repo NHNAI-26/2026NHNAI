@@ -252,7 +252,7 @@ namespace Border.Research
                 }
 
                 presetButtons[i] = button;
-                button.onClick.RemoveAllListeners();
+                Border.UI.UISelectableSoundHook.ClearListeners(button);
                 button.onClick.AddListener(() =>
                 {
                     if (!session.Model.IsEnginePresetUnlocked(presetId))

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Border.Core;
+using Border.Audio;
 using Border.UI;
 using Unity.Cinemachine;
 using UnityEngine;
@@ -249,7 +250,40 @@ namespace Simulation
             if (_hasPendingDesignTargetIntro) BeginDesignTargetIntro();
         }
 
+        private SoundHandle _gearSound;
+
         private void Update()
+        {
+            RocketPart part = _selected;
+            Quaternion before = part != null ? part.transform.localRotation : Quaternion.identity;
+            UpdateInput();
+            bool rotating = part != null && part == _selected && _mode == EditMode.Rotate
+                && _grabAxis >= 0 && rocket != null && !rocket.Launched
+                && part.transform.IsChildOf(rocket.transform)
+                && Quaternion.Angle(before, part.transform.localRotation) > 0.01f;
+            UpdateRotationSound(rotating);
+        }
+
+        private void UpdateRotationSound(bool rotating)
+        {
+            if (!rotating)
+            {
+                _gearSound.Stop();
+                _gearSound = SoundHandle.Invalid;
+                return;
+            }
+            if (!_gearSound.IsValid && SoundManager.Instance != null)
+                _gearSound = SoundManager.Instance.PlaySfx("gear");
+        }
+
+        private void OnDisable() => UpdateRotationSound(false);
+
+        private void OnApplicationFocus(bool focused)
+        {
+            if (!focused) UpdateRotationSound(false);
+        }
+
+        private void UpdateInput()
         {
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null)
@@ -646,6 +680,7 @@ namespace Simulation
 
         private void OnDestroy()
         {
+            UpdateRotationSound(false);
             // RenderTexture 는 GC 가 회수하지 않는다 — 씬을 내렸다 올릴 때마다 GPU 메모리가 샌다.
             if (_pipTexture == null) return;
 
@@ -728,6 +763,7 @@ namespace Simulation
             if (mode == _mode) return;
 
             // 모드 재진입은 반드시 여기를 지난다 — 삭제·선택 해제로 남은 잡기 상태를 여기서 끊는다.
+            UpdateRotationSound(false);
             _grabAxis = -1;
             _mode = mode;
             if (mode != EditMode.Move) HideGuides(); // 이동을 끝내면 가이드도 같이 사라져야 한다
@@ -738,6 +774,7 @@ namespace Simulation
         {
             if (_selected == null || rocket.Launched) return;
 
+            UpdateRotationSound(false);
             Destroy(_selected.gameObject);
             _mode = EditMode.None;
             _grabAxis = -1;
@@ -1458,6 +1495,7 @@ namespace Simulation
 
         private void Select(RocketPart part)
         {
+            UpdateRotationSound(false);
             if (_selected == part) return;
 
             if (_selected != null) _selected.SetOutline(false);

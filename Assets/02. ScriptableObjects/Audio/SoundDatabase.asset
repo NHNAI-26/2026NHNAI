@@ -66,3 +66,51 @@ MonoBehaviour:
     useSpatialAudio: 1
     minDistance: 5
     maxDistance: 150
+  - id: keyboard01
+    clip: {fileID: 8300000, guid: 5ad987d57e3e54a578e8b279c0a3c8e6, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: keyboard02
+    clip: {fileID: 8300000, guid: b43abfc6c98004033ac6b84c833e892f, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: keyboard03
+    clip: {fileID: 8300000, guid: 0192b2bbde880427bb94f2146d52ca1e, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: keyboard04
+    clip: {fileID: 8300000, guid: 219f2198a7f884c1f8187e9bfbd794ae, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: click
+    clip: {fileID: 8300000, guid: 184d097bbd14c4183accc9a6151a0b91, type: 3}
+    volume: 0.65
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: gear
+    clip: {fileID: 8300000, guid: 3500f79d7ea2d4e3587325667eefe3df, type: 3}
+    volume: 0.65
+    pitch: 1
+    loop: 1
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50

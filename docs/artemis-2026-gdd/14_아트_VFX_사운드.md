@@ -160,6 +160,34 @@ ID와 파일의 대응은 아래 표와 같으며, 볼륨과 피치는 1, 공간
 `SoundManager.Instance.PlaySfx(id)`로 재생할 수 있다. 비행 루프는 반환된
 `SoundHandle`을 보관해 종료 시 정지한다. 발사 상태별 재생은 `RocketAudio`가 처리한다.
 
+### 버튼 클릭음
+
+`Assets/04. Audios/SFX/click.mp3`를 `click` ID로 등록했다. 볼륨 0.65, 피치 1,
+비루프·2D이며, Decompress On Load와 Preload Audio Data로 클릭 시 즉시 재생한다.
+
+`SoundManager`의 `UISelectableSoundHook`가 활성 uGUI Button의 `onClick`에 한 번씩
+연결한다. 동적으로 생성되거나 뒤늦게 활성화된 버튼도 자동 연결되며, 마우스 클릭과
+키보드 Submit을 함께 처리한다. 비활성 버튼과 우클릭은 Button 자체의 입력 규칙에 따라
+재생하지 않는다. 버튼 클릭으로 패널이 닫혀도 소리는 사운드 매니저에서 계속 재생한다.
+이벤트를 재구성하는 화면은 `UISelectableSoundHook.ClearListeners`로 클릭음 연결을 유지한다.
+타이틀 프리팹도 사운드 매니저를 준비하므로 새 게임·설정 버튼부터 효과음을 사용할 수 있다.
+
+클릭음 Play Mode 테스트 4개와 기존 타이핑 테스트 3개를 함께 통과했다. 중복 바인딩,
+리스너 초기화, 뒤늦은 활성화, 비활성·우클릭 무음과 Submit 시 패널 닫힘을 확인했다.
+
+### 엔진 회전 효과음
+
+`Assets/04. Audios/SFX/gear.mp3`를 `gear` ID로 등록했다. 볼륨 0.65, 피치 1,
+반복·2D 재생이며, Decompress On Load와 Preload Audio Data를 사용한다.
+`RocketBuilder`는 로켓에 부착된 선택 엔진의 실제 로컬 회전이 바뀌는 프레임에만
+루프를 유지한다. 핸들을 잡은 채 멈추거나 스냅으로 각도가 고정되면 즉시 정지한다.
+같은 루프를 매 프레임 다시 시작하지 않으며, 이동·카메라 회전에는 재생하지 않는다.
+모드 변경, 선택 변경·삭제, 화면 비활성화, 포커스 상실과 파괴 시에도 해당 루프를 정지한다.
+
+`RocketBuilderGearAudioTests` Play Mode 테스트 2개로 단일 루프 유지, 즉시 정지·재시작,
+다른 효과음 유지, 비활성화·포커스 상실 정지를 확인했다. Unity 컴파일을 통과했다.
+실제 마우스로 회전 핸들을 드래그하는 전체 조작은 이번 테스트에 포함하지 않았다.
+
 ### 운영 화면
 
 - 낮은 볼륨의 관제실 드론

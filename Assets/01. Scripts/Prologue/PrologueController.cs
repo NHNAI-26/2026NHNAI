@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using Border.Audio;
 using Border.Core;
 using TMPro;
@@ -21,6 +22,10 @@ namespace Border.Prologue
         [SerializeField] private TMP_Text lineText;
 
         private Coroutine routine;
+        private readonly List<SoundHandle> typingSounds = new();
+        private int typingSoundIndex;
+        private static readonly string[] TypingSoundIds =
+            { "keyboard01", "keyboard02", "keyboard03", "keyboard04" };
 
         private void Awake()
         {
@@ -54,6 +59,7 @@ namespace Border.Prologue
                 return; // 이미 오버레이를 걷는 중이다.
             }
 
+            StopTypingSound();
             StopCoroutine(routine);
             routine = StartCoroutine(RevealRoutine());
         }
@@ -88,6 +94,7 @@ namespace Border.Prologue
 
         private IEnumerator RevealRoutine()
         {
+            StopTypingSound();
             routine = null; // Skip() 재진입 차단
             lineText.alpha = 0f;
             lineText.maxVisibleCharacters = int.MaxValue;
@@ -123,11 +130,45 @@ namespace Border.Prologue
             while (lineText.maxVisibleCharacters < total)
             {
                 elapsed += Time.unscaledDeltaTime;
-                lineText.maxVisibleCharacters = Mathf.Min(total, Mathf.FloorToInt(elapsed / beat.TypeSecondsPerChar));
+                int previous = lineText.maxVisibleCharacters;
+                int visible = Mathf.Min(total, Mathf.FloorToInt(elapsed / beat.TypeSecondsPerChar));
+                lineText.maxVisibleCharacters = visible;
+                PlayTypingSound(beat.Line, previous, visible);
                 yield return null;
             }
 
             lineText.maxVisibleCharacters = total;
+            StopTypingSound();
+        }
+
+        private void PlayTypingSound(string text, int previous, int visible)
+        {
+            if (visible <= previous) return;
+            typingSounds.RemoveAll(handle => !handle.IsValid);
+            // A slow frame may reveal several characters; play only one key for that frame.
+            for (int i = previous; i < visible; i++)
+            {
+                if (char.IsWhiteSpace(text[i])) continue;
+                if (SoundManager.Instance != null)
+                {
+                    typingSounds.Add(SoundManager.Instance.PlaySfx(TypingSoundIds[typingSoundIndex]));
+                    typingSoundIndex = (typingSoundIndex + 1) % TypingSoundIds.Length;
+                }
+                break;
+            }
+        }
+
+        private void StopTypingSound()
+        {
+            foreach (SoundHandle sound in typingSounds) sound.Stop();
+            typingSounds.Clear();
+        }
+
+        private void OnDisable()
+        {
+            StopTypingSound();
+            if (routine != null) StopCoroutine(routine);
+            routine = null;
         }
 
         /// <summary>

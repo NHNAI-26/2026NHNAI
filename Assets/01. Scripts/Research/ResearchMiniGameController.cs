@@ -705,7 +705,7 @@ namespace Border.Research
             SetupOutputStage();
             primaryButton.gameObject.SetActive(true);
             primaryButton.interactable = true;
-            primaryButton.onClick.RemoveAllListeners();
+            Border.UI.UISelectableSoundHook.ClearListeners(primaryButton);
             ClearPointerHandlers(primaryButton.gameObject);
             primaryButton.GetComponentInChildren<TMP_Text>().text = "출력 고정";
             AddPointer(primaryButton.gameObject, EventTriggerType.PointerDown, RecordOutputStage);
@@ -722,7 +722,7 @@ namespace Border.Research
             {
                 int igniterIndex = i;
                 Button button = ignitionButtons[i];
-                button.onClick.RemoveAllListeners();
+                Border.UI.UISelectableSoundHook.ClearListeners(button);
                 TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
                 if (label != null)
                 {
@@ -1123,7 +1123,7 @@ namespace Border.Research
             stateText.text = "개발 완료. 곧 연구 화면으로 돌아갑니다.";
             primaryButton.gameObject.SetActive(true);
             primaryButton.interactable = true;
-            primaryButton.onClick.RemoveAllListeners();
+            Border.UI.UISelectableSoundHook.ClearListeners(primaryButton);
             RemovePointerHandlers(primaryButton.gameObject);
             primaryButton.GetComponentInChildren<TMP_Text>().text = "결과 닫기";
             primaryButton.onClick.AddListener(DismissResult);
