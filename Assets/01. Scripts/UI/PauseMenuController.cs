@@ -9,6 +9,7 @@ namespace Border.UI
     public sealed class PauseMenuController : MonoBehaviour
     {
         private const string TitleSceneName = "00_Title";
+        private const float DefaultGameplayTimeScale = 1f;
 
         [SerializeField] private GameObject panelRoot;
         [SerializeField] private Button resumeButton;
@@ -25,6 +26,7 @@ namespace Border.UI
                 enabled = false;
                 return;
             }
+            UiEventSystemUtility.Ensure();
             resumeButton.onClick.AddListener(Resume);
             titleButton.onClick.AddListener(GoToTitle);
             quitButton.onClick.AddListener(QuitGame);
@@ -43,9 +45,10 @@ namespace Border.UI
         public void Open()
         {
             if (paused || panelRoot == null) return;
-            previousTimeScale = Time.timeScale;
+            previousTimeScale = Time.timeScale > 0f ? Time.timeScale : DefaultGameplayTimeScale;
             Time.timeScale = 0f;
             paused = true;
+            UiEventSystemUtility.Ensure();
             panelRoot.SetActive(true);
             resumeButton.Select();
         }

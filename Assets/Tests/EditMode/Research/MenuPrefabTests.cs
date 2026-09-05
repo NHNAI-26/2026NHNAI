@@ -7,6 +7,7 @@ using NUnit.Framework;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Border.Research.Tests
@@ -93,10 +94,34 @@ namespace Border.Research.Tests
                 menu.Open();
                 menu.Open();
                 Assert.That(Time.timeScale, Is.Zero);
-                root.GetComponentsInChildren<Button>(true).Single(button => button.name == "ResumeButton").onClick.Invoke();
+                Button resume = root.GetComponentsInChildren<Button>(true).Single(button => button.name == "ResumeButton");
+                ExecuteEvents.Execute(resume.gameObject, new PointerEventData(EventSystem.current), ExecuteEvents.pointerClickHandler);
                 Assert.That(Time.timeScale, Is.EqualTo(0.5f));
                 Assert.That(root.GetComponentInChildren<Canvas>(true).gameObject.activeSelf, Is.False);
                 Assert.That(root.GetComponentsInChildren<Transform>(true).Length, Is.EqualTo(count));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Time.timeScale = originalTimeScale;
+            }
+        }
+
+        [Test]
+        public void PausePrefab_ResumeButtonReturnsToGameplayWhenOpenedFromZeroTimeScale()
+        {
+            float originalTimeScale = Time.timeScale;
+            GameObject root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/PauseMenu.prefab"));
+            try
+            {
+                var menu = root.GetComponent<PauseMenuController>();
+                typeof(PauseMenuController).GetMethod("Awake", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(menu, null);
+                Time.timeScale = 0f;
+                menu.Open();
+                Button resume = root.GetComponentsInChildren<Button>(true).Single(button => button.name == "ResumeButton");
+                ExecuteEvents.Execute(resume.gameObject, new PointerEventData(EventSystem.current), ExecuteEvents.pointerClickHandler);
+                Assert.That(Time.timeScale, Is.EqualTo(1f));
+                Assert.That(root.GetComponentInChildren<Canvas>(true).gameObject.activeSelf, Is.False);
             }
             finally
             {
