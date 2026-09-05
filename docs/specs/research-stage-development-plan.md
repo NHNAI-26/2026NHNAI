@@ -191,8 +191,8 @@ bestGrade
 - 프리팹 기반 연구 운영 UI 구성
 - 허브 상태: `TopInfoBar`(제목 + 칩 3개 + `ResetButton`)와 `HubActionBar`(`PartDevelopmentButton`, `EnterDesignButton`, `WaitQuarterButton`)
 - 부품 개발 패널: `EnginePresetColumn`(카드 + `CreateEnginePresetButton`)과 `DetailColumn`/`SelectedPanel`
-- `SelectedPanel` 구성 순서: `SelectedEngineText` → `SelectedEngineCompletion` → `StatRows`(`StatRow_*`/`StatRowLabel_*`/`StatGauge_*`) → `StatButtons` → `ResearchModeButtons` → `StartDevelopmentRow`
-- `HubActionBar`는 `TopInfoBar`/`EnginePresetColumn`/`DetailColumn`과 달리 전환 애니메이터 대상이 아니므로 설계 전환 때 즉시 숨긴다
+- `SelectedPanel` 구성 순서: `SelectedEngineText` → `SelectedEngineCompletion` → `StatRows`(`StatRow_*`/`StatRowLabel_*`/`StatGauge_*`) → `StatButtons` → `ResearchModeButtons` → `StartDevelopmentRow`(`StartDevelopmentButton`, `CancelDevelopmentButton`)
+- `HubActionBar`도 `TopInfoBar`/`EnginePresetColumn`/`DetailColumn`과 함께 전환 애니메이터 대상이다 (`PanelGroup.Bottom`)
 - 개발된 엔진 프리셋 카드만 표시
 - 선택 엔진 상세 스탯과 스탯별 게이지 표시
 - 기본/집중은 모드 선택, `개발 시작`만 미니게임 실행
@@ -265,6 +265,7 @@ DetailColumn
 
 - **`TopInfoBar` 에는 배경을 주지 않는다.** 주면 세 조각으로 나눈 것이 다시 한 판으로 보인다.
   이름은 바꿀 수 없다 — `ResearchOperationTransitionAnimator` 가 `"TopInfoBar"` 로 찾아 슬라이드·페이드한다.
+  `"HubActionBar"`, `"EnginePresetColumn"`, `"DetailColumn"` 도 같은 이유로 고정이다.
 - **분기 예산은 자기 칩을 잃고 보유 자금 칩의 셋째 줄이 됐다.** 텍스트 노드 이름 `QuarterlyFunding` 은
   그대로 둔다 — 컨트롤러가 필수로 찾고, 없으면 화면 초기화 자체가 실패해 아무것도 뜨지 않는다.
 - **초기화 버튼은 사라졌다.** 리셋 동작 자체는 `ResetResearchState()` 에 남아 있고, 밖에서 부를 수 있는
@@ -288,6 +289,31 @@ DetailColumn
 
 색은 이 문서의 관심사가 아니다. 패널의 보라색은 `engine_ui_01.psd` 의 `_0` 조각 픽셀에 그려진 그라데이션이고,
 `Skin()` 이 모든 Image 를 `Color.white` 로 고정하므로 아트가 그대로 나온다 — 코드에 그 색 리터럴은 없다.
+
+`CancelDevelopmentButton` 은 예외적으로 프리팹에 직접 넣고 `DefaultPrefabsAreCurrent()` 에는 조건을 **넣지
+않았다.** 조건을 넣으면 다음 도메인 리로드에 전체가 다시 구워지고, 프리팹이 빌더보다 앞서 있는 부분(라벨 문구,
+아트 손질)이 함께 날아간다. 대신 `CreateOperationScreen()` 에도 같은 버튼을 추가해 두었으므로, 누군가
+`Border/Research/Rebuild Operation UI Prefab` 을 눌러 재생성하더라도 버튼은 남는다.
+
+### 화면 전환 연출
+
+전환은 전부 DOTween 이고 `ResearchOperationTransitionAnimator` 가 패널 네 개를 **그룹 단위**로 움직인다
+(`PanelGroup` 플래그: `Top`/`Bottom`/`Left`/`Right`, 조합 `Hub`/`Columns`/`All`). 그룹으로 나눈 이유는
+허브와 부품 개발 화면이 서로 다른 축으로 움직이기 때문이다 — 한 덩어리로 재생하면 부품 개발을 열 때
+가만히 있어야 할 상단 바까지 다시 날아든다.
+
+- **첫 진입** (`Initialize`) — `Hub`: `TopInfoBar` 위에서, `HubActionBar` 아래에서 들어온다.
+- **부품 개발 열기** — `Columns`: `EnginePresetColumn` 좌, `DetailColumn` 우에서 들어온다.
+- **부품 개발 닫기** (`CancelDevelopmentButton` / ESC) — `Columns` 를 역방향으로 내보낸 뒤 `Bottom` 만
+  다시 들인다. 닫는 동안 `closingPartDevelopment` 가 ESC 와 재진입을 막는다. 빌드 시점과 EditMode
+  테스트(`Application.isPlaying == false`)는 연출 없이 즉시 상태만 적용한다.
+- **설계 진입** — `All` 을 내보내고 엔진 프리뷰 연출과 함께 기다린다.
+- **건너뛰기** — 캔버스 루트 `CanvasGroup` 의 알파를 0 으로 내렸다가 그 지점에서 `Refresh()` 하고 다시 1 로
+  올린다. **분기 소모는 클릭 즉시** 처리한다 — 트윈 완료를 기다리면 엔딩 전환과 EditMode 테스트가 깨진다.
+- **로켓 설계 팝업** (`ResearchTestVisibilityDialog.Open`) — 알파 0→1, 스케일 0.9→1, `Ease.OutBack`.
+
+애니메이터 메서드는 완료 콜백을 **인자로** 받는다. 반환된 시퀀스에 `OnComplete` 를 다시 걸면 DOTween 이
+콜백을 이어붙이지 않고 교체하므로, 애니메이터가 내부에 걸어둔 raycast 복구가 사라진다.
 
 ### 프리팹 스테이지 미리보기
 

@@ -599,12 +599,14 @@ namespace Border.Research.Editor
             CreateGroup("DetailSpacer", parent).gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
             RectTransform startRow = CreateGroup("StartDevelopmentRow", parent);
-            AddHorizontalLayout(startRow, 0f, 0f, 0f, 0f);
+            AddHorizontalLayout(startRow, 0f, 0f, 0f, 8f);
             startRow.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleRight;
             LayoutElement startRowLayout = startRow.gameObject.AddComponent<LayoutElement>();
             startRowLayout.preferredHeight = 52f;
             startRowLayout.flexibleHeight = 0f;
             CreateButton("StartDevelopmentButton", startRow, "개발 시작", 168f, 52f);
+            // 부품 개발 화면을 닫는 유일한 버튼 — 컨트롤러가 필수로 찾으므로 빠지면 화면이 뜨지 않는다.
+            CreateButton("CancelDevelopmentButton", startRow, "그만두기", 168f, 52f);
         }
 
         private static void CreateMapPanel(RectTransform parent)
