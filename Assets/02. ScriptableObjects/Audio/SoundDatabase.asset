@@ -12,7 +12,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5296d3f630b29da4cbd1063a0513c705, type: 3}
   m_Name: SoundDatabase
   m_EditorClassIdentifier: Border::Border.Audio.SoundDatabaseSO
-  bgmEntries: []
+  bgmEntries:
+  - id: EngineBGM
+    clip: {fileID: 8300000, guid: 4084d486608a742faa63aaf5c7add49e, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
+  - id: LaunchPanelLoop
+    clip: {fileID: 8300000, guid: f04a9a6eea20640fe879973a38b416ec, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
+  - id: Launch
+    clip: {fileID: 8300000, guid: 67d4bd79721fb45619a3f6dbae135902, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
+  - id: ToSpace
+    clip: {fileID: 8300000, guid: 0530c6833058244cebf56077a8430871, type: 3}
+    volume: 1
+    pitch: 1
+    loop: 1
   sfxEntries:
   - id: EngineStop
     clip: {fileID: 8300000, guid: 53b79cfbcfacc4abdbce7f205151f18d, type: 3}
@@ -46,3 +66,51 @@ MonoBehaviour:
     useSpatialAudio: 1
     minDistance: 5
     maxDistance: 150
+  - id: keyboard01
+    clip: {fileID: 8300000, guid: 5ad987d57e3e54a578e8b279c0a3c8e6, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: keyboard02
+    clip: {fileID: 8300000, guid: b43abfc6c98004033ac6b84c833e892f, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: keyboard03
+    clip: {fileID: 8300000, guid: 0192b2bbde880427bb94f2146d52ca1e, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: keyboard04
+    clip: {fileID: 8300000, guid: 219f2198a7f884c1f8187e9bfbd794ae, type: 3}
+    volume: 0.45
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: click
+    clip: {fileID: 8300000, guid: 184d097bbd14c4183accc9a6151a0b91, type: 3}
+    volume: 0.65
+    pitch: 1
+    loop: 0
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50
+  - id: gear
+    clip: {fileID: 8300000, guid: 3500f79d7ea2d4e3587325667eefe3df, type: 3}
+    volume: 0.65
+    pitch: 1
+    loop: 1
+    useSpatialAudio: 0
+    minDistance: 1
+    maxDistance: 50

@@ -125,17 +125,23 @@ GDD 02 §2 는 20~30초를 적었지만, 실제로 돌려 보니 글자가 다 �
 `Time.unscaledDeltaTime` 에는 시임이 없고, 가짜 시계를 위해 실제 구현이 하나뿐인 주입점을 프로덕션
 코드에 만들 이유가 없다.
 
-## 남은 작업 — 오디오
+## 타이핑 효과음
 
-지금 프로젝트에 AudioClip 에셋이 하나도 없고 `SoundDatabase.asset` 도 비어 있다. 소리를 넣으려면:
+DiaBlackJack의 `Assets/04. Audios/SFX/keyboard01.mp3`부터 `keyboard04.mp3`까지 네 효과음을
+가져왔다. 원본 앞의 약 0.08~0.10초 무음과 뒤쪽 무음을 줄여 이 프로젝트의
+`Assets/04. Audios/SFX/keyboard01.wav`~`keyboard04.wav`로 저장했다.
+`SoundDatabase.asset`의 같은 이름 ID로 등록하며 볼륨 0.45, 비루프, 2D 재생이다.
+짧은 효과음이므로 Decompress On Load와 Preload Audio Data를 사용한다.
 
-1. `Assets/04. Audios/SFX/Prologue_SecureComms.wav` — 통신음 약 2초, 비루프,
-   `useSpatialAudio = false`(스페이셜 엔트리는 `SoundManager.PlaySfx` 가 거부한다).
-2. `Assets/04. Audios/BGM/Prologue_LowTension.wav` — GDD 14 §10 의 15~20초 저긴장, `loop = true`.
-3. `Assets/02. ScriptableObjects/Audio/SoundDatabase.asset` 에 두 엔트리 추가.
-   id 비교는 `StringComparer.Ordinal`(대소문자 구분)이라 SO 문자열과 정확히 같아야 한다.
-4. `Assets/03. Prefabs/Systems/SoundManager.prefab` 을 `00_Title.unity` 에 인스턴스.
-   `DontDestroyOnLoad` 라 `01_Main` 까지 따라온다.
+`PrologueController`는 새 글자가 나타날 때 네 소리를 순서대로 재생한다. 공백만 드러난
+프레임에는 새 소리를 내지 않고, 느린 프레임에 여러 글자가 드러나도 한 번만 재생한다.
+각 키의 짧은 잔향은 겹쳐 재생할 수 있지만, 줄의 타이핑 완료·건너뛰기·비활성화 시에는
+이 컨트롤러가 재생한 키 소리를 모두 멈춘다. 컷 사이 대기와 페이드에서는 새 소리를 내지 않는다.
 
-**id 명명 선례**: PascalCase 이며 클립 파일명과 같다. 기존 에디터 툴
-`SoundDatabaseSOEditor.SetIdFromClipName` 이 클립 이름에서 id 를 만들기 때문에 그 관례를 따랐다.
+기존 컷별 효과음과 프롤로그 BGM 설정은 유지한다. `SoundManager`는 연구 화면 초기화에서
+준비하며, 연구실 음악은 프롤로그 텍스트와 오버레이 페이드가 모두 끝난 뒤 시작한다.
+
+### 검증
+
+`PrologueTypingAudioTests` Play Mode 테스트 3개를 통과했다. 한 프레임 중복 재생 방지,
+공백 무음, 다른 효과음 유지, 스킵·줄 완료·비활성화 정지를 확인했다. Unity 컴파일도 통과했다.

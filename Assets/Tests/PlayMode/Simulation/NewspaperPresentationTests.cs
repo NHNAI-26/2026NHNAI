@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.Collections;
+using System.Linq;
 using System.Reflection;
 using Border.Research;
 using Border.UI;
@@ -32,7 +33,7 @@ namespace Simulation.Tests
                 session.CompleteActiveLaunch(true, out var result);
                 host = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/ResearchResultReport.prefab"));
                 var report = host.GetComponent<ResearchResultReportController>();
-                var newspaper = host.GetComponentInChildren<NewspaperReveal>(true);
+                var newspaper = FindReveal(host, LaunchNewspaperArticle.ResolveMedium(result));
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 var type = typeof(NewspaperReveal);
                 type.GetField("flyDuration", flags).SetValue(newspaper, 0.1f);
@@ -142,7 +143,7 @@ namespace Simulation.Tests
                 Assert.That(session.Model.Funds, Is.EqualTo(funds));
                 reportObject = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/ResearchResultReport.prefab"));
                 reportObject.GetComponent<ResearchResultReportController>().Initialize(session, session.LastLaunchResult, session.AcknowledgeLaunchResult);
-                Assert.That(reportObject.GetComponentInChildren<NewspaperReveal>(true).IsShowing, Is.True);
+                Assert.That(reportObject.GetComponentsInChildren<NewspaperReveal>(true).Single(item => item.IsShowing), Is.Not.Null);
             }
             finally
             {
@@ -174,7 +175,7 @@ namespace Simulation.Tests
                 int turns = session.Model.RemainingTurns;
                 host = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/ResearchResultReport.prefab"));
                 var report = host.GetComponent<ResearchResultReportController>();
-                var newspaper = host.GetComponentInChildren<NewspaperReveal>(true);
+                var newspaper = FindReveal(host, LaunchNewspaperArticle.ResolveMedium(result));
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 typeof(NewspaperReveal).GetField("flyDuration", flags).SetValue(newspaper, 0.02f);
                 typeof(NewspaperReveal).GetField("settleDuration", flags).SetValue(newspaper, 0.02f);
@@ -209,6 +210,14 @@ namespace Simulation.Tests
                 ResearchFlowSession.ResetForTests();
             }
             yield return null;
+        }
+
+        private static NewspaperReveal FindReveal(GameObject root, LaunchResultMedium medium)
+        {
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            FieldInfo field = typeof(NewspaperReveal).GetField("medium", flags);
+            return root.GetComponentsInChildren<NewspaperReveal>(true)
+                .Single(item => (LaunchResultMedium)field.GetValue(item) == medium);
         }
     }
 }

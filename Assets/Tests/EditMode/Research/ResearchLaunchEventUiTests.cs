@@ -55,6 +55,7 @@ namespace Border.Research.Tests
                 { LaunchOutcomeEventId.UsefulFailureData, "깨진 기록에서 멀쩡한 답 나왔다" },
                 { LaunchOutcomeEventId.Whistleblower, "관계자, \"비리 관계 있다\" 밝혀" },
                 { LaunchOutcomeEventId.FinalProof, "적게 태우고, 끝내 증명했다" },
+                { LaunchOutcomeEventId.FinalFailure, "끝내 낮은 불꽃은 달에 닿지 못했다" },
             };
 
             foreach (LaunchOutcomeEventResult outcomeEvent in AllLaunchOutcomeEvents())
@@ -76,11 +77,23 @@ namespace Border.Research.Tests
                     "저전력 검증을 통과했습니다. 아르테미스 발사 체계가 최종 인정됐습니다.",
                     "효율 검증 통과 · 최종 미션 성공"),
                     missionId: LaunchMissionId.LowPowerZoneHold,
-                    visibility: TestVisibility.FinalMission,
+                    visibility: TestVisibility.Public,
                     finalMissionWon: true), "저전력 구역 체류");
+            LaunchNewspaperArticle finalFailureArticle = LaunchNewspaperArticle.Create(
+                CreateResult(new LaunchOutcomeEventResult(
+                    LaunchOutcomeEventId.FinalFailure,
+                    "최종 검증 실패",
+                    "저전력 검증은 최종 통과 기준에 못 미쳤습니다.",
+                    "최종 미션 실패"),
+                    missionId: LaunchMissionId.LowPowerZoneHold,
+                    visibility: TestVisibility.Public,
+                    finalMissionWon: false,
+                    deadlineMissed: true,
+                    grade: ResearchGrade.F), "저전력 구역 체류");
 
             Assert.That(privateArticle.Edition, Is.EqualTo("2024년 2분기 내부 메일"));
             Assert.That(finalArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
+            Assert.That(finalFailureArticle.Edition, Is.EqualTo("2024년 2분기 특별호"));
         }
 
         [Test]
@@ -111,13 +124,13 @@ namespace Border.Research.Tests
                     "저전력 검증을 통과했습니다.",
                     "효율 검증 통과 · 최종 미션 성공"),
                     missionId: LaunchMissionId.LowPowerZoneHold,
-                    visibility: TestVisibility.FinalMission,
+                    visibility: TestVisibility.Public,
                     finalMissionWon: true), "저전력 구역 체류");
 
             Assert.That(publicArticle.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
             Assert.That(privateArticle.Medium, Is.EqualTo(LaunchResultMedium.Mail));
             Assert.That(privateWhistleblower.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
-            Assert.That(publicCleanTelemetry.Medium, Is.EqualTo(LaunchResultMedium.Mail));
+            Assert.That(publicCleanTelemetry.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
             Assert.That(finalArticle.Medium, Is.EqualTo(LaunchResultMedium.Newspaper));
         }
 
@@ -149,7 +162,15 @@ namespace Border.Research.Tests
                 Assert.That(body, Does.Not.Contain("책임자님,"));
             }
 
-            Assert.That(body, Does.Contain(outcomeEvent.Description));
+            if (article.Medium == LaunchResultMedium.Mail)
+            {
+                Assert.That(body, Does.Contain(outcomeEvent.Description));
+            }
+            else
+            {
+                Assert.That(body, Does.Not.Contain("책임자님,"));
+                Assert.That(body, Does.Not.Contain("했습니다."));
+            }
             Assert.That(body, Does.Not.Contain("미션:"));
             Assert.That(body, Does.Not.Contain("판정:"));
             Assert.That(body, Does.Not.Contain("종료 사유:"));
@@ -174,6 +195,7 @@ namespace Border.Research.Tests
                     visibility: TestVisibility.Private), "저고도 안정화");
 
             Assert.That(article.Medium, Is.EqualTo(LaunchResultMedium.Mail));
+            Assert.That(article.Heading, Is.EqualTo("[시험 결과] 저고도 안정화 - 비공개 성능 개선 확인"));
             Assert.That(article.Edition, Is.EqualTo("2024년 2분기 내부 메일"));
             Assert.That(article.Body, Does.StartWith("책임자님,"));
             Assert.That(article.Body, Does.Contain("저고도 안정화 시험 결과를 확인했습니다."));
@@ -198,23 +220,15 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void ResultReport_MissingMailSpriteFallsBackToNewspaperSprite()
+        public void ResultReport_ContainsSeparateNewspaperAndMailPrefabs()
         {
             ResearchResultReportController report = CreateReport();
-            ResearchLaunchResultData result = CreateResult(null, visibility: TestVisibility.Private);
-            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
-            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            FieldInfo mailSpriteField = typeof(NewspaperReveal).GetField("mailSprite", flags);
-            mailSpriteField.SetValue(newspaper, null);
+            NewspaperReveal[] reveals = report.GetComponentsInChildren<NewspaperReveal>(true);
 
-            report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
-
-            Sprite newspaperSprite = (Sprite)typeof(NewspaperReveal).GetField("newspaperSprite", flags).GetValue(newspaper);
-            Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(newspaper);
-
-            Assert.That(LaunchNewspaperArticle.Create(result, "저고도 안정화").Medium, Is.EqualTo(LaunchResultMedium.Mail));
-            Assert.That(mailSpriteField.GetValue(newspaper), Is.Null);
-            Assert.That(image.sprite, Is.SameAs(newspaperSprite));
+            Assert.That(reveals, Has.Length.EqualTo(2));
+            Assert.That(FindReveal(report, LaunchResultMedium.Newspaper).name, Is.EqualTo("NewspaperReveal"));
+            Assert.That(FindReveal(report, LaunchResultMedium.Mail).name, Is.EqualTo("MailReveal"));
+            Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/MailReveal.prefab"), Is.Not.Null);
         }
 
         [Test]
@@ -225,11 +239,11 @@ namespace Border.Research.Tests
 
             report.Initialize(ResearchFlowSession.GetOrCreate(), result, null);
 
-            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
+            var mail = FindReveal(report, LaunchResultMedium.Mail);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             Sprite emailSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/05. Arts/UI/Email/Email.png");
-            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("mailSprite", flags).GetValue(newspaper);
-            Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(newspaper);
+            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("presentationSprite", flags).GetValue(mail);
+            Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(mail);
 
             Assert.That(emailSprite, Is.Not.Null);
             Assert.That(mailSprite, Is.SameAs(emailSprite));
@@ -248,9 +262,9 @@ namespace Border.Research.Tests
             TMP_Text body = FindText(report.gameObject, "Body");
             TMP_Text effects = FindText(report.gameObject, "Effects");
             TMP_Text edition = FindText(report.gameObject, "Edition");
-            RawImage photo = report.GetComponentsInChildren<RawImage>(true).Single(item => item.name == "Photo");
-            var newspaper = report.GetComponentInChildren<NewspaperReveal>(true);
-            RectTransform effectsBackground = GetPrivateField<RectTransform>(newspaper, "effectsBackground");
+            RawImage photo = FindSelectedComponent<RawImage>(report.gameObject, "Photo");
+            var mail = FindReveal(report, LaunchResultMedium.Mail);
+            RectTransform effectsBackground = GetPrivateField<RectTransform>(mail, "effectsBackground");
 
             Assert.That(headline.rectTransform.anchorMin.x, Is.GreaterThan(0.3f));
             Assert.That(headline.rectTransform.anchorMax.y, Is.LessThan(0.82f));
@@ -271,14 +285,12 @@ namespace Border.Research.Tests
         public void ResultReport_NewspaperRestoresSavedLayoutAndPrintedPhoto()
         {
             ResearchResultReportController report = CreateReport();
-            ResearchLaunchResultData privateResult = CreateResult(null, visibility: TestVisibility.Private);
             ResearchLaunchResultData publicResult = CreateResult(null, visibility: TestVisibility.Public);
 
-            report.Initialize(ResearchFlowSession.GetOrCreate(), privateResult, null);
             report.Initialize(ResearchFlowSession.GetOrCreate(), publicResult, null);
 
             TMP_Text headline = FindText(report.gameObject, "Headline");
-            RawImage photo = report.GetComponentsInChildren<RawImage>(true).Single(item => item.name == "Photo");
+            RawImage photo = FindSelectedComponent<RawImage>(report.gameObject, "Photo");
 
             Assert.That(headline.rectTransform.anchorMin.x, Is.EqualTo(0.24772727f).Within(0.0001f));
             Assert.That(headline.rectTransform.anchorMax.y, Is.EqualTo(0.9446773f).Within(0.0001f));
@@ -368,7 +380,9 @@ namespace Border.Research.Tests
             LaunchOutcomeEventResult outcomeEvent,
             LaunchMissionId missionId = LaunchMissionId.LowAltitude,
             TestVisibility visibility = TestVisibility.Public,
-            bool finalMissionWon = false)
+            bool finalMissionWon = false,
+            bool deadlineMissed = false,
+            ResearchGrade grade = ResearchGrade.B)
         {
             return new ResearchLaunchResultData(
                 missionId,
@@ -385,11 +399,11 @@ namespace Border.Research.Tests
                 10,
                 10,
                 42,
-                ResearchGrade.B,
+                grade,
                 600,
                 75,
                 finalMissionWon,
-                false,
+                deadlineMissed,
                 outcomeEvent,
                 LaunchTerminationReason.Succeeded);
         }
@@ -439,6 +453,8 @@ namespace Border.Research.Tests
                     return "내부 고발자";
                 case LaunchOutcomeEventId.FinalProof:
                     return "최종 검증 인정";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "최종 검증 실패";
                 default:
                     return id.ToString();
             }
@@ -472,6 +488,8 @@ namespace Border.Research.Tests
                     return "관계자가 비공개 실패 기록과 예산 처리에 \"비리 관계 있다\"고 주장했습니다. 후원 기관이 다음 분기 지원을 깎았습니다.";
                 case LaunchOutcomeEventId.FinalProof:
                     return "저전력 검증을 통과했습니다. 아르테미스 발사 체계가 최종 인정됐습니다.";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "저전력 검증은 최종 통과 기준에 못 미쳤습니다. 남은 기록은 다음 판단 자료로 넘겨졌습니다.";
                 default:
                     return id.ToString();
             }
@@ -505,6 +523,8 @@ namespace Border.Research.Tests
                     return "분기 연구비 -100";
                 case LaunchOutcomeEventId.FinalProof:
                     return "효율 검증 통과 · 최종 미션 성공\n1번 엔진 완성도 +10\n1번 엔진 연료 탱크 용량 +5";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "최종 미션 실패";
                 default:
                     return id.ToString();
             }
@@ -512,8 +532,23 @@ namespace Border.Research.Tests
 
         private static TMP_Text FindText(GameObject root, string name)
         {
-            TMP_Text text = root.GetComponentsInChildren<TMP_Text>(true).Single(item => item.name == name);
-            return text;
+            return FindSelectedComponent<TMP_Text>(root, name);
+        }
+
+        private static T FindSelectedComponent<T>(GameObject root, string name) where T : Component
+        {
+            return root.GetComponentsInChildren<T>(true).Single(item =>
+            {
+                NewspaperReveal reveal = item.GetComponentInParent<NewspaperReveal>(true);
+                return item.name == name && reveal != null && reveal.gameObject.activeSelf;
+            });
+        }
+
+        private static NewspaperReveal FindReveal(ResearchResultReportController report, LaunchResultMedium medium)
+        {
+            FieldInfo field = typeof(NewspaperReveal).GetField("medium", BindingFlags.Instance | BindingFlags.NonPublic);
+            return report.GetComponentsInChildren<NewspaperReveal>(true)
+                .Single(item => (LaunchResultMedium)field.GetValue(item) == medium);
         }
 
         private static TMP_Text FindButtonLabel(GameObject root, string buttonName)

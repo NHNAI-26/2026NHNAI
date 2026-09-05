@@ -17,6 +17,15 @@ namespace Simulation
         private readonly List<SoundHandle> alerts = new();
         private SoundHandle spark;
         private SoundHandle launch;
+        private SkyEnvironment skyEnvironment;
+        private bool launchMusicStarted;
+        private bool spaceMusicStarted;
+
+        private void Start()
+        {
+            if (rocket != null && !rocket.Launched)
+                SoundManager.Instance?.PlayBgm("LaunchPanelLoop");
+        }
 
         private void OnEnable()
         {
@@ -31,8 +40,22 @@ namespace Simulation
         private void OnLaunch()
         {
             ClearAudio();
+            launchMusicStarted = true;
+            spaceMusicStarted = false;
+            skyEnvironment = null;
+            foreach (var environment in FindObjectsByType<SkyEnvironment>(FindObjectsSortMode.None))
+            {
+                if (environment.Target == rocket.transform)
+                {
+                    skyEnvironment = environment;
+                    break;
+                }
+            }
             if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayBgm("Launch");
                 spark = SoundManager.Instance.PlaySfx("SparkStart");
+            }
         }
 
         private void OnLiftoff()
@@ -51,9 +74,17 @@ namespace Simulation
         {
             if (rocket == null || !rocket.Launched)
             {
+                if (rocket != null && launchMusicStarted)
+                    SoundManager.Instance?.PlayBgm("LaunchPanelLoop");
+                launchMusicStarted = false;
+                spaceMusicStarted = false;
                 ClearAudio();
                 return;
             }
+
+            if (!spaceMusicStarted && !rocket.FlightStopped && !rocket.Splashed
+                && skyEnvironment != null && skyEnvironment.IsInSpace && SoundManager.Instance != null)
+                spaceMusicStarted = SoundManager.Instance.PlayBgm("ToSpace");
 
             if (rocket.FlightStopped || rocket.Splashed)
             {

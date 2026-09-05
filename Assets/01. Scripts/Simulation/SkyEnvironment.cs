@@ -105,6 +105,9 @@ namespace Simulation
         public float AltitudeKm =>
             target == null ? 0f : (target.position.y - _zeroY) * worldMetersPerUnit * 0.001f;
 
+        public bool IsInSpace => _bound && AltitudeKm >= spaceKm;
+        public Transform Target => target;
+
         private void Awake() => Bind();
 
         /// <summary>발사대 높이를 고도 0 으로 잡고 하늘을 넘겨받는다. EditMode 테스트에서는 Awake 가 돌지 않아 직접 부른다.</summary>
@@ -206,7 +209,7 @@ namespace Simulation
             // 가 필요하고 그 비용이 이 연출값보다 크다. 하늘색 반사가 필요해지면 그때 단계적으로 부른다.
             if (sun != null) sun.intensity = sunIntensity.Evaluate(t);
 
-            bool inSpace = AltitudeKm >= spaceKm;
+            bool inSpace = IsInSpace;
             if (groundRenderer != null) groundRenderer.enabled = !inSpace;
             if (!inSpace) CurveGround();
             // 우주에서 내려다보면 구름 판이 허공에 떠 있는 덩어리로 보인다. 렌더러만 끈다 —

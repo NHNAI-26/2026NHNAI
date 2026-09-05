@@ -7,7 +7,7 @@ namespace Border.Research
     {
         None, SponsorBoost, CleanTelemetry, PublicPressure, NearMissInspection,
         RecoveredPayload, PadDamage, QuietLessons, MediaBacklash, QuietBreakthrough,
-        UsefulFailureData, Whistleblower, FinalProof
+        UsefulFailureData, Whistleblower, FinalProof, FinalFailure
     }
 
     public sealed class LaunchOutcomeEventResult
@@ -103,7 +103,7 @@ namespace Border.Research
             var candidates = new List<LaunchOutcomeEventId>();
             if (mission == LaunchMissionId.LowPowerZoneHold)
             {
-                if (succeeded) candidates.Add(LaunchOutcomeEventId.FinalProof);
+                candidates.Add(succeeded ? LaunchOutcomeEventId.FinalProof : LaunchOutcomeEventId.FinalFailure);
                 return candidates;
             }
             if (succeeded)
@@ -224,14 +224,27 @@ namespace Border.Research
                     description = "관계자가 비공개 실패 기록과 예산 처리에 \"비리 관계 있다\"고 주장했습니다. 후원 기관이 다음 분기 지원을 깎았습니다.";
                     ApplyEventFunds(0, -100, effects);
                     break;
-                default:
+                case LaunchOutcomeEventId.FinalProof:
                     name = "최종 검증 인정";
                     description = "저전력 검증을 통과했습니다. 아르테미스 발사 체계가 최종 인정됐습니다.";
                     effects.Add("효율 검증 통과 · 최종 미션 성공");
                     ApplyEventEngine(target, 10, 5, effects);
                     break;
+                case LaunchOutcomeEventId.FinalFailure:
+                    return CreateFinalFailureOutcomeEvent();
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(id), id, null);
             }
             return new LaunchOutcomeEventResult(id, name, description, string.Join("\n", effects));
+        }
+
+        public static LaunchOutcomeEventResult CreateFinalFailureOutcomeEvent()
+        {
+            return new LaunchOutcomeEventResult(
+                LaunchOutcomeEventId.FinalFailure,
+                "최종 검증 실패",
+                "저전력 검증은 최종 통과 기준에 못 미쳤습니다. 남은 기록은 다음 판단 자료로 넘겨졌습니다.",
+                "최종 미션 실패");
         }
 
         private EnginePresetState FindEventEngine(int[] counts, bool random)

@@ -30,6 +30,9 @@ namespace Border.Research
         private const float FuelJudgementSeconds = 2f;
         private const float OutputJudgementSeconds = 2f;
         private const float CoolingDurationSeconds = 9f;
+        private const float CoolingInitialHeat = 0.4f;
+        private const float CoolingHeatPerSecond = 0.1f;
+        private const float CoolingHeatPerTargetRotation = 1.2f;
         private const float NoInputReactionSeconds = 9f;
         private const float PerfectJudgementThreshold = 0.02f;
         private const float GreatJudgementThreshold = 0.08f;
@@ -86,8 +89,10 @@ namespace Border.Research
         private float fuelGaugeValue;
         private float fuelFillDuration;
         private float fuelHoldSeconds;
+        // Calibrates cooling per turn; reaching this rotation never ends the game early.
         private float coolingTargetDegrees;
         private float coolingDegrees;
+        private float coolingHeat;
         private bool coolingDragging;
         private bool coolingHasAngle;
         private float coolingPreviousAngle;
@@ -228,6 +233,7 @@ namespace Border.Research
         public float GetFuelDurationForTests() => fuelFillDuration;
         public float GetCoolingTargetForTests() => coolingTargetDegrees;
         public float GetCoolingDegreesForTests() => coolingDegrees;
+        public float GetCoolingHeatForTests() => coolingHeat;
         public float GetOutputTargetForTests() => outputTargetValue;
         public float GetOutputCursorForTests() => outputGaugeValue;
 
@@ -322,10 +328,9 @@ namespace Border.Research
             return error <= GoodJudgementThreshold ? "Good" : "Miss";
         }
 
-        public static int CalculateCoolingScore(float elapsed, bool reachedTarget)
+        public static int CalculateCoolingScore(float heat)
         {
-            if (!reachedTarget || elapsed >= CoolingDurationSeconds) return 0;
-            return Mathf.RoundToInt(80f + 20f * (1f - Mathf.Clamp01(elapsed / CoolingDurationSeconds)));
+            return Mathf.RoundToInt(100f * (1f - Mathf.Clamp01(heat)));
         }
 
         public static int CalculateOutputAttemptScore(float cursor, float target)
@@ -390,6 +395,11 @@ namespace Border.Research
                 return;
             }
 
+            if (statId == EngineStatId.Cooling)
+            {
+                float activeSeconds = Mathf.Min(deltaSeconds, Mathf.Max(0f, CoolingDurationSeconds - elapsedSeconds));
+                coolingHeat = Mathf.Clamp01(coolingHeat + activeSeconds * CoolingHeatPerSecond);
+            }
             elapsedSeconds += deltaSeconds;
             roundElapsedSeconds += deltaSeconds;
             UpdateTimerText();
@@ -418,9 +428,10 @@ namespace Border.Research
 
             UpdateActiveGame(deltaSeconds);
 
-            if (!gameCompleted && statId == EngineStatId.Cooling && elapsedSeconds >= CoolingDurationSeconds)
+            if (!gameCompleted && statId == EngineStatId.Cooling
+                && (coolingHeat >= 1f || elapsedSeconds >= CoolingDurationSeconds))
             {
-                Complete(0);
+                Complete(CalculateCoolingScore(coolingHeat));
             }
         }
 
@@ -604,6 +615,7 @@ namespace Border.Research
             fuelGaugeValue = 0f;
             fuelHoldSeconds = 0f;
             coolingDegrees = 0f;
+            coolingHeat = CoolingInitialHeat;
             coolingDragging = false;
             coolingHasAngle = false;
             outputGaugeValue = 0f;
@@ -633,7 +645,7 @@ namespace Border.Research
                     BuildFuelGame();
                     break;
                 case EngineStatId.Cooling:
-                    instructionText.text = "완전히 빨개지기 전에 밸브를 시계 방향으로 돌리세요.";
+                    instructionText.text = "시간이 끝날 때까지 핸들을 시계 방향으로 돌려 파이프를 식히세요.";
                     BuildCoolingGame();
                     break;
                 case EngineStatId.MaxOutput:
@@ -665,6 +677,7 @@ namespace Border.Research
             primaryButton.gameObject.SetActive(false);
             coolingTargetDegrees = NextFloat(CoolingMinimumTurns, CoolingMaximumTurns) * 360f;
             coolingDegrees = 0f;
+            coolingHeat = CoolingInitialHeat;
             coolingDragging = false;
             coolingHasAngle = false;
             coolingValveImage.rectTransform.localRotation = Quaternion.identity;
@@ -692,10 +705,10 @@ namespace Border.Research
             SetupOutputStage();
             primaryButton.gameObject.SetActive(true);
             primaryButton.interactable = true;
-            primaryButton.onClick.RemoveAllListeners();
-            RemovePointerHandlers(primaryButton.gameObject);
+            Border.UI.UISelectableSoundHook.ClearListeners(primaryButton);
+            ClearPointerHandlers(primaryButton.gameObject);
             primaryButton.GetComponentInChildren<TMP_Text>().text = "출력 고정";
-            primaryButton.onClick.AddListener(RecordOutputStage);
+            AddPointer(primaryButton.gameObject, EventTriggerType.PointerDown, RecordOutputStage);
             ClearPointerHandlers(outputGameGroup.gameObject);
             AddPointer(outputGameGroup.gameObject, EventTriggerType.PointerDown, RecordOutputStage);
         }
@@ -709,7 +722,7 @@ namespace Border.Research
             {
                 int igniterIndex = i;
                 Button button = ignitionButtons[i];
-                button.onClick.RemoveAllListeners();
+                Border.UI.UISelectableSoundHook.ClearListeners(button);
                 TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
                 if (label != null)
                 {
@@ -756,11 +769,10 @@ namespace Border.Research
 
         private void UpdateCoolingGame()
         {
-            float heat = Mathf.Clamp01(elapsedSeconds / CoolingDurationSeconds);
-            coolingPipeMaterial.SetFloat("_Heat", heat);
+            coolingPipeMaterial.SetFloat("_Heat", coolingHeat);
             coolingValveMaterial.SetFloat("_Heat", 0f);
-            coolingProgressText.text = $"회전 {Mathf.RoundToInt(100f * coolingDegrees / coolingTargetDegrees)}% / 과열 {Mathf.RoundToInt(heat * 100f)}%";
-            SetStateText($"회전 {coolingDegrees / 360f:0.0} / {coolingTargetDegrees / 360f:0.0}바퀴 · 시계 방향", false);
+            coolingProgressText.text = $"과열 {Mathf.FloorToInt(coolingHeat * 100f)}%";
+            SetStateText($"회전 {coolingDegrees / 360f:0.0}바퀴", false);
         }
 
         private void UpdateOutputGame()
@@ -898,10 +910,10 @@ namespace Border.Research
         private void DragValveLocal(Vector2 position)
         {
             if (!coolingDragging || gameCompleted || statId != EngineStatId.Cooling) return;
-            if (elapsedSeconds >= CoolingDurationSeconds) { Complete(0); return; }
+            if (elapsedSeconds >= CoolingDurationSeconds) return;
             Rect rect = coolingValveImage.rectTransform.rect;
             float deadZone = Mathf.Min(rect.width, rect.height) * ValveCenterDeadZone;
-            if (position.sqrMagnitude < deadZone * deadZone)
+            if (position.sqrMagnitude <= deadZone * deadZone)
             {
                 coolingHasAngle = false;
                 return;
@@ -909,13 +921,16 @@ namespace Border.Research
             float angle = Mathf.Atan2(position.y, position.x) * Mathf.Rad2Deg;
             if (coolingHasAngle)
             {
-                coolingDegrees = Mathf.Clamp(coolingDegrees + Mathf.DeltaAngle(angle, coolingPreviousAngle), 0f, coolingTargetDegrees);
+                float previousDegrees = coolingDegrees;
+                coolingDegrees = Mathf.Max(0f, coolingDegrees + Mathf.DeltaAngle(angle, coolingPreviousAngle));
+                float rotation = coolingDegrees - previousDegrees;
+                coolingHeat = Mathf.Clamp01(coolingHeat - rotation / coolingTargetDegrees * CoolingHeatPerTargetRotation);
                 coolingValveImage.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -coolingDegrees);
             }
             coolingPreviousAngle = angle;
             coolingHasAngle = true;
             UpdateCoolingGame();
-            if (coolingDegrees >= coolingTargetDegrees) Complete(CalculateCoolingScore(elapsedSeconds, true));
+            if (coolingHeat >= 1f) Complete(0);
         }
 
         private void RecordOutputStage()
@@ -929,6 +944,8 @@ namespace Border.Research
             }
 
             if (roundElapsedSeconds >= OutputDurationSeconds) { RecordMissedOutputStage(); return; }
+            // Freeze the position the player saw on pointer-down, before judgement animation starts.
+            SetOutputCursor();
             float error = Mathf.Abs(outputGaugeValue - outputTargetValue);
             outputErrors[outputStageIndex] = error;
             outputStageIndex++;
@@ -1064,7 +1081,7 @@ namespace Border.Research
             switch (statId)
             {
                 case EngineStatId.FuelCapacity: return AverageFuelScore();
-                case EngineStatId.Cooling: return CalculateCoolingScore(elapsedSeconds, coolingDegrees >= coolingTargetDegrees);
+                case EngineStatId.Cooling: return CalculateCoolingScore(coolingHeat);
                 case EngineStatId.MaxOutput: return CalculateMaxOutputScore(outputErrors);
                 case EngineStatId.IgnitionReliability:
                     float average = ignitionTotalInputs == 0 ? NoInputReactionSeconds : ignitionReactionTotal / ignitionTotalInputs;
@@ -1096,13 +1113,17 @@ namespace Border.Research
             instructionText.text = "개발 결과를 확인하세요.";
             SetActiveGameGroup(resultGroup);
             resultScoreText.text = $"{ResearchPrototypeModel.GetStatDisplayName(statId)} 개발 {GetEvaluationText(pendingResult.Score)}";
+            if (statId == EngineStatId.Cooling && coolingHeat >= 1f)
+            {
+                resultScoreText.text = "과열 · 게임오버";
+            }
             resultDetailText.text = BuildResultDetailText();
             PlayResultFeedback();
 
             stateText.text = "개발 완료. 곧 연구 화면으로 돌아갑니다.";
             primaryButton.gameObject.SetActive(true);
             primaryButton.interactable = true;
-            primaryButton.onClick.RemoveAllListeners();
+            Border.UI.UISelectableSoundHook.ClearListeners(primaryButton);
             RemovePointerHandlers(primaryButton.gameObject);
             primaryButton.GetComponentInChildren<TMP_Text>().text = "결과 닫기";
             primaryButton.onClick.AddListener(DismissResult);

@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Reflection;
+using System.Collections;
+using Border.Audio;
+using Border.Prologue;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -19,10 +22,16 @@ namespace Border.Research
         private const float DesignTransitionDelaySeconds = 1f;
         private const float WaitFadeOutSeconds = 0.18f;
         private const float WaitFadeInSeconds = 0.22f;
+        private const float FundsFeedbackHighlightSeconds = 0.25f;
+        private const float FundsFeedbackRestoreSeconds = 0.35f;
+        private const float FundsIncreaseScaleMultiplier = 1.15f;
         private const string ResearchCinemachineCameraName = "Research Cinemachine Camera";
         private const int ResearchCinemachineCameraPriority = 20;
+        private static readonly Color FundsIncreaseColor = new Color32(91, 214, 123, 255);
+        private static readonly Color FundsDecreaseColor = new Color32(239, 91, 91, 255);
 
         [SerializeField] private GameObject operationScreenPrefab;
+        [SerializeField] private SoundManager soundManagerPrefab;
         [SerializeField] private Button enginePresetCardPrefab;
         [SerializeField] private ResearchResultReportController resultReport;
         [SerializeField] private ResearchEndingController endingScreen;
@@ -52,6 +61,7 @@ namespace Border.Research
         private ResearchMiniGameController activeMiniGameController;
         private Sequence designTransitionSequence;
         private Sequence waitFadeSequence;
+        private Sequence fundsFeedbackSequence;
         private Tween researchCameraDriftTween;
         private Tween researchCameraReturnTween;
         private Quaternion researchCameraBaseLocalRotation;
@@ -62,6 +72,11 @@ namespace Border.Research
         private bool partDevelopmentOpen;
         private bool closingPartDevelopment;
         private bool focusedResearchSelected;
+        private bool hasRenderedFunds;
+        private bool hasFundsBaseVisual;
+        private int lastRenderedFunds;
+        private Color fundsBaseColor;
+        private Vector3 fundsBaseScale;
 
         private readonly Button[] statButtons = new Button[StatCount];
         private readonly TMP_Text[] statRowLabels = new TMP_Text[StatCount];
@@ -144,6 +159,16 @@ namespace Border.Research
             }
         }
 
+        private IEnumerator Start()
+        {
+            var prologue = FindFirstObjectByType<PrologueController>();
+            while (prologue != null && prologue.gameObject.activeInHierarchy)
+                yield return null;
+
+            if (initialized && RequestedScreenName == ResearchFlowSession.ResearchScreenName)
+                SoundManager.Instance?.PlayBgm("EngineBGM");
+        }
+
         private void OnDisable()
         {
             if (visibilityDialog != null) visibilityDialog.Hide();
@@ -155,6 +180,7 @@ namespace Border.Research
             {
                 KillWaitFade();
                 KillDesignTransition();
+                KillFundsFeedback();
                 KillResearchCameraDrift(resetRotation: true);
                 HideEnginePreview();
             }
@@ -202,6 +228,11 @@ namespace Border.Research
             }
 
             initialized = true;
+            if (Application.isPlaying)
+            {
+                if (SoundManager.Instance == null && soundManagerPrefab != null)
+                    Instantiate(soundManagerPrefab);
+            }
             Refresh();
             PlayResearchEntryAnimation(PanelGroup.Hub);
         }
@@ -288,6 +319,7 @@ namespace Border.Research
             detailColumnRoot = FindChildRectTransform(canvasTransform, "DetailColumn")?.gameObject;
             dateText = FindRequiredText(canvasTransform, "Date");
             fundsText = FindRequiredText(canvasTransform, "Funds");
+            CaptureFundsBaseVisual();
             selectedEngineNameText = FindRequiredText(canvasTransform, "SelectedEngineName");
             selectedEnginePerformanceText = FindRequiredText(canvasTransform, "SelectedEnginePerformance");
             selectedEngineInstallCostText = FindRequiredText(canvasTransform, "SelectedEngineInstallCost");
@@ -469,12 +501,12 @@ namespace Border.Research
                     return new EngineCardView(null, null, null);
                 }
 
-                button.onClick.RemoveAllListeners();
+                Border.UI.UISelectableSoundHook.ClearListeners(button);
                 return BindEngineCardButton(button, title, detail, config.Id);
             }
 
             ConfigureCardButton(button, 46f, out TMP_Text existingTitle, out TMP_Text existingDetail);
-            button.onClick.RemoveAllListeners();
+            Border.UI.UISelectableSoundHook.ClearListeners(button);
             return BindEngineCardButton(button, existingTitle, existingDetail, config.Id);
         }
 
@@ -572,7 +604,8 @@ namespace Border.Research
             session.ClearPendingDesignEntry();
             if (model.HasGameEnded)
             {
-                ShowEndingScreen();
+                session.QueueDeadlineFailureReportIfNeeded();
+                Refresh();
                 return;
             }
             canvasTransform.gameObject.SetActive(true);
@@ -590,11 +623,6 @@ namespace Border.Research
             }
 
             selectedMission = model.GetCurrentMission();
-            if (selectedMission == LaunchMissionId.LowPowerZoneHold)
-            {
-                if (ConfirmDesignEntry(selectedMission, selectedEnginePreset, TestVisibility.FinalMission) != ResearchActionResult.Success) Refresh();
-                return;
-            }
             if (visibilityDialog == null)
             {
                 Debug.LogError("Research test visibility dialog must be assigned in the scene.", this);
@@ -666,6 +694,7 @@ namespace Border.Research
         private void Refresh()
         {
             if (resultReport != null && resultReport.gameObject.activeSelf) return;
+            session.QueueDeadlineFailureReportIfNeeded();
             if (session.HasUnacknowledgedLaunchResult)
             {
                 ShowResultReport(session.LastLaunchResult);
@@ -685,9 +714,7 @@ namespace Border.Research
             if (model.ActiveEnginePresetCount > 0) ShowEnginePreview();
             else HideEnginePreview();
             dateText.text = $"{model.Year}.Q{model.Quarter} / 남은 분기 : {model.RemainingTurns}";
-            // 다음 분기 예산은 자기 노드를 잃고 보유 자금 텍스트의 둘째 줄이 됐다 — 프리팹에
-            // "QuarterlyFunding" 노드가 더는 없으므로 여기서 찾으면 화면 초기화가 실패한다.
-            fundsText.text = $"보유 자금 : {model.Funds} $\n다음 분기 : {model.QuarterlyFunding:+#;-#;0} $";
+            RefreshFundsText();
 
             foreach (EnginePresetConfig config in ResearchPrototypeModel.GetEnginePresetConfigs())
             {
@@ -823,6 +850,7 @@ namespace Border.Research
 
         private void ShowDesignScreen()
         {
+            if (Application.isPlaying) SoundManager.Instance?.PlayBgm("LaunchPanelLoop");
             RequestedScreenName = ResearchFlowSession.DesignScreenName;
             isTransitioningToDesign = false;
             KillResearchCameraDrift(resetRotation: true);
@@ -877,6 +905,7 @@ namespace Border.Research
             }
 
             RequestedScreenName = ResearchFlowSession.ResearchScreenName;
+            if (Application.isPlaying) SoundManager.Instance?.PlayBgm("EngineBGM");
             isTransitioningToDesign = false;
             // A hard reset back to the hub, not an animated close — the canvas is still off at this point.
             closingPartDevelopment = false;
@@ -896,6 +925,16 @@ namespace Border.Research
 
         private void ShowResultReport(ResearchLaunchResultData result)
         {
+            ShowResultReport(result, null);
+        }
+
+        public void ShowLaunchResultOverlay(ResearchLaunchResultData result, Action afterReports)
+        {
+            ShowResultReport(result, afterReports);
+        }
+
+        private void ShowResultReport(ResearchLaunchResultData result, Action afterReports)
+        {
             if (resultReport == null)
             {
                 Debug.LogError("Research result report prefab must be assigned in the scene.", this);
@@ -909,6 +948,7 @@ namespace Border.Research
             }
 
             RequestedScreenName = "ResultReport";
+            if (Application.isPlaying) SoundManager.Instance?.StopBgm();
             if (canvasTransform != null) canvasTransform.gameObject.SetActive(false);
             HideEnginePreview();
             HideResearchLab();
@@ -918,7 +958,25 @@ namespace Border.Research
                 session.AcknowledgeLaunchResult();
                 if (model.HasGameEnded)
                 {
+                    if (session.QueueDeadlineFailureReportIfNeeded())
+                    {
+                        ShowResultReport(session.LastLaunchResult, afterReports);
+                        return;
+                    }
+
+                    if (afterReports != null)
+                    {
+                        afterReports();
+                        return;
+                    }
+
                     ShowEndingScreen();
+                    return;
+                }
+
+                if (afterReports != null)
+                {
+                    afterReports();
                     return;
                 }
 
@@ -936,6 +994,7 @@ namespace Border.Research
             }
             if (endingScreen.gameObject.activeSelf) return;
             RequestedScreenName = "Ending";
+            if (Application.isPlaying) SoundManager.Instance?.StopBgm();
             if (canvasTransform != null)
             {
                 canvasTransform.gameObject.SetActive(false);
@@ -956,6 +1015,8 @@ namespace Border.Research
             if (visibilityDialog != null) visibilityDialog.Hide();
             KillDesignTransition();
             KillWaitFade();
+            KillFundsFeedback();
+            hasRenderedFunds = false;
             isTransitioningToDesign = false;
             focusedResearchSelected = false;
             closingPartDevelopment = false;
@@ -967,6 +1028,103 @@ namespace Border.Research
             selectedEnginePreset = EnginePresetId.Engine01;
             selectedStat = EngineStatId.FuelCapacity;
             selectedMission = model.GetCurrentMission();
+        }
+
+        private void CaptureFundsBaseVisual()
+        {
+            if (fundsText == null)
+            {
+                return;
+            }
+
+            fundsBaseColor = fundsText.color;
+            fundsBaseScale = fundsText.rectTransform.localScale;
+            hasFundsBaseVisual = true;
+            hasRenderedFunds = false;
+        }
+
+        private void RefreshFundsText()
+        {
+            int currentFunds = model.Funds;
+            bool fundsChanged = hasRenderedFunds && currentFunds != lastRenderedFunds;
+            bool increased = currentFunds > lastRenderedFunds;
+
+            // 다음 분기 예산은 자기 노드를 잃고 보유 자금 텍스트의 둘째 줄이 됐다 — 프리팹에
+            // "QuarterlyFunding" 노드가 더는 없으므로 여기서 찾으면 화면 초기화가 실패한다.
+            fundsText.text = $"보유 자금 : {currentFunds} $\n다음 분기 : {model.QuarterlyFunding:+#;-#;0} $";
+            lastRenderedFunds = currentFunds;
+
+            if (!hasRenderedFunds)
+            {
+                hasRenderedFunds = true;
+                return;
+            }
+
+            if (fundsChanged)
+            {
+                PlayFundsFeedback(increased);
+            }
+        }
+
+        private void PlayFundsFeedback(bool increased)
+        {
+            if (!hasFundsBaseVisual || fundsText == null)
+            {
+                return;
+            }
+
+            KillFundsFeedback();
+            Color highlightColor = increased ? FundsIncreaseColor : FundsDecreaseColor;
+            fundsFeedbackSequence = DOTween.Sequence()
+                .SetTarget(this)
+                .Append(DOTween.To(() => fundsText.color, value => fundsText.color = value,
+                    highlightColor, FundsFeedbackHighlightSeconds).SetEase(Ease.OutCubic));
+
+            if (increased)
+            {
+                fundsFeedbackSequence.Join(fundsText.rectTransform
+                    .DOScale(fundsBaseScale * FundsIncreaseScaleMultiplier, FundsFeedbackHighlightSeconds)
+                    .SetEase(Ease.OutCubic));
+            }
+
+            fundsFeedbackSequence
+                .Append(DOTween.To(() => fundsText.color, value => fundsText.color = value,
+                    fundsBaseColor, FundsFeedbackRestoreSeconds).SetEase(Ease.InOutSine));
+
+            if (increased)
+            {
+                fundsFeedbackSequence.Join(fundsText.rectTransform
+                    .DOScale(fundsBaseScale, FundsFeedbackRestoreSeconds)
+                    .SetEase(Ease.InOutSine));
+            }
+
+            fundsFeedbackSequence.OnComplete(() =>
+            {
+                RestoreFundsBaseVisual();
+                fundsFeedbackSequence = null;
+            });
+        }
+
+        private void KillFundsFeedback()
+        {
+            if (fundsFeedbackSequence != null)
+            {
+                fundsFeedbackSequence.Kill();
+                fundsFeedbackSequence = null;
+            }
+
+            RestoreFundsBaseVisual();
+        }
+
+        private void RestoreFundsBaseVisual()
+        {
+            if (!hasFundsBaseVisual || fundsText == null)
+            {
+                return;
+            }
+
+            fundsText.color = fundsBaseColor;
+            fundsText.rectTransform.localScale = fundsBaseScale;
         }
 
         /// <summary>
@@ -1306,6 +1464,23 @@ namespace Border.Research
         {
             return isTransitioningToDesign;
         }
+
+#if UNITY_EDITOR
+        public bool IsFundsFeedbackActiveForTests()
+        {
+            return fundsFeedbackSequence != null && fundsFeedbackSequence.IsActive();
+        }
+
+        public void GotoFundsFeedbackForTests(float elapsedSeconds)
+        {
+            fundsFeedbackSequence?.Goto(elapsedSeconds, false);
+        }
+
+        public void CompleteFundsFeedbackForTests()
+        {
+            fundsFeedbackSequence?.Complete(true);
+        }
+#endif
 
         public void CompleteDesignTransitionForTests()
         {

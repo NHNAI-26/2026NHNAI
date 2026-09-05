@@ -33,7 +33,7 @@ namespace Border.Research
 
             bool succeeded = result.Grade <= ResearchGrade.B;
             LaunchResultMedium medium = ResolveMedium(result);
-            string heading = CreateHeading(result, succeeded);
+            string heading = CreateHeading(result, resolvedMissionName, succeeded, medium);
             string edition = CreateEdition(result, medium);
             string body = CreateBody(result, resolvedMissionName, succeeded, medium);
             string effects = CreateEffects(result);
@@ -43,47 +43,34 @@ namespace Border.Research
 
         public static LaunchResultMedium ResolveMedium(ResearchLaunchResultData result)
         {
-            if (result.Visibility == TestVisibility.FinalMission || result.FinalMissionWon)
+            if (result.MissionId == LaunchMissionId.LowPowerZoneHold || result.FinalMissionWon)
             {
                 return LaunchResultMedium.Newspaper;
             }
 
-            if (result.OutcomeEvent != null && TryResolveEventMedium(result.OutcomeEvent.Id, out LaunchResultMedium eventMedium))
+            if (result.Visibility == TestVisibility.Private
+                && result.OutcomeEvent?.Id == LaunchOutcomeEventId.Whistleblower)
             {
-                return eventMedium;
+                return LaunchResultMedium.Newspaper;
             }
 
             return result.Visibility == TestVisibility.Private ? LaunchResultMedium.Mail : LaunchResultMedium.Newspaper;
         }
 
-        private static bool TryResolveEventMedium(LaunchOutcomeEventId id, out LaunchResultMedium medium)
+        private static string CreateHeading(
+            ResearchLaunchResultData result,
+            string missionName,
+            bool succeeded,
+            LaunchResultMedium medium)
         {
-            switch (id)
+            if (medium == LaunchResultMedium.Mail)
             {
-                case LaunchOutcomeEventId.FinalProof:
-                case LaunchOutcomeEventId.Whistleblower:
-                case LaunchOutcomeEventId.SponsorBoost:
-                case LaunchOutcomeEventId.PublicPressure:
-                case LaunchOutcomeEventId.MediaBacklash:
-                case LaunchOutcomeEventId.PadDamage:
-                    medium = LaunchResultMedium.Newspaper;
-                    return true;
-                case LaunchOutcomeEventId.CleanTelemetry:
-                case LaunchOutcomeEventId.NearMissInspection:
-                case LaunchOutcomeEventId.RecoveredPayload:
-                case LaunchOutcomeEventId.QuietLessons:
-                case LaunchOutcomeEventId.QuietBreakthrough:
-                case LaunchOutcomeEventId.UsefulFailureData:
-                    medium = LaunchResultMedium.Mail;
-                    return true;
-                default:
-                    medium = LaunchResultMedium.Newspaper;
-                    return false;
+                string subject = result.OutcomeEvent == null
+                    ? succeeded ? "성공 판정" : result.Grade == ResearchGrade.C ? "부분 성공 판정" : "실패 판정"
+                    : CreateMailSubject(result.OutcomeEvent.Id, result.OutcomeEvent.Name);
+                return $"[시험 결과] {missionName} - {subject}";
             }
-        }
 
-        private static string CreateHeading(ResearchLaunchResultData result, bool succeeded)
-        {
             LaunchOutcomeEventResult outcomeEvent = result.OutcomeEvent;
             if (outcomeEvent == null)
             {
@@ -116,15 +103,38 @@ namespace Border.Research
                     return "관계자, \"비리 관계 있다\" 밝혀";
                 case LaunchOutcomeEventId.FinalProof:
                     return "적게 태우고, 끝내 증명했다";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "끝내 낮은 불꽃은 달에 닿지 못했다";
                 default:
                     return succeeded ? "발사 성공 확인" : "발사 실패 확인";
+            }
+        }
+
+        private static string CreateMailSubject(LaunchOutcomeEventId id, string fallback)
+        {
+            switch (id)
+            {
+                case LaunchOutcomeEventId.CleanTelemetry:
+                    return "정상 비행 데이터 확보";
+                case LaunchOutcomeEventId.NearMissInspection:
+                    return "추락 현장 점검 결과";
+                case LaunchOutcomeEventId.RecoveredPayload:
+                    return "탑재 장비 회수 결과";
+                case LaunchOutcomeEventId.QuietLessons:
+                    return "비공개 시험 분석 결과";
+                case LaunchOutcomeEventId.QuietBreakthrough:
+                    return "비공개 성능 개선 확인";
+                case LaunchOutcomeEventId.UsefulFailureData:
+                    return "실패 비행 데이터 분석 결과";
+                default:
+                    return string.IsNullOrWhiteSpace(fallback) ? "시험 결과 보고" : fallback;
             }
         }
 
         private static string CreateEdition(ResearchLaunchResultData result, LaunchResultMedium medium)
         {
             string date = $"{result.Year}년 {result.Quarter}분기";
-            if (result.FinalMissionWon)
+            if (result.FinalMissionWon || result.OutcomeEvent?.Id == LaunchOutcomeEventId.FinalFailure)
             {
                 return $"{date} 특별호";
             }
@@ -134,7 +144,7 @@ namespace Border.Research
                 return $"{date} 내부 메일";
             }
 
-            string publication = result.Visibility == TestVisibility.Private ? "연구소 내부 회보" : "정규판";
+            string publication = result.OutcomeEvent?.Id == LaunchOutcomeEventId.Whistleblower ? "특종" : "정규판";
             return $"{date} {publication}";
         }
 
@@ -149,13 +159,50 @@ namespace Border.Research
         {
             string article = succeeded
                 ? $"{missionName} 시험이 성공했다."
+                : result.OutcomeEvent?.Id == LaunchOutcomeEventId.FinalFailure && result.DeadlineMissed
+                    ? $"{result.Year}년 {result.Quarter}분기 마감까지 {missionName}을 통과하지 못했다."
                 : CreateFailedBodyLead(result, missionName);
-            if (result.OutcomeEvent == null || string.IsNullOrWhiteSpace(result.OutcomeEvent.Description))
+            if (result.OutcomeEvent == null)
             {
                 return article + " 추가 사건은 기록되지 않았다.";
             }
 
-            return article + " " + result.OutcomeEvent.Description;
+            return article + " " + CreateNewspaperEventParagraph(result.OutcomeEvent.Id, result.OutcomeEvent.Description);
+        }
+
+        private static string CreateNewspaperEventParagraph(LaunchOutcomeEventId id, string fallback)
+        {
+            switch (id)
+            {
+                case LaunchOutcomeEventId.SponsorBoost:
+                    return "공개 발사 뒤 후원 기관들이 잇달아 지원 의사를 밝혔다. 기술 설명보다 예산 회의가 먼저 잡혔다.";
+                case LaunchOutcomeEventId.CleanTelemetry:
+                    return "비행 기록은 보기 드물게 깨끗했다. 연구진은 실패 원인 대신 다음 개선 목록을 작성했다.";
+                case LaunchOutcomeEventId.PublicPressure:
+                    return "성공 축하가 끝나기도 전에 다음 발사 일정을 묻는 요구가 이어졌다.";
+                case LaunchOutcomeEventId.NearMissInspection:
+                    return "추락 지점에서 설계 결함 하나가 또렷하게 드러났다. 사고는 났지만 점검 방향은 잡혔다.";
+                case LaunchOutcomeEventId.RecoveredPayload:
+                    return "로켓은 뜨지 못했지만 탑재 장비는 온전히 회수됐다. 실패 현장에서 다음 시도 비용을 건졌다.";
+                case LaunchOutcomeEventId.PadDamage:
+                    return "발사는 짧았고 견적서는 길었다. 시설팀은 로켓보다 발사대를 먼저 살폈다.";
+                case LaunchOutcomeEventId.QuietLessons:
+                    return "외부에 알려지지 않은 시험에서 의미 있는 데이터가 확보됐다.";
+                case LaunchOutcomeEventId.MediaBacklash:
+                    return "실패 장면이 대중에 그대로 공개됐다. 후원 기관들은 박수 대신 예산 검토표를 꺼냈다.";
+                case LaunchOutcomeEventId.QuietBreakthrough:
+                    return "공식 발표는 없었지만 성능 지표가 개선됐다. 연구팀은 다음 설계를 수정했다.";
+                case LaunchOutcomeEventId.UsefulFailureData:
+                    return "실패 순간 평소에는 보이지 않던 흔들림이 기록됐다. 실패했지만 빈손은 아니었다.";
+                case LaunchOutcomeEventId.Whistleblower:
+                    return "관계자가 비공개 실패 기록과 예산 처리에 비리가 있다고 주장했다. 후원 기관은 다음 분기 지원을 삭감했다.";
+                case LaunchOutcomeEventId.FinalProof:
+                    return "저전력 검증을 통과하며 아르테미스 발사 체계가 최종 인정을 받았다.";
+                case LaunchOutcomeEventId.FinalFailure:
+                    return "저전력 검증은 최종 통과 기준에 미치지 못했다. 남은 기록은 다음 판단 자료로 넘겨졌다.";
+                default:
+                    return string.IsNullOrWhiteSpace(fallback) ? "추가 사건은 기록되지 않았다." : fallback;
+            }
         }
 
         private static string CreateMailBody(ResearchLaunchResultData result, string missionName, bool succeeded)
@@ -182,7 +229,7 @@ namespace Border.Research
 
         private static string CreateEffects(ResearchLaunchResultData result)
         {
-            string label = result.Visibility == TestVisibility.FinalMission ? "기본 보상" : "테스트 정산";
+            string label = result.MissionId == LaunchMissionId.LowPowerZoneHold ? "기본 보상" : "테스트 정산";
             string baseEffects = $"{label}: 즉시 지원금 {FormatSigned(result.ImmediateFunding)} / 분기 연구비 {FormatSigned(result.QuarterlyFundingDelta)}";
             if (result.OutcomeEvent == null || string.IsNullOrWhiteSpace(result.OutcomeEvent.EffectsText))
             {

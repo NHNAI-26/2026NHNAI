@@ -133,7 +133,7 @@ namespace Border.Research.Tests
             int oldStat = model.GetEnginePreset(EnginePresetId.Engine01).Cooling;
             model.ExecuteEngineResearch(EnginePresetId.Engine01, EngineStatId.Cooling, false, 100);
             Assert.That(model.GetEnginePreset(EnginePresetId.Engine01).Cooling, Is.EqualTo(oldStat + 7));
-            var entry = model.CreateDesignEntry(model.GetCurrentMission(), EnginePresetId.Engine01, new int[10], 50, TestVisibility.FinalMission);
+            var entry = model.CreateDesignEntry(model.GetCurrentMission(), EnginePresetId.Engine01, new int[10], 50, TestVisibility.Public);
             session.StoreDesignEntry(entry);
             Assert.That(session.TryBeginPendingDesignLaunch(), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(session.CompleteActiveLaunch(true, out var result), Is.EqualTo(ResearchActionResult.Success));
@@ -153,7 +153,7 @@ namespace Border.Research.Tests
             PrepareFinalEngine(model);
             var counts = new int[10];
             counts[0] = 1;
-            var entry = model.CreateDesignEntry(LaunchMissionId.LowPowerZoneHold, EnginePresetId.Engine01, counts, 100, TestVisibility.FinalMission);
+            var entry = model.CreateDesignEntry(LaunchMissionId.LowPowerZoneHold, EnginePresetId.Engine01, counts, 100, TestVisibility.Public);
             Assert.That(model.CommitLaunch(entry, out var result), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(result.Grade, Is.EqualTo(grade));
             Assert.That(result.FinalMissionWon, Is.EqualTo(won));
@@ -185,7 +185,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void Operation_LastResearchShowsMiniGameResultBeforeEnding()
+        public void Operation_LastResearchShowsFinalFailureReportBeforeEnding()
         {
             CreateOperation();
             operation.Model.CreateNewEnginePreset(out _);
@@ -197,7 +197,11 @@ namespace Border.Research.Tests
             Assert.That(ending.gameObject.activeSelf, Is.False);
             Assert.That(operation.Model.HasGameEnded, Is.False);
             game.ForceDismissForTests();
-            Assert.That(operation.RequestedScreenName, Is.EqualTo("Ending"));
+            Assert.That(operation.RequestedScreenName, Is.EqualTo("ResultReport"));
+            Assert.That(report.gameObject.activeSelf, Is.True);
+            Assert.That(ending.gameObject.activeSelf, Is.False);
+            Assert.That(ResearchFlowSession.GetOrCreate().LastLaunchResult.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.FinalFailure));
+            Invoke(report, "Respond");
             Assert.That(ending.gameObject.activeSelf, Is.True);
         }
 
@@ -214,13 +218,16 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void Operation_LastWaitShowsEndingAndRestartReusesScreens()
+        public void Operation_LastWaitShowsFinalFailureReportAndRestartReusesScreens()
         {
             CreateOperation();
             WaitUntilLastQuarter(operation.Model);
             FindButton(host, "WaitQuarterButton").onClick.Invoke();
-            Assert.That(ending.gameObject.activeSelf, Is.True);
+            Assert.That(report.gameObject.activeSelf, Is.True);
+            Assert.That(ending.gameObject.activeSelf, Is.False);
+            Assert.That(ResearchFlowSession.GetOrCreate().LastLaunchResult.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.FinalFailure));
             ResearchPrototypeModel old = operation.Model;
+            Invoke(report, "Respond");
             Button restart = FindButton(ending.gameObject, "RestartButton");
             restart.onClick.Invoke();
             ResearchPrototypeModel fresh = operation.Model;
@@ -234,7 +241,7 @@ namespace Border.Research.Tests
         }
 
         [Test]
-        public void Operation_FinalLaunchShowsReportBeforeEndingWithoutDuplicateRewards()
+        public void Operation_FinalLaunchShowsResultThenFinalFailureReportBeforeEndingWithoutDuplicateRewards()
         {
             CreateOperation();
             operation.Model.CreateNewEnginePreset(out _);
@@ -247,6 +254,10 @@ namespace Border.Research.Tests
             Assert.That(report.gameObject.activeSelf, Is.True);
             Assert.That(ending.gameObject.activeSelf, Is.False);
             Invoke(report, "Respond");
+            Invoke(report, "Respond");
+            Assert.That(report.gameObject.activeSelf, Is.True);
+            Assert.That(ending.gameObject.activeSelf, Is.False);
+            Assert.That(session.LastLaunchResult.OutcomeEvent.Id, Is.EqualTo(LaunchOutcomeEventId.FinalFailure));
             Invoke(report, "Respond");
             Assert.That(ending.gameObject.activeSelf, Is.True);
             Assert.That(report.gameObject.activeSelf, Is.False);
@@ -262,6 +273,25 @@ namespace Border.Research.Tests
             Invoke(report, "Respond");
             Assert.That(callbacks, Is.EqualTo(1));
             Assert.That(operation.Model.Funds, Is.EqualTo(funds));
+        }
+
+        [Test]
+        public void LaunchResultOverlay_WaitsForDismissalBeforeInvokingStageContinuation()
+        {
+            CreateOperation();
+            ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
+            session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
+            session.CommitPendingDesignLaunch(out ResearchLaunchResultData result);
+            bool continued = false;
+
+            operation.ShowLaunchResultOverlay(result, () => continued = true);
+
+            Assert.That(report.gameObject.activeSelf, Is.True);
+            Assert.That(continued, Is.False);
+            Invoke(report, "Respond");
+            Assert.That(continued, Is.True);
+            Assert.That(session.HasUnacknowledgedLaunchResult, Is.False);
+            Assert.That(report.gameObject.activeSelf, Is.False);
         }
 
         [Test]

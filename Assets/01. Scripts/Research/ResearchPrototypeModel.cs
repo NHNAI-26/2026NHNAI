@@ -1018,9 +1018,14 @@ namespace Border.Research
         public ResearchActionResult TryEnterDesign(LaunchMissionId missionId, EnginePresetId presetId, TestVisibility visibility, out ResearchDesignEntryData data)
         {
             data = default;
-            if (missionId != LaunchMissionId.LowPowerZoneHold && visibility != TestVisibility.Public && visibility != TestVisibility.Private)
+            if (!IsSelectableVisibility(visibility) && !(missionId == LaunchMissionId.LowPowerZoneHold && visibility == TestVisibility.FinalMission))
             {
                 LastMessage = "공개 또는 비공개 테스트를 선택하세요.";
+                return ResearchActionResult.RequirementNotMet;
+            }
+            if (missionId == LaunchMissionId.LowPowerZoneHold && visibility == TestVisibility.Private)
+            {
+                LastMessage = "마지막 미션은 공개 테스트로만 진행할 수 있습니다.";
                 return ResearchActionResult.RequirementNotMet;
             }
             if (HasActiveLaunch) return ResearchActionResult.LaunchInProgress;
@@ -1072,7 +1077,7 @@ namespace Border.Research
             LaunchMissionConfig missionConfig = GetConfiguredMissionConfig(missionId);
             EnginePresetState selectedEngine = GetEnginePreset(presetId);
             int clampedFit = ClampInt(designFit, MinDesignFit, MaxDesignFit);
-            TestVisibility normalizedVisibility = missionId == LaunchMissionId.LowPowerZoneHold ? TestVisibility.FinalMission : visibility;
+            TestVisibility normalizedVisibility = NormalizeDesignVisibility(missionId, visibility);
             int mapSeed = CreateDesignMapSeed(missionId, presetId);
             int[] counts = CopyAndNormalizeEngineCounts(installedEngineCounts);
             ClearLockedEngineCounts(counts);
@@ -1124,6 +1129,13 @@ namespace Border.Research
                 LastMessage = $"{config.DisplayName} 미션은 아직 잠겨 있습니다.";
                 return ResearchActionResult.MissionLocked;
             }
+            if (designEntry.MissionId == LaunchMissionId.LowPowerZoneHold
+                && designEntry.Visibility != TestVisibility.Public
+                && designEntry.Visibility != TestVisibility.FinalMission)
+            {
+                LastMessage = "마지막 미션은 공개 테스트로만 진행할 수 있습니다.";
+                return ResearchActionResult.RequirementNotMet;
+            }
 
             int entryCost = designEntry.LaunchCostPaid ? designEntry.LaunchCost : GetDesignEntryCost(designEntry.MissionId);
             int remainingCost = GetLaunchPaymentCost(designEntry);
@@ -1168,6 +1180,37 @@ namespace Border.Research
                 succeeded ? 100 : 0, 0, 0, out result, terminationReason);
         }
 
+        public ResearchLaunchResultData CreateDeadlineFailureResult()
+        {
+            LaunchMissionState finalMission = GetMission(LaunchMissionId.LowPowerZoneHold);
+            ResearchGrade finalGrade = finalMission.HasBestGrade ? finalMission.BestGrade : ResearchGrade.F;
+            int year = HasGameEnded ? FinalYear : Year;
+            int quarter = HasGameEnded ? FinalQuarter : Quarter;
+
+            return new ResearchLaunchResultData(
+                LaunchMissionId.LowPowerZoneHold,
+                EnginePresetId.Engine01,
+                year,
+                quarter,
+                0,
+                0,
+                TestVisibility.Public,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                finalGrade,
+                0,
+                0,
+                false,
+                true,
+                CreateFinalFailureOutcomeEvent(),
+                LaunchTerminationReason.Unknown);
+        }
+
         private ResearchActionResult FinishLaunch(ResearchGrade grade, int successChance, int partialChance, int roll, out ResearchLaunchResultData result,
             LaunchTerminationReason terminationReason = LaunchTerminationReason.Unknown)
         {
@@ -1179,7 +1222,7 @@ namespace Border.Research
             LaunchMissionConfig config = GetConfiguredMissionConfig(designEntry.MissionId);
             LaunchMissionState mission = GetMission(designEntry.MissionId);
             int failureChance = 100 - successChance - partialChance;
-            GetVisibilityAdjustedReward(grade, designEntry.Visibility, out int immediateFunding, out int quarterlyFundingDelta);
+            GetVisibilityAdjustedReward(grade, designEntry.MissionId, designEntry.Visibility, out int immediateFunding, out int quarterlyFundingDelta);
             if (grade == ResearchGrade.F) FailedLaunches++;
             ApplyBestGrade(mission, grade);
 
@@ -1584,7 +1627,22 @@ namespace Border.Research
 
         private static TestVisibility GetDefaultVisibility(LaunchMissionId missionId)
         {
-            return missionId == LaunchMissionId.LowPowerZoneHold ? TestVisibility.FinalMission : TestVisibility.Private;
+            return missionId == LaunchMissionId.LowPowerZoneHold ? TestVisibility.Public : TestVisibility.Private;
+        }
+
+        private static bool IsSelectableVisibility(TestVisibility visibility)
+        {
+            return visibility == TestVisibility.Public || visibility == TestVisibility.Private;
+        }
+
+        private static TestVisibility NormalizeDesignVisibility(LaunchMissionId missionId, TestVisibility visibility)
+        {
+            if (missionId == LaunchMissionId.LowPowerZoneHold && visibility == TestVisibility.FinalMission)
+            {
+                return TestVisibility.Public;
+            }
+
+            return visibility;
         }
 
         private double CalculateEngineImbalancePenalty(EnginePresetState preset)
@@ -1616,25 +1674,25 @@ namespace Border.Research
             }
         }
 
-        private void GetVisibilityAdjustedReward(ResearchGrade grade, TestVisibility visibility, out int immediateFunding, out int quarterlyFundingDelta)
+        private void GetVisibilityAdjustedReward(ResearchGrade grade, LaunchMissionId missionId, TestVisibility visibility, out int immediateFunding, out int quarterlyFundingDelta)
         {
-            if (visibility != TestVisibility.FinalMission)
+            if (missionId != LaunchMissionId.LowPowerZoneHold)
             {
                 immediateFunding = 0;
                 quarterlyFundingDelta = 0;
                 return;
             }
 
+            const TestVisibility rewardVisibility = TestVisibility.FinalMission;
             ResearchGradeReward reward = balanceConfig.GetLaunchReward(grade);
             if (grade == ResearchGrade.F)
             {
                 immediateFunding = 0;
-                quarterlyFundingDelta = balanceConfig.GetFailureQuarterlyFundingDelta(visibility);
+                quarterlyFundingDelta = balanceConfig.GetFailureQuarterlyFundingDelta(rewardVisibility);
                 return;
             }
 
-            double multiplier = Math.Max(0, balanceConfig.GetRewardMultiplier(visibility)
-                - (activePublicRewardPenalty && visibility == TestVisibility.Public ? 0.25 : 0));
+            double multiplier = Math.Max(0, balanceConfig.GetRewardMultiplier(rewardVisibility));
             immediateFunding = (int)Math.Round(reward.ImmediateFunding * multiplier, MidpointRounding.AwayFromZero);
             quarterlyFundingDelta = (int)Math.Round(reward.QuarterlyFundingDelta * multiplier, MidpointRounding.AwayFromZero);
         }

@@ -3,6 +3,7 @@ using System.Reflection;
 using Border.Research;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Simulation.Tests
 {
@@ -190,11 +191,19 @@ namespace Simulation.Tests
             Assert.That(guide.TargetMaterial.shader.name, Is.EqualTo("Shader/Uber/3D Object"));
             Assert.That(guide.TargetMaterial.GetFloat("_HologramEnabled"), Is.EqualTo(1f));
             Assert.That(guide.TargetMaterial.GetFloat("_Surface"), Is.EqualTo(1f));
+            Assert.That(guide.TargetMaterial.GetFloat("_Blend"), Is.EqualTo(0f));
+            Assert.That(guide.TargetMaterial.GetFloat("_SrcBlend"), Is.EqualTo((float)BlendMode.SrcAlpha));
+            Assert.That(guide.TargetMaterial.GetFloat("_DstBlend"), Is.EqualTo((float)BlendMode.OneMinusSrcAlpha));
+            Assert.That(guide.TargetMaterial.GetFloat("_HologramOpacity"), Is.EqualTo(1f));
+            Assert.That(guide.TargetMaterial.GetFloat("_Cull"), Is.EqualTo((float)CullMode.Off));
             Assert.That(guide.TargetMaterial.renderQueue, Is.EqualTo((int)UnityEngine.Rendering.RenderQueue.Transparent));
             Assert.That(guide.TargetMaterial.GetColor("_BaseColor").r, Is.GreaterThan(0.9f));
             Assert.That(guide.TargetMaterial.GetColor("_BaseColor").g, Is.GreaterThan(0.7f));
             Assert.That(guide.TargetMaterial.GetColor("_BaseColor").a, Is.GreaterThan(0.25f));
             Assert.That(guide.TargetMaterial.GetColor("_BaseColor").a, Is.LessThan(0.5f));
+            Transform targetRoot = GetField<Transform>(guide, "targetRoot");
+            Assert.That(targetRoot.GetComponent<MeshFilter>().sharedMesh.name, Is.EqualTo("Cube"));
+            Assert.That(targetRoot.localScale, Is.EqualTo(Vector3.one * 480f));
             Assert.That(guide.ArrowMaterial.renderQueue, Is.EqualTo((int)UnityEngine.Rendering.RenderQueue.Geometry));
             Assert.That(guide.ArrowMaterial.color.a, Is.EqualTo(1f));
             Assert.That(guide.ArrowMesh.bounds.size.z, Is.LessThan(1.3f));
@@ -303,6 +312,9 @@ namespace Simulation.Tests
 
         private static void SetField(object target, string name, object value) =>
             target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(target, value);
+
+        private static T GetField<T>(object target, string name) =>
+            (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(target);
 
         private static void Invoke(object target, string name) =>
             target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, null);
