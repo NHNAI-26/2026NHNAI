@@ -55,6 +55,7 @@ public static class NewspaperRevealBuilder
             var photoRect = EnsureRect("Photo", content);
             PlaceOnPaper(photoRect, sprite, 407, 369, 366, 274.5f);
             var photo = photoRect.GetComponent<RawImage>() ?? photoRect.gameObject.AddComponent<RawImage>();
+            photo.material = GetPhotoMaterial();
             photo.raycastTarget = false;
             var fallback = PaperText("PhotoFallback", content, font, sprite, 407, 369, 366, 274.5f, 15, 12);
             fallback.alignment = TextAlignmentOptions.Center;
@@ -87,6 +88,18 @@ public static class NewspaperRevealBuilder
         }
         finally { PrefabUtility.UnloadPrefabContents(report); }
         AssetDatabase.SaveAssets();
+    }
+
+    public static Material GetPhotoMaterial()
+    {
+        const string path = "Assets/05. Arts/Material/NewspaperPhoto.mat";
+        Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (material != null) return material;
+        Shader shader = Shader.Find("Border/UI/NewspaperPhoto");
+        if (shader == null) throw new System.InvalidOperationException("Newspaper photo shader is not imported.");
+        material = new Material(shader);
+        AssetDatabase.CreateAsset(material, path);
+        return material;
     }
 
     private static RectTransform EnsureRect(string name, Transform parent)
