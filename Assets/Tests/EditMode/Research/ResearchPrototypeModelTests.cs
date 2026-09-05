@@ -1509,6 +1509,11 @@ namespace Border.Research.Tests
                 Assert.That(controller.IsTransitioningToDesignForTests(), Is.False);
                 Assert.That(controller.RequestedScreenName, Is.EqualTo(ResearchFlowSession.DesignScreenName));
                 Assert.That(controller.GetActiveDesignControllerForTests(), Is.Not.Null);
+
+                controller.ReturnFromDesignScreenForTests();
+                FindButton(host.transform, "PartDevelopmentButton").onClick.Invoke();
+
+                Assert.That(FindButton(host.transform, "CancelDevelopmentButton").interactable, Is.True);
             }
             finally
             {

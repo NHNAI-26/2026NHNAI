@@ -759,6 +759,7 @@ namespace Border.Research
             startDevelopmentButton.interactable = CanResearch(selectedEngine, focusedResearchSelected
                 ? model.ConfiguredEngineFocusedResearchCost
                 : model.ConfiguredEngineNormalResearchCost);
+            cancelDevelopmentButton.interactable = true;
             normalResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineNormalResearchCost);
             focusedResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineFocusedResearchCost);
             createEnginePresetButton.interactable = !model.DeadlineReached && model.ActiveEnginePresetCount < ResearchPrototypeModel.MaxEnginePresetCount;
@@ -799,6 +800,7 @@ namespace Border.Research
             EnginePresetState engine = model.GetEnginePreset(config.Id);
             EngineCardView card = engineCards[(int)config.Id];
             card.Button.gameObject.SetActive(model.IsEnginePresetUnlocked(config.Id));
+            card.Button.interactable = !isTransitioningToDesign;
             bool selected = selectedEnginePreset == config.Id;
             Image background = card.Button.GetComponent<Image>();
             background.color = background.sprite != null
