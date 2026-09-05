@@ -752,8 +752,8 @@ Scene/Game 뷰에는 씬 값이, Play Mode 에는 프리팹 커브 값이 보인
 
 - 몸통 — `Assets/03. Prefabs/3D/RocketBody.prefab` 을 씬의 `Rocket/Body` 자식으로 중첩.
 - 엔진 — `Assets/03. Prefabs/3D/Engine_01.prefab` 을 `RocketEngine.prefab` 루트의 자식으로 중첩.
-  `RocketPart`·`BoxCollider`·`Flame` 은 그대로 두고 메시만 바꿨다. 프리셋 10개가 여전히 같은
-  프리팹을 쓰므로 외형은 전부 같다.
+  `RocketPart`·`BoxCollider`·`Flame` 은 그대로 두고 메시만 바꿨다. 이 메시는 **기본값일 뿐이고**,
+  프리셋에 따라 통째로 갈린다 — 아래 "엔진 외형은 프리셋이 고른다".
 
 두 프리팹 다 **X −90° 회전**이 필요하다. 원본 FBX 의 긴 축이 로컬 +Z 이고, X −90° 가 그것을 +Y 로
 올린다. 회전이 없으면 로켓이 옆으로 눕는다.
@@ -767,6 +767,45 @@ Scene/Game 뷰에는 씬 값이, Play Mode 에는 프리팹 커브 값이 보인
   들어가고, 교체 전 실린더 임시본(4 m × 1 m)과 같은 높이라 카메라·부착 좌표가 그대로 산다.
 - 엔진: 중첩 인스턴스 스케일 **100**(원본 그대로) → 1 m × 0.55 m. 임시본 Cube(0.8 m × 0.5 m)와
   거의 같아 조정할 이유가 없었다.
+
+### 엔진 외형은 프리셋이 고른다
+
+연구가 만든 프리셋은 스탯 구성에서 다섯 아키타입 중 하나가 정해지고(`EngineVisualClassifier`,
+한 스탯이 2위를 `SpecializationLeadThreshold` 8 만큼 앞서야 특화로 친다), 그 아키타입의 메시가
+`RocketEngine.prefab` 의 기본 메시를 대체한다. 매핑은
+`Assets/02. ScriptableObjects/Research/EnginePresetVisualLibrary.asset` 한 곳이고, 연구 운영 화면의
+홀로그램 프리뷰(`ResearchEnginePreviewController`)와 **같은 에셋·같은 해석 규칙**을 탄다 — 두 화면이
+같은 엔진에 다른 모양을 보여주면 연동됐다는 신호 자체가 사라지기 때문이다.
+
+교체는 `RocketPart.ApplyPreset` 안에서 일어난다. 스탯이 정해지는 지점이 곧 아키타입이 정해지는
+지점이고, 부품을 만드는 경로가 프리셋 드래그 하나뿐이라(`RocketBuilder.BeginPresetDrag`) 여기 하나면
+설계·부착·발사가 전부 따라온다. `RocketBuilder` 는 이 기능을 모른다.
+
+탈출구는 둘이고 서로 다른 것을 막는다. `RocketPart.visualLibrary` 가 비어 있으면 — 프리팹을 거치지
+않고 만든 부품, 즉 EditMode 테스트가 그렇다 — 교체 판정 자체를 지나지 않는다. `ResearchFlowSession`
+을 만들지 않는 것도 이 가드 덕이다(`GetOrCreate()` 는 이름 그대로 오브젝트를 만드는 호출이다).
+프리셋의 `PresetIndex` 가 `-1`(저작 에셋)이면 매핑이 `null` 로 떨어져 프리팹 기본 메시가 남는다 —
+`SimulationTest` 단독 재생이 이쪽이다.
+
+**아트 원본 스케일을 그대로 쓴다.** 메시를 고정 높이로 정규화하지 않는 대신, 교체 직후
+`BoxCollider` 와 `Flame` 을 새 메시 bounds 로 다시 맞춘다(`RocketPart.FitToMesh`). 따라서 프리팹에
+박힌 `(0.547, 1, 0.541)` 은 이제 **기본 메시의 값일 뿐 계약이 아니다** — 아래 콜라이더 문단의 수치는
+기본 메시를 설명하는 것이다.
+
+- 메시를 옮겨 기하 중심을 부품 원점으로 끌어온다. `RocketBuilder.HalfExtents` 가
+  `BoxCollider.center == 0` 을 가정하고 그 가정이 코드에 `ponytail:` 로 못 박혀 있어서다.
+  중심을 콜라이더에 적어 넣는 대신 메시를 옮기면 그 가정이 그대로 산다.
+- 불꽃은 새 bounds 의 바닥(`-extents.y`)으로 내려간다. 프리팹 기본값 `-0.5` 는 길이 1 짜리 기본
+  메시의 바닥이었다.
+- `Flame` 은 메시의 자식이 아니라 **형제**다. 교체를 "자식을 전부 지운다"로 쓰면 불꽃이 같이 죽는다 —
+  `RocketPart.meshRoot` 가 가리키는 하나만 지운다.
+- bounds 는 `Renderer.localBounds` 를 행렬로 부품 로컬로 옮겨 잰다. `Renderer.bounds`(월드 AABB)를
+  되돌리는 방식은 부품이 돌아가 있으면 부풀어 오른다.
+- 머티리얼 인스턴스 캐시(`_uberMaterials`)는 교체 때 반납한다. 렌더러가 통째로 바뀌므로 남겨두면
+  사라진 렌더러의 인스턴스를 붙든 채 샌다.
+
+알려진 천장: 콜라이더가 메시를 따라가므로 `partSeatSink` 를 1 아래로 내리면 아키타입마다 안착
+깊이가 달라진다. 지금은 1 이라 `ProjectOntoBody` 의 그 항이 0 이다.
 
 콜라이더는 모델 bounds 에 맞춰 다시 잡았다. 몸통 `CapsuleCollider` 는 `radius 0.338 / height 4`,
 `Body` 로컬 스케일은 `(1, 1, 1)` 로 되돌렸다 — 스케일 1 이면 `CacheBodyShape()` 의 환산 결과가 곧
@@ -871,10 +910,12 @@ UI Controller` 의 자식이 아니라 별개 루트라 진입할 때 같이 꺼
 
 ## 테스트
 
-`Assets/Tests/EditMode/Simulation/RocketSimulationTests.cs` 세 개뿐이다. 연료 소진 경계
-(`TryBurn`이 마지막 프레임에는 추력을 내고 그 다음부터 거부), 부착 계약(표면 좌표 유지 + 로켓 기준 자세),
-불꽃 토글(연소 중 켜짐 / 소진 후 꺼짐). 씬 에셋을 로드하지 않고 in-memory 오브젝트로 만들며,
-private 직렬화 필드는 리플렉션으로 넣는다 — `Border.Audio.EditModeTests`와 같은 방식.
+`Assets/Tests/EditMode/Simulation/RocketSimulationTests.cs` 한 파일이다. 잠그는 것은 계약이지 구현이
+아니다: 연료 소진 경계(마지막 프레임에는 추력을 내고 그 다음부터 거부), 과열, 부착 계약(표면 좌표 유지 +
+로켓 기준 자세), 불꽃 토글, 연구 런타임 브리지(스탯 스케일·체크섬·설계 패널 필터), 그리고 프리셋 외형
+교체(아키타입 선택, 저작 에셋은 기본 메시 유지, 콜라이더·불꽃 refit, `Flame` 생존, 머티리얼 캐시 반납).
+씬 에셋을 로드하지 않고 in-memory 오브젝트로 만들며, private 직렬화 필드와 private 메서드는 리플렉션으로
+다룬다 — `Border.Audio.EditModeTests`와 같은 방식.
 
 `ParticleSystem.Play()`와 `isEmitting`은 EditMode에서도 정상 동작한다(확인함). 상태를 미러링하는
 bool 필드를 따로 두지 않은 이유다.

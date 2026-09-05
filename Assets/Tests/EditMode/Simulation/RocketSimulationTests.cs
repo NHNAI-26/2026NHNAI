@@ -726,6 +726,87 @@ namespace Simulation.Tests
                 "PresetEntry 가 IDragHandler 를 구현하지 않으면 프리셋 드래그가 시작되지 않는다.");
         }
 
+        [Test]
+        public void PresetMesh_PicksArchetypePrefab_AndLeavesAuthoredAssetsAlone()
+        {
+            // 연구 화면과 설계 화면이 같은 프리셋에 다른 엔진을 보여주면 연동됐다는 신호가 사라진다.
+            // 저작 에셋(PresetIndex -1)이 null 로 떨어지는 것도 같이 잠근다 — SimulationTest 단독 재생 경로다.
+            MethodInfo resolve = typeof(RocketPart).GetMethod(
+                "ResolveMeshPrefab", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(resolve, "RocketPart.ResolveMeshPrefab 을 찾지 못했다.");
+
+            GameObject balanced = Track(new GameObject("Balanced"));
+            GameObject fuel = Track(new GameObject("FuelCapacity"));
+            GameObject cooling = Track(new GameObject("Cooling"));
+            GameObject power = Track(new GameObject("MaxOutput"));
+            GameObject reliability = Track(new GameObject("IgnitionReliability"));
+            EnginePresetVisualLibrarySO library = Track(EnginePresetVisualLibrarySO.CreateRuntime(
+                null, new[] { balanced, fuel, cooling, power, reliability }));
+
+            var model = new ResearchPrototypeModel();
+            EngineStatsSO slot0 = Stats(100f, 60f, BaselineOutput, 100f, presetIndex: 0);
+            EngineStatsSO authored = Stats(100f, 60f, BaselineOutput, 100f);
+
+            Assert.AreSame(balanced, resolve.Invoke(null, new object[] { slot0, model, library }),
+                "새 게임의 네 스탯은 같으므로 균형형이다.");
+
+            EnginePresetState state = model.GetEnginePreset(EnginePresetId.Engine01);
+            state.MaxOutput += EngineVisualClassifier.SpecializationLeadThreshold;
+
+            Assert.AreSame(power, resolve.Invoke(null, new object[] { slot0, model, library }),
+                "출력이 임계치만큼 앞서면 출력 특화 메시로 바뀐다.");
+            Assert.IsNull(resolve.Invoke(null, new object[] { authored, model, library }),
+                "저작 에셋은 프리팹 기본 메시를 그대로 쓴다.");
+            Assert.IsNull(resolve.Invoke(null, new object[] { slot0, model, null }),
+                "라이브러리가 없으면 교체하지 않는다.");
+        }
+
+        [Test]
+        public void PresetMesh_SwapRefitsColliderAndFlame_AndKeepsFlameAlive()
+        {
+            // 아트 원본 스케일을 그대로 쓰기로 했으므로 프리팹마다 치수가 다르다. 콜라이더가 따라가지
+            // 않으면 집기 레이캐스트가 어긋나고, 불꽃이 따라가지 않으면 노즐 밖에서 탄다.
+            // 불꽃은 메시의 자식이 아니라 형제다 — "자식 전부 지우기" 로 구현하면 여기서 죽는다.
+            MethodInfo setMesh = typeof(RocketPart).GetMethod(
+                "SetMesh", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(setMesh, "RocketPart.SetMesh 를 찾지 못했다.");
+
+            RocketPart part = CreateEngine(null);
+            BoxCollider box = part.GetComponent<BoxCollider>();
+            box.size = new Vector3(0.547f, 1f, 0.541f); // 기본 메시(Engine_01)의 값
+            box.center = Vector3.zero;
+
+            GameObject oldMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            oldMesh.transform.SetParent(part.transform, false);
+            SetField(part, "meshRoot", oldMesh.transform);
+
+            var flameGo = new GameObject("Flame");
+            flameGo.transform.SetParent(part.transform, false);
+            flameGo.transform.localPosition = new Vector3(0f, -0.5f, 0f);
+            ParticleSystem flame = flameGo.AddComponent<ParticleSystem>();
+            SetField(part, "flame", flame);
+
+            // 렌더러가 통째로 바뀌므로 지연 캐시는 반납돼야 한다. 빈 배열이면 머티리얼 인스턴스를
+            // 만들지 않고도 반납 경로를 지난다.
+            SetField(part, "_uberMaterials", new Material[0]);
+
+            GameObject prefab = Track(GameObject.CreatePrimitive(PrimitiveType.Cube));
+            prefab.transform.localScale = new Vector3(2f, 4f, 2f); // 1유닛 큐브 × 스케일 = bounds
+
+            setMesh.Invoke(part, new object[] { prefab });
+
+            Assert.IsTrue(oldMesh == null, "기본 메시는 교체와 함께 사라져야 한다.");
+            Assert.AreEqual(2, part.transform.childCount, "새 메시와 Flame 둘만 남아야 한다.");
+            Assert.IsTrue(flame != null, "Flame 은 메시의 형제라 교체가 건드리면 안 된다.");
+
+            Assert.AreEqual(new Vector3(2f, 4f, 2f), box.size);
+            Assert.AreEqual(Vector3.zero, box.center, "RocketBuilder.HalfExtents 가 center 0 을 가정한다.");
+            Assert.AreEqual(-2f, flame.transform.localPosition.y, 1e-4f, "불꽃은 새 메시 바닥으로 내려간다.");
+            Assert.IsNull(typeof(RocketPart)
+                .GetField("_uberMaterials", BindingFlags.NonPublic | BindingFlags.Instance)
+                .GetValue(part), "머티리얼 캐시가 남으면 사라진 렌더러의 인스턴스를 계속 붙든다.");
+        }
+
         private EngineStatsSO Stats(float fuel, float cooling, float output, float ignition, int presetIndex = -1)
         {
             var stats = Track(ScriptableObject.CreateInstance<EngineStatsSO>());
