@@ -18,15 +18,15 @@ namespace Border.Research
         [SerializeField] private int engineInstallCost = ResearchPrototypeModel.EngineInstallCost;
         [SerializeField] private ScoreRewardBandEntry[] normalResearchStatRewards =
         {
-            new(0, 10),
-            new(50, 13),
-            new(80, 16),
+            new(0, 20),
+            new(50, 25),
+            new(80, 30),
         };
         [SerializeField] private ScoreRewardBandEntry[] focusedResearchStatRewards =
         {
-            new(0, 16),
-            new(50, 21),
-            new(80, 26),
+            new(0, 30),
+            new(50, 40),
+            new(80, 50),
         };
         [SerializeField] private GradeRewardEntry[] launchRewards =
         {

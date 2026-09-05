@@ -25,8 +25,6 @@ namespace Simulation.Tests
             try
             {
                 var session = ResearchFlowSession.GetOrCreate();
-                // 새 게임은 프리셋 0개로 시작한다.
-                session.Model.CreateNewEnginePreset(out _);
                 session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
                 session.TryBeginPendingDesignLaunch();
                 session.SetLaunchPhoto(new Texture2D(4, 3), session.LaunchPhotoGeneration);
@@ -114,8 +112,6 @@ namespace Simulation.Tests
             try
             {
                 var session = ResearchFlowSession.GetOrCreate();
-                // 새 게임은 프리셋 0개로 시작한다.
-                session.Model.CreateNewEnginePreset(out _);
                 session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
                 session.TryBeginPendingDesignLaunch();
                 var photo = new Texture2D(4, 3);
@@ -164,8 +160,6 @@ namespace Simulation.Tests
             try
             {
                 var session = ResearchFlowSession.GetOrCreate();
-                // 새 게임은 프리셋 0개로 시작한다.
-                session.Model.CreateNewEnginePreset(out _);
                 session.TryEnterDesign(LaunchMissionId.LowAltitude, out _);
                 session.TryBeginPendingDesignLaunch();
                 var photo = new Texture2D(4, 3);
@@ -188,11 +182,13 @@ namespace Simulation.Tests
                 newspaper.Hide();
                 Assert.That(newspaper.IsShowing, Is.True);
                 Assert.That(closed, Is.Zero);
-                for (int i = 0; i < 60 && newspaper.IsAnimating; i++) yield return null;
+                float revealDeadline = Time.realtimeSinceStartup + 3f;
+                while (newspaper.IsAnimating && Time.realtimeSinceStartup < revealDeadline) yield return null;
                 Assert.That(newspaper.IsAnimating, Is.False);
                 newspaper.Hide();
                 newspaper.Hide();
-                for (int i = 0; i < 60 && newspaper.IsAnimating; i++) yield return null;
+                float hideDeadline = Time.realtimeSinceStartup + 3f;
+                while (newspaper.IsAnimating && Time.realtimeSinceStartup < hideDeadline) yield return null;
                 yield return null;
                 Assert.That(closed, Is.EqualTo(1));
                 Assert.That(session.HasUnacknowledgedLaunchResult, Is.False);

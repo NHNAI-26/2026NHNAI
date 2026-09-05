@@ -67,31 +67,6 @@ namespace Simulation.Tests
             Assert.AreEqual(0, GearSources().Length);
         }
 
-        [Test]
-        public void BriefInputGaps_KeepTheSameVoice_ReleaseAndIdleStopIt()
-        {
-            Motion(true, false, 0f);
-            Assert.AreEqual(0, GearSources().Length, "Holding a stationary handle must be silent.");
-            Motion(true, true, 0f);
-            var source = GearSources().Single();
-            Motion(true, false, 0.016f);
-            Motion(true, false, 0.08f);
-            Assert.AreSame(source, GearSources().Single(), "The voice must outlast the clip's initial silence.");
-            Motion(true, true, 0.09f);
-            Assert.AreSame(source, GearSources().Single());
-            Motion(true, false, 0.22f);
-            Assert.AreEqual(0, GearSources().Length, "A held but stationary handle must stop after 120 ms.");
-            Motion(true, true, 0.23f);
-            Motion(false, false, 0.231f);
-            Assert.AreEqual(0, GearSources().Length, "Release must stop immediately, without the idle grace period.");
-            Motion(true, false, 0.24f);
-            Assert.AreEqual(0, GearSources().Length, "Re-grabbing must not replay stale movement.");
-        }
-
-        private void Motion(bool dragging, bool moved, float now) => typeof(RocketBuilder)
-            .GetMethod("UpdateRotationSoundForMotion", BindingFlags.Instance | BindingFlags.NonPublic)
-            .Invoke(builder, new object[] { dragging, moved, now });
-
         private AudioSource[] GearSources() => audioRoot.GetComponentsInChildren<AudioSource>()
             .Where(source => source.clip != null && source.clip.name == "gear").ToArray();
         private void SetRotating(bool value) => typeof(RocketBuilder)

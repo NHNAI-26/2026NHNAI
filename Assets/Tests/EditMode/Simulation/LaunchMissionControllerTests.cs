@@ -183,11 +183,11 @@ namespace Simulation.Tests
 
             Assert.That(_controller.UsesTargetBox, Is.True);
             Assert.That(_controller.TargetZoneCenter, Is.EqualTo(new Vector3(0f, 260f, 100f)));
-            Assert.That(_controller.TargetZoneRadius, Is.EqualTo(60f));
+            Assert.That(_controller.TargetBoxBounds.size, Is.EqualTo(Vector3.one * 168f));
             LaunchTargetZoneGuide guide = _object.GetComponent<LaunchTargetZoneGuide>();
             Assert.That(guide, Is.Not.Null);
             Assert.That(guide.IsVisible, Is.True);
-            Assert.That(guide.TargetBounds.size, Is.EqualTo(Vector3.one * 120f));
+            Assert.That(guide.TargetBounds.size, Is.EqualTo(Vector3.one * 168f));
             Assert.That(guide.TargetMaterial.shader.name, Is.EqualTo("Shader/Uber/3D Object"));
             Assert.That(guide.TargetMaterial.GetFloat("_HologramEnabled"), Is.EqualTo(1f));
             Assert.That(guide.TargetMaterial.GetFloat("_Surface"), Is.EqualTo(1f));
@@ -203,7 +203,7 @@ namespace Simulation.Tests
             Assert.That(guide.TargetMaterial.GetColor("_BaseColor").a, Is.LessThan(0.5f));
             Transform targetRoot = GetField<Transform>(guide, "targetRoot");
             Assert.That(targetRoot.GetComponent<MeshFilter>().sharedMesh.name, Is.EqualTo("Cube"));
-            Assert.That(targetRoot.localScale, Is.EqualTo(Vector3.one * 480f));
+            Assert.That(targetRoot.localScale, Is.EqualTo(Vector3.one * 168f));
             Assert.That(guide.ArrowMaterial.renderQueue, Is.EqualTo((int)UnityEngine.Rendering.RenderQueue.Geometry));
             Assert.That(guide.ArrowMaterial.color.a, Is.EqualTo(1f));
             Assert.That(guide.ArrowMesh.bounds.size.z, Is.LessThan(1.3f));
@@ -241,12 +241,27 @@ namespace Simulation.Tests
             _object.AddComponent<BoxCollider>().size = Vector3.one;
 
             _rocket.Launch();
-            _object.transform.position = new Vector3(0f, 190f, 100f);
+            _object.transform.position = new Vector3(0f, 170f, 100f);
             Physics.SyncTransforms();
             Invoke(_controller, "FixedUpdate");
 
             Assert.That(_controller.IsInTargetBox, Is.False);
             Assert.That(_results, Is.Empty);
+        }
+
+        [Test]
+        public void TargetBoxMission_SucceedsAtVisibleCubeCorner()
+        {
+            ReinitializeController(LaunchMissionId.TargetZone);
+            _object.AddComponent<BoxCollider>().size = Vector3.one;
+
+            _rocket.Launch();
+            _object.transform.position = new Vector3(83f, 343f, 183f);
+            Physics.SyncTransforms();
+            Invoke(_controller, "FixedUpdate");
+
+            Assert.That(_controller.IsInTargetBox, Is.True);
+            Assert.That(_results, Is.EqualTo(new[] { true }));
         }
 
         [Test]

@@ -23,18 +23,18 @@ MonoBehaviour:
   engineInstallCost: 350
   normalResearchStatRewards:
   - minScore: 0
-    gain: 10
+    gain: 20
   - minScore: 50
-    gain: 13
+    gain: 25
   - minScore: 80
-    gain: 16
+    gain: 30
   focusedResearchStatRewards:
   - minScore: 0
-    gain: 16
+    gain: 30
   - minScore: 50
-    gain: 21
+    gain: 40
   - minScore: 80
-    gain: 26
+    gain: 50
   launchRewards:
   - grade: 0
     immediateFunding: 900

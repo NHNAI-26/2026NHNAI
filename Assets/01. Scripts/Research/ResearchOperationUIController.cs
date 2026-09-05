@@ -446,17 +446,8 @@ namespace Border.Research
             IsPartDevelopmentOpen = open;
             if (hubActionBar != null) hubActionBar.SetActive(!open);
             if (enginePresetColumnRoot != null) enginePresetColumnRoot.SetActive(open);
-            ApplyDetailColumnState(open);
+            if (detailColumnRoot != null) detailColumnRoot.SetActive(open);
             RefreshPendingEffects();
-        }
-
-        // 프리셋이 하나도 없으면 우측 상세 컬럼은 존재하지 않는 엔진의 이름·완성도·스탯을 그린다.
-        // 두 호출자는 서로를 부르지 않는다 — ApplyPartDevelopmentState 는 Refresh 를 부르지 않고,
-        // 프리셋 생성 후의 Refresh 는 ApplyPartDevelopmentState 를 부르지 않는다. 그래서 양쪽에서 갱신한다.
-        private void ApplyDetailColumnState(bool open)
-        {
-            if (detailColumnRoot == null) return;
-            detailColumnRoot.SetActive(open && model != null && model.ActiveEnginePresetCount > 0);
         }
 
         private void SelectResearchMode(bool focused)
@@ -707,13 +698,10 @@ namespace Border.Research
                 return;
             }
             EnsureSelectedEnginePresetUnlocked();
-            ApplyDetailColumnState(partDevelopmentOpen);
             selectedMission = model.GetCurrentMission();
             ShowResearchLab();
             PlayResearchCameraDrift();
-            // 프리셋 0개일 때 홀로그램을 띄우면 만들지도 않은 엔진 01 이 실험실에 떠 있게 된다.
-            if (model.ActiveEnginePresetCount > 0) ShowEnginePreview();
-            else HideEnginePreview();
+            ShowEnginePreview();
             dateText.text = $"{model.Year}.Q{model.Quarter} / 남은 분기 : {model.RemainingTurns}";
             RefreshFundsText();
 
@@ -761,9 +749,7 @@ namespace Border.Research
             SetSelectedTint(focusedResearchButton, focusedResearchSelected);
             createEnginePresetButtonText.text = model.ActiveEnginePresetCount >= ResearchPrototypeModel.MaxEnginePresetCount
                 ? "새로운 엔진 개발 최대 10개"
-                : model.NextEnginePresetCost == 0
-                    ? "새로운 엔진 개발 무료"
-                    : $"새로운 엔진 개발 -{model.NextEnginePresetCost}$";
+                : $"새로운 엔진 개발 -{model.ConfiguredNewEnginePresetCost}$";
             partDevelopmentButtonText.text = $"부품 개발\n<size=15>-{model.ConfiguredEngineNormalResearchCost}$~</size>";
             enterDesignButtonText.text = $"로켓 설계\n<size=15>-{designEntryCost}$</size>";
             waitButtonText.text = $"건너뛰기\n<size=15>+{model.NextWaitFunding}$ / +1분기</size>";
@@ -774,6 +760,7 @@ namespace Border.Research
             startDevelopmentButton.interactable = CanResearch(selectedEngine, focusedResearchSelected
                 ? model.ConfiguredEngineFocusedResearchCost
                 : model.ConfiguredEngineNormalResearchCost);
+            cancelDevelopmentButton.interactable = true;
             normalResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineNormalResearchCost);
             focusedResearchButton.interactable = CanResearch(selectedEngine, model.ConfiguredEngineFocusedResearchCost);
             createEnginePresetButton.interactable = !model.DeadlineReached && model.ActiveEnginePresetCount < ResearchPrototypeModel.MaxEnginePresetCount;
@@ -814,6 +801,7 @@ namespace Border.Research
             EnginePresetState engine = model.GetEnginePreset(config.Id);
             EngineCardView card = engineCards[(int)config.Id];
             card.Button.gameObject.SetActive(model.IsEnginePresetUnlocked(config.Id));
+            card.Button.interactable = !isTransitioningToDesign;
             bool selected = selectedEnginePreset == config.Id;
             Image background = card.Button.GetComponent<Image>();
             background.color = background.sprite != null

@@ -242,7 +242,7 @@ namespace Border.Research.Tests
             var mail = FindReveal(report, LaunchResultMedium.Mail);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             Sprite emailSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/05. Arts/UI/Email/Email.png");
-            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("presentationSprite", flags).GetValue(mail);
+            Sprite mailSprite = (Sprite)typeof(NewspaperReveal).GetField("newspaperSprite", flags).GetValue(mail);
             Image image = (Image)typeof(NewspaperReveal).GetField("newspaperImage", flags).GetValue(mail);
 
             Assert.That(emailSprite, Is.Not.Null);
@@ -365,6 +365,26 @@ namespace Border.Research.Tests
 
             Assert.That(status, Does.Contain("남은 이벤트 효과:"));
             Assert.That(status, Does.Not.Contain("예상 이벤트 효과"));
+        }
+
+        [Test]
+        public void SavedNewspaperPrefab_PreservesOriginalSpriteAfterDeserialization()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/03. Prefabs/UI/NewspaperReveal.prefab");
+            GameObject instance = UnityEngine.Object.Instantiate(prefab);
+            createdObjects.Add(instance);
+            NewspaperReveal reveal = instance.GetComponent<NewspaperReveal>();
+            Sprite expected = AssetDatabase.LoadAllAssetsAtPath(
+                    "Assets/05. Arts/UI/Newspaper/newspaper-original-transparent.png")
+                .OfType<Sprite>().Single();
+
+            Assert.That(GetPrivateField<Sprite>(reveal, "newspaperSprite"), Is.SameAs(expected),
+                "The original newspaperSprite field must directly reference the original newspaper sprite.");
+            typeof(NewspaperReveal).GetMethod("OnValidate", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(reveal, null);
+            Image paperImage = GetPrivateField<Image>(reveal, "newspaperImage");
+            Assert.That(paperImage.sprite, Is.SameAs(expected));
+            Assert.That(paperImage.preserveAspect, Is.True);
         }
 
         private ResearchResultReportController CreateReport()

@@ -1036,9 +1036,8 @@ MonoBehaviour:
   contentGroup: {fileID: 1258489021359883288}
   backdrop: {fileID: 990115017057102264}
   newspaperImage: {fileID: 4707156235232891774}
+  medium: 0
   newspaperSprite: {fileID: -358238143, guid: 69df57a2876c647d9a8590a5f47c4468, type: 3}
-  mailSprite: {fileID: 21300000, guid: 0116bd2fbef09419da38ae91169dcf7f, type: 3}
-  fallbackSprite: {fileID: -358238143, guid: 69df57a2876c647d9a8590a5f47c4468, type: 3}
   headlineText: {fileID: 2785839060496756978}
   editionText: {fileID: 8209609880249309807}
   articleText: {fileID: 3071269840717012279}
@@ -1053,6 +1052,10 @@ MonoBehaviour:
   startScale: 0.06
   startOffset: {x: -300, y: -180}
   overshootScale: 1.08
+  headlineCharacterSeconds: 0.055
+  articleCharacterSeconds: 0.012
+  resultLineSeconds: 0.3
+  sectionPauseSeconds: 0.15
   onImpact:
     m_PersistentCalls:
       m_Calls: []

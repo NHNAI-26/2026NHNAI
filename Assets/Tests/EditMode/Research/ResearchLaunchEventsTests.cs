@@ -246,6 +246,34 @@ namespace Border.Research.Tests
             Assert.That(result.OutcomeEvent.EffectsText, Does.Contain("분기 연구비 -100"));
         }
 
+        [TestCase(LaunchTerminationReason.NoLiftoff)]
+        [TestCase(LaunchTerminationReason.GroundCrash)]
+        [TestCase(LaunchTerminationReason.SelfDestruct)]
+        public void PrivateFailureLottery_GivesWhistleblowerTenPercentOfTickets(LaunchTerminationReason reason)
+        {
+            var counts = new Dictionary<LaunchOutcomeEventId, int>();
+            for (int lotteryIndex = 0; lotteryIndex < 20; lotteryIndex++)
+            {
+                var model = new ResearchPrototypeModel(balanceConfig: CreateBalance(), eventRandom: Sequence(lotteryIndex));
+                ResearchLaunchResultData result = Launch(model, TestVisibility.Private, false, reason);
+                counts[result.OutcomeEvent.Id] = counts.TryGetValue(result.OutcomeEvent.Id, out int count) ? count + 1 : 1;
+            }
+
+            Assert.That(counts[LaunchOutcomeEventId.Whistleblower], Is.EqualTo(2));
+            IReadOnlyList<LaunchOutcomeEventId> candidates = ResearchPrototypeModel.GetEligibleLaunchEvents(
+                LaunchMissionId.LowAltitude,
+                false,
+                TestVisibility.Private,
+                2024,
+                reason);
+            int expectedCommonTickets = 18 / (candidates.Count - 1);
+            foreach (LaunchOutcomeEventId candidate in candidates)
+            {
+                if (candidate != LaunchOutcomeEventId.Whistleblower)
+                    Assert.That(counts[candidate], Is.EqualTo(expectedCommonTickets));
+            }
+        }
+
         [Test]
         public void PadDamage_AppliesFundsFloorCompletionFloorAndRandomInstalledTarget()
         {
@@ -586,7 +614,6 @@ namespace Border.Research.Tests
             bool succeeded,
             LaunchTerminationReason reason)
         {
-            UnlockPreset(model, EnginePresetId.Engine01);
             PrepareFinalMission(model);
             ResearchDesignEntryData entry = model.CreateDesignEntry(missionId, EnginePresetId.Engine01, SingleEngine(), 50, visibility, true);
             Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.Success));
@@ -605,7 +632,6 @@ namespace Border.Research.Tests
             bool succeeded,
             LaunchTerminationReason reason)
         {
-            UnlockPreset(model, EnginePresetId.Engine01);
             ResearchDesignEntryData entry = model.CreateDesignEntry(missionId, EnginePresetId.Engine01, SingleEngine(), 50, visibility, true);
             Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(model.CompleteLaunch(succeeded, reason, out ResearchLaunchResultData result), Is.EqualTo(ResearchActionResult.Success));
@@ -624,7 +650,6 @@ namespace Border.Research.Tests
             TestVisibility visibility,
             int[] installedEngineCounts = null)
         {
-            UnlockPreset(model, EnginePresetId.Engine01);
             int[] counts = installedEngineCounts ?? SingleEngine();
             ResearchDesignEntryData entry = model.CreateDesignEntry(missionId, EnginePresetId.Engine01, counts, 50, visibility);
             Assert.That(model.BeginLaunch(entry), Is.EqualTo(ResearchActionResult.Success));

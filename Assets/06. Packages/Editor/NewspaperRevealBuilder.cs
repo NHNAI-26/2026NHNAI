@@ -13,6 +13,97 @@ public static class NewspaperRevealBuilder
     private const string NewspaperPrefabPath = "Assets/03. Prefabs/UI/NewspaperReveal.prefab";
     private const string MailPrefabPath = "Assets/03. Prefabs/UI/MailReveal.prefab";
 
+    [InitializeOnLoadMethod]
+    private static void ScheduleMissingMailMigration()
+    {
+        EditorApplication.delayCall += MigrateMissingMail;
+        EditorApplication.playModeStateChanged -= MigrateAfterPlayMode;
+        EditorApplication.playModeStateChanged += MigrateAfterPlayMode;
+    }
+
+    private static void MigrateAfterPlayMode(PlayModeStateChange state)
+    {
+        if (state == PlayModeStateChange.EnteredEditMode)
+            EditorApplication.delayCall += MigrateMissingMail;
+    }
+
+    private static void MigrateMissingMail()
+    {
+        if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+        {
+            EditorApplication.delayCall += MigrateMissingMail;
+            return;
+        }
+        const string reportPath = "Assets/03. Prefabs/UI/ResearchResultReport.prefab";
+        GameObject report = AssetDatabase.LoadAssetAtPath<GameObject>(reportPath);
+        if (report == null) return;
+        var controller = report.GetComponent<ResearchResultReportController>();
+        if (controller == null) return;
+        var serialized = new SerializedObject(controller);
+        if (serialized.FindProperty("mail").objectReferenceValue != null)
+        {
+            UpdateMailReadability();
+            return;
+        }
+        if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+        ApplyLaunchNewspaper();
+        Debug.Log("Created and connected the missing MailReveal prefab for private launch results.");
+    }
+
+    private static void UpdateMailReadability()
+    {
+        GameObject root = PrefabUtility.LoadPrefabContents(MailPrefabPath);
+        try
+        {
+            var serialized = new SerializedObject(root.GetComponent<NewspaperReveal>());
+            var heading = (TMP_Text)serialized.FindProperty("headlineText").objectReferenceValue;
+            var sprite = (Sprite)serialized.FindProperty("newspaperSprite").objectReferenceValue;
+            if (heading == null || sprite == null) return;
+            bool changed = false;
+            // Migrate only the old wrapping title once; preserve later prefab edits.
+            if (heading.textWrappingMode != TextWrappingModes.NoWrap)
+            {
+                ConfigureMailHeadline(heading, sprite);
+                changed = true;
+            }
+            var effects = (TMP_Text)serialized.FindProperty("effectsText").objectReferenceValue;
+            var background = (RectTransform)serialized.FindProperty("effectsBackground").objectReferenceValue;
+            if (effects != null && background != null
+                && (effects.color == Color.black || effects.color == new Color(0.08f, 0.075f, 0.065f, 1f)
+                    || effects.transform.GetSiblingIndex() < background.GetSiblingIndex()))
+            {
+                ConfigureMailEffects(effects, background);
+                changed = true;
+            }
+            if (changed) PrefabUtility.SaveAsPrefabAsset(root, MailPrefabPath);
+        }
+        finally { PrefabUtility.UnloadPrefabContents(root); }
+    }
+
+    private static void ConfigureMailHeadline(TMP_Text heading, Sprite sprite)
+    {
+        PlaceOnPaper(heading.rectTransform, sprite, 430, 306, 760, 64);
+        heading.enableAutoSizing = true;
+        heading.fontSizeMin = 10f;
+        heading.fontSizeMax = 20f;
+        heading.textWrappingMode = TextWrappingModes.NoWrap;
+        heading.overflowMode = TextOverflowModes.Overflow;
+    }
+
+    private static void ConfigureMailEffects(TMP_Text effects, RectTransform background)
+    {
+        effects.color = Color.white;
+        effects.enableVertexGradient = false;
+        effects.fontStyle |= FontStyles.Bold;
+        effects.fontSize = 17f;
+        effects.fontSizeMax = 17f;
+        effects.fontSizeMin = 12f;
+        background.GetComponent<Image>().color = new Color(0.04f, 0.08f, 0.16f, 1f);
+        // A panel after the text in sibling order paints over the text.
+        if (effects.transform.GetSiblingIndex() < background.GetSiblingIndex())
+            effects.transform.SetSiblingIndex(background.GetSiblingIndex());
+    }
+
     [MenuItem("Border/UI/Apply Launch Newspaper")]
     public static void ApplyLaunchNewspaper()
     {
@@ -33,47 +124,12 @@ public static class NewspaperRevealBuilder
         {
             var reveal = newspaperRoot.GetComponent<NewspaperReveal>();
             var serialized = new SerializedObject(reveal);
-            var view = (GameObject)serialized.FindProperty("view").objectReferenceValue;
-            view.GetComponent<Canvas>().sortingOrder = 30;
-            var paper = (RectTransform)serialized.FindProperty("paper").objectReferenceValue;
-            paper.anchorMin = new Vector2(0.1f, 0.025f);
-            paper.anchorMax = new Vector2(0.9f, 0.975f);
-            paper.offsetMin = paper.offsetMax = Vector2.zero;
-            var content = (RectTransform)paper.Find("Content");
-            var fitter = content.GetComponent<AspectRatioFitter>() ?? content.gameObject.AddComponent<AspectRatioFitter>();
-            fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
-            fitter.aspectRatio = sprite.rect.width / sprite.rect.height;
+            // The saved newspaper prefab is the source of truth for its original appearance.
+            // Only migrate the sprite binding; keep all layout, material and animation settings.
             serialized.FindProperty("medium").enumValueIndex = (int)LaunchResultMedium.Newspaper;
-            serialized.FindProperty("presentationSprite").objectReferenceValue = sprite;
-            serialized.FindProperty("showEvent").objectReferenceValue = null;
-            TMP_Text heading = PaperText("Headline", content, font, sprite, 405, 92, 536, 94, 28, 20);
-            heading.fontStyle = FontStyles.Bold;
-            TMP_Text edition = PaperText("Edition", content, font, sprite, 252, 290, 770, 40, 14, 12);
-            TMP_Text body = PaperText("Body", content, font, sprite, 792, 362, 226, 286, 15, 12);
-            TMP_Text effects = PaperText("Effects", content, font, sprite, 262, 998, 752, 146, 15, 12);
-            var effectsBackground = EnsureRect("EffectsBackground", content);
-            PlaceOnPaper(effectsBackground, sprite, 246, 976, 788, 184);
-            var background = effectsBackground.GetComponent<Image>() ?? effectsBackground.gameObject.AddComponent<Image>();
-            background.color = new Color(0.91f, 0.88f, 0.79f, 1f);
-            background.raycastTarget = false;
-            effectsBackground.SetSiblingIndex(effects.transform.GetSiblingIndex());
-            var photoRect = EnsureRect("Photo", content);
-            PlaceOnPaper(photoRect, sprite, 407, 369, 366, 274.5f);
-            var photo = photoRect.GetComponent<RawImage>() ?? photoRect.gameObject.AddComponent<RawImage>();
-            photo.material = GetPhotoMaterial();
-            photo.raycastTarget = false;
-            var fallback = PaperText("PhotoFallback", content, font, sprite, 407, 369, 366, 274.5f, 15, 12);
-            fallback.alignment = TextAlignmentOptions.Center;
-            fallback.text = "현장 사진 수신 실패";
-            serialized.FindProperty("headlineText").objectReferenceValue = heading;
-            serialized.FindProperty("editionText").objectReferenceValue = edition;
-            serialized.FindProperty("articleText").objectReferenceValue = body;
-            serialized.FindProperty("effectsText").objectReferenceValue = effects;
-            serialized.FindProperty("photoImage").objectReferenceValue = photo;
-            serialized.FindProperty("photoFallbackText").objectReferenceValue = fallback;
+            serialized.FindProperty("newspaperSprite").objectReferenceValue = sprite;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             reveal.SetSprite(sprite);
-            photo.gameObject.SetActive(false);
             PrefabUtility.SaveAsPrefabAsset(newspaperRoot, NewspaperPrefabPath);
         }
         finally { PrefabUtility.UnloadPrefabContents(newspaperRoot); }
@@ -101,10 +157,11 @@ public static class NewspaperRevealBuilder
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             fitter.aspectRatio = mailSprite.rect.width / mailSprite.rect.height;
             serialized.FindProperty("medium").enumValueIndex = (int)LaunchResultMedium.Mail;
-            serialized.FindProperty("presentationSprite").objectReferenceValue = mailSprite;
+            serialized.FindProperty("newspaperSprite").objectReferenceValue = mailSprite;
             serialized.FindProperty("showEvent").objectReferenceValue = null;
 
-            TMP_Text heading = PaperText("Headline", content, font, mailSprite, 430, 318, 760, 64, 20, 16);
+            TMP_Text heading = PaperText("Headline", content, font, mailSprite, 430, 306, 760, 64, 20, 10);
+            ConfigureMailHeadline(heading, mailSprite);
             heading.fontStyle = FontStyles.Bold;
             heading.alignment = TextAlignmentOptions.Left;
             TMP_Text edition = PaperText("Edition", content, font, mailSprite, 430, 392, 760, 34, 13, 11);
@@ -118,7 +175,7 @@ public static class NewspaperRevealBuilder
             var background = effectsBackground.GetComponent<Image>() ?? effectsBackground.gameObject.AddComponent<Image>();
             background.color = new Color(0.92f, 0.96f, 1f, 0.92f);
             background.raycastTarget = false;
-            effectsBackground.SetSiblingIndex(effects.transform.GetSiblingIndex());
+            ConfigureMailEffects(effects, effectsBackground);
             var photoRect = EnsureRect("Photo", content);
             PlaceOnPaper(photoRect, mailSprite, 430, 715, 300, 225);
             var photo = photoRect.GetComponent<RawImage>() ?? photoRect.gameObject.AddComponent<RawImage>();
@@ -144,15 +201,20 @@ public static class NewspaperRevealBuilder
         GameObject report = PrefabUtility.LoadPrefabContents(reportPath);
         try
         {
-            // Keep the report root/GUID so all existing scene result routes remain connected.
-            for (int i = report.transform.childCount - 1; i >= 0; i--)
-                Object.DestroyImmediate(report.transform.GetChild(i).gameObject);
-            var paperInstance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(NewspaperPrefabPath), report.transform);
-            var mailInstance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(MailPrefabPath), report.transform);
-            mailInstance.SetActive(false);
             var adapter = new SerializedObject(report.GetComponent<ResearchResultReportController>());
-            adapter.FindProperty("newspaper").objectReferenceValue = paperInstance.GetComponent<NewspaperReveal>();
-            adapter.FindProperty("mail").objectReferenceValue = mailInstance.GetComponent<NewspaperReveal>();
+            if (adapter.FindProperty("newspaper").objectReferenceValue == null)
+            {
+                var paperInstance = (GameObject)PrefabUtility.InstantiatePrefab(
+                    AssetDatabase.LoadAssetAtPath<GameObject>(NewspaperPrefabPath), report.transform);
+                adapter.FindProperty("newspaper").objectReferenceValue = paperInstance.GetComponent<NewspaperReveal>();
+            }
+            if (adapter.FindProperty("mail").objectReferenceValue == null)
+            {
+                var mailInstance = (GameObject)PrefabUtility.InstantiatePrefab(
+                    AssetDatabase.LoadAssetAtPath<GameObject>(MailPrefabPath), report.transform);
+                mailInstance.SetActive(false);
+                adapter.FindProperty("mail").objectReferenceValue = mailInstance.GetComponent<NewspaperReveal>();
+            }
             adapter.ApplyModifiedPropertiesWithoutUndo();
             report.SetActive(false);
             PrefabUtility.SaveAsPrefabAsset(report, reportPath);

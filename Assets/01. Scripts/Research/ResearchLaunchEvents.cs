@@ -28,6 +28,9 @@ namespace Border.Research
 
     public sealed partial class ResearchPrototypeModel
     {
+        private const int LaunchEventLotteryTickets = 20;
+        private const int WhistleblowerLotteryTickets = 2;
+
         private readonly Func<int, int> eventRandomOverride;
         private Random eventRandom;
         private LaunchOutcomeEventId previousLaunchEvent;
@@ -135,6 +138,29 @@ namespace Border.Research
             return index;
         }
 
+        private LaunchOutcomeEventId SelectLaunchEvent(IReadOnlyList<LaunchOutcomeEventId> candidates)
+        {
+            int commonCandidateCount = 0;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (candidates[i] != LaunchOutcomeEventId.Whistleblower) commonCandidateCount++;
+            }
+            if (commonCandidateCount == candidates.Count)
+                return candidates[NextEventIndex(candidates.Count)];
+
+            int commonEventTickets = (LaunchEventLotteryTickets - WhistleblowerLotteryTickets) / commonCandidateCount;
+            var lottery = new List<LaunchOutcomeEventId>(LaunchEventLotteryTickets);
+            lottery.AddRange(candidates);
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                int targetTickets = candidates[i] == LaunchOutcomeEventId.Whistleblower
+                    ? WhistleblowerLotteryTickets
+                    : commonEventTickets;
+                for (int ticket = 1; ticket < targetTickets; ticket++) lottery.Add(candidates[i]);
+            }
+            return lottery[NextEventIndex(lottery.Count)];
+        }
+
         private LaunchOutcomeEventResult ApplyLaunchEvent(ResearchDesignEntryData entry, bool succeeded, LaunchTerminationReason reason)
         {
             var candidates = new List<LaunchOutcomeEventId>(GetEligibleLaunchEvents(entry.MissionId, succeeded, entry.Visibility, entry.Year, reason));
@@ -144,7 +170,7 @@ namespace Border.Research
                 previousLaunchEvent = LaunchOutcomeEventId.None;
                 return null;
             }
-            LaunchOutcomeEventId id = candidates[NextEventIndex(candidates.Count)];
+            LaunchOutcomeEventId id = SelectLaunchEvent(candidates);
             previousLaunchEvent = id;
             EnginePresetState target = FindEventEngine(entry.InstalledEngineCounts, id == LaunchOutcomeEventId.PadDamage);
             var effects = new List<string>();

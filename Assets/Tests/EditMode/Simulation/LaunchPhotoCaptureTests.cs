@@ -96,8 +96,6 @@ namespace Simulation.Tests
         private ResearchFlowSession BeginSessionLaunch()
         {
             ResearchFlowSession session = ResearchFlowSession.GetOrCreate();
-            // 새 게임은 프리셋 0개로 시작한다 — 설계에 들어가려면 먼저 하나 만들어야 한다.
-            session.Model.CreateNewEnginePreset(out _);
             Assert.That(session.TryEnterDesign(LaunchMissionId.LowAltitude, out _), Is.EqualTo(ResearchActionResult.Success));
             Assert.That(session.TryBeginPendingDesignLaunch(), Is.EqualTo(ResearchActionResult.Success));
             return session;

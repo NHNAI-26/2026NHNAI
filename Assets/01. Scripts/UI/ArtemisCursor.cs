@@ -16,6 +16,7 @@ namespace Border.UI
         {
             Default,
             Hover,
+            ClickHold,
             Drag,
             AttachValid,
             AttachInvalid,
@@ -127,13 +128,20 @@ namespace Border.UI
 
         private void LateUpdate()
         {
+            Mouse mouse = Mouse.current;
             Visual visual = requestFrame == Time.frameCount
                 ? requestedVisual
-                : Mouse.current != null && IsPointerOverInteractiveTarget(Mouse.current.position.ReadValue())
-                    ? Visual.Hover
-                    : Visual.Default;
+                : ResolveUnrequestedVisual(
+                    mouse != null && mouse.leftButton.isPressed,
+                    mouse != null && IsPointerOverInteractiveTarget(mouse.position.ReadValue()));
 
             Apply(visual);
+        }
+
+        private static Visual ResolveUnrequestedVisual(bool primaryPressed, bool overInteractive)
+        {
+            if (primaryPressed) return Visual.ClickHold;
+            return overInteractive ? Visual.Hover : Visual.Default;
         }
 
         private void OnDestroy()
@@ -150,6 +158,7 @@ namespace Border.UI
         {
             LoadCursor(Visual.Default, "artemis_cursor_default", new Vector2(8f, 5f));
             LoadCursor(Visual.Hover, "artemis_cursor_hover", new Vector2(8f, 5f));
+            LoadCursor(Visual.ClickHold, "artemis_cursor_click_hold", new Vector2(8f, 5f));
             LoadCursor(Visual.Drag, "artemis_cursor_drag", new Vector2(31f, 38f));
             LoadCursor(Visual.AttachValid, "artemis_cursor_attach_valid", new Vector2(18f, 18f));
             LoadCursor(Visual.AttachInvalid, "artemis_cursor_attach_invalid", new Vector2(18f, 18f));

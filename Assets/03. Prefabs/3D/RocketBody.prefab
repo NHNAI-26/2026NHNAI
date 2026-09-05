@@ -159,9 +159,6 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 36694720c134e4cc2973070ecf30153a, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6665984243254796268}
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 36694720c134e4cc2973070ecf30153a, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 3087252859052966228}
   m_SourcePrefab: {fileID: 100100000, guid: 36694720c134e4cc2973070ecf30153a, type: 3}
 --- !u!1 &3594526978425505700 stripped
 GameObject:
@@ -209,19 +206,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Simulation::Simulation.MissionSuccessPresentation
   parachutePrefab: {fileID: 864652023081443301, guid: be8cdfb16f5bc491488ef3899b8cd3f2, type: 3}
   swayClip: {fileID: 7400000, guid: 8315af7a2aed74dd8a19877d9ecd5dcd, type: 2}
---- !u!114 &3087252859052966228
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3594526978425505700}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 938922adf2c684c3ca644c9981cbba2b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Simulation::Simulation.RocketSplashVfx
-  splashPrefab: {fileID: 7993835611259736931, guid: 35656554461ff402b84306c1a664536c, type: 3}
 --- !u!4 &4227054391006076190 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 36694720c134e4cc2973070ecf30153a, type: 3}

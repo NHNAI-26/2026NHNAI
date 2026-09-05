@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
+using Border.Audio;
 using Border.Events;
 using Border.Research;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace Border.UI
@@ -18,7 +21,8 @@ namespace Border.UI
         [SerializeField] private CanvasGroup backdrop;
         [SerializeField] private Image newspaperImage;
         [SerializeField] private LaunchResultMedium medium;
-        [SerializeField] private Sprite presentationSprite;
+        [FormerlySerializedAs("presentationSprite")]
+        [SerializeField] private Sprite newspaperSprite;
         [SerializeField] private TMP_Text headlineText;
         [SerializeField] private TMP_Text editionText;
         [SerializeField] private TMP_Text articleText;
@@ -50,6 +54,13 @@ namespace Border.UI
         private Action closeCallback;
         private bool closeCallbackArmed;
         private Sprite activeSprite;
+        private SoundHandle flySound;
+        private SoundHandle impactSound;
+        private readonly List<SoundHandle> typingSounds = new();
+        private int typingSoundIndex;
+        private int lastTypingSoundFrame = -1;
+        private static readonly string[] TypingSoundIds =
+            { "keyboard01", "keyboard02", "keyboard03", "keyboard04" };
 
         public bool IsShowing => view != null && view.activeSelf;
         public bool IsAnimating => sequence != null && sequence.IsActive();
@@ -59,7 +70,7 @@ namespace Border.UI
 
         public void SetSprite(Sprite sprite)
         {
-            presentationSprite = sprite;
+            newspaperSprite = sprite;
             activeSprite = null;
             ApplySprite();
         }
@@ -68,7 +79,7 @@ namespace Border.UI
         {
             activeSprite = sprite;
             ApplySprite();
-            Show();
+            ShowInternal(clearCloseCallback: true);
         }
 
         public void Present(LaunchNewspaperArticle article, Texture photo, Action onClosed)
@@ -79,7 +90,7 @@ namespace Border.UI
                 return;
             }
 
-            activeSprite = presentationSprite;
+            activeSprite = newspaperSprite;
             ApplyArticle(article, photo);
             closeCallback = onClosed;
             closeCallbackArmed = onClosed != null;
@@ -91,7 +102,8 @@ namespace Border.UI
         private void ApplySprite()
         {
             if (newspaperImage == null) return;
-            newspaperImage.sprite = activeSprite != null ? activeSprite : presentationSprite;
+            Sprite sprite = activeSprite != null ? activeSprite : newspaperSprite;
+            if (sprite != null) newspaperImage.sprite = sprite;
             newspaperImage.preserveAspect = true;
         }
 
@@ -112,7 +124,7 @@ namespace Border.UI
         [ContextMenu("Preview Reveal (Play Mode)")]
         public void Show()
         {
-            activeSprite = presentationSprite;
+            activeSprite = newspaperSprite;
             ShowInternal(clearCloseCallback: true);
         }
 
@@ -132,6 +144,7 @@ namespace Border.UI
             float angle = -spinDegrees;
             paper.localRotation = restRotation * Quaternion.Euler(0f, 0f, angle);
             sequence = DOTween.Sequence().SetUpdate(true).SetTarget(this);
+            sequence.OnStart(() => flySound = PlaySfx("woosh"));
             sequence.Append(DOTween.To(() => paper.anchoredPosition,
                 value => paper.anchoredPosition = value, restPosition, flyDuration).SetEase(Ease.OutCubic));
             sequence.Join(DOTween.To(() => paper.localScale,
@@ -143,7 +156,12 @@ namespace Border.UI
             }, 0f, flyDuration).SetEase(Ease.OutCubic));
             sequence.Join(DOTween.To(() => backdrop.alpha, value => backdrop.alpha = value,
                 1f, Mathf.Min(0.2f, flyDuration)));
-            sequence.AppendCallback(() => onImpact.Invoke());
+            sequence.AppendCallback(() =>
+            {
+                flySound.Stop();
+                impactSound = PlaySfx(medium == LaunchResultMedium.Mail ? "email" : "hammer_collision_sound");
+                onImpact.Invoke();
+            });
             sequence.Append(DOTween.To(() => paper.localScale, value => paper.localScale = value,
                 restScale * 0.97f, settleDuration * 0.35f).SetEase(Ease.OutQuad));
             sequence.Append(DOTween.To(() => paper.localScale, value => paper.localScale = value,
@@ -214,6 +232,7 @@ namespace Border.UI
         {
             sequence?.Kill();
             sequence = null;
+            StopRevealSounds();
             HideArticle();
             if (!CachePose()) return;
             RestorePose();
@@ -248,8 +267,12 @@ namespace Border.UI
             int count = text.textInfo.characterCount;
             if (count > 0 && secondsPerCharacter > 0f)
                 sequence.Append(DOTween.To(() => text.maxVisibleCharacters,
-                    value => text.maxVisibleCharacters = value, count, count * secondsPerCharacter).SetEase(Ease.Linear));
-            sequence.AppendCallback(() => text.maxVisibleCharacters = int.MaxValue);
+                    value => RevealCharacters(text, value), count, count * secondsPerCharacter).SetEase(Ease.Linear));
+            sequence.AppendCallback(() =>
+            {
+                RevealCharacters(text, count);
+                text.maxVisibleCharacters = int.MaxValue;
+            });
         }
 
         private void AppendResultLines()
@@ -262,10 +285,45 @@ namespace Border.UI
             {
                 if (effectsText.textInfo.characterInfo[i].character != '\n' && i != count - 1) continue;
                 int end = i + 1;
-                sequence.AppendCallback(() => effectsText.maxVisibleCharacters = end);
+                sequence.AppendCallback(() => RevealCharacters(effectsText, end));
                 sequence.AppendInterval(Mathf.Max(0f, resultLineSeconds));
             }
             sequence.AppendCallback(() => effectsText.maxVisibleCharacters = int.MaxValue);
+        }
+
+        private void RevealCharacters(TMP_Text text, int visible)
+        {
+            int previous = text.maxVisibleCharacters;
+            text.maxVisibleCharacters = visible;
+            if (visible <= previous || lastTypingSoundFrame == Time.frameCount) return;
+
+            // TMP character data excludes rich-text tags. A slow frame or a whole result line plays one key.
+            int end = Mathf.Min(visible, text.textInfo.characterCount);
+            for (int i = Mathf.Max(0, previous); i < end; i++)
+            {
+                if (char.IsWhiteSpace(text.textInfo.characterInfo[i].character)) continue;
+                SoundHandle sound = PlaySfx(TypingSoundIds[typingSoundIndex]);
+                if (!sound.IsValid) return;
+                typingSounds.RemoveAll(handle => !handle.IsValid);
+                typingSounds.Add(sound);
+                typingSoundIndex = (typingSoundIndex + 1) % TypingSoundIds.Length;
+                lastTypingSoundFrame = Time.frameCount;
+                break;
+            }
+        }
+
+        private static SoundHandle PlaySfx(string id) => SoundManager.Instance != null
+            ? SoundManager.Instance.PlaySfx(id)
+            : SoundHandle.Invalid;
+
+        private void StopRevealSounds()
+        {
+            flySound.Stop();
+            impactSound.Stop();
+            foreach (SoundHandle sound in typingSounds) sound.Stop();
+            typingSounds.Clear();
+            typingSoundIndex = 0;
+            lastTypingSoundFrame = -1;
         }
 
         private void ApplyArticle(LaunchNewspaperArticle article, Texture photo)

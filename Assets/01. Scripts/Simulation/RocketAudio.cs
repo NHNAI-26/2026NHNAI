@@ -69,7 +69,7 @@ namespace Simulation
 
         private void OnSplashdown(Vector3 impactPoint)
         {
-            // Let the non-spatial impact finish even if the rocket sinks or unloads.
+            // Keep the 2D impact alive after the rocket sinks or the scene unloads.
             SoundManager.Instance?.PlaySfx("HeavyWave");
         }
 

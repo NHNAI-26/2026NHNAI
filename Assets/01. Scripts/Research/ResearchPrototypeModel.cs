@@ -439,9 +439,9 @@ namespace Border.Research
         {
             return new[]
             {
-                new ResearchScoreRewardBand(0, 10),
-                new ResearchScoreRewardBand(50, 13),
-                new ResearchScoreRewardBand(80, 16),
+                new ResearchScoreRewardBand(0, 20),
+                new ResearchScoreRewardBand(50, 25),
+                new ResearchScoreRewardBand(80, 30),
             };
         }
 
@@ -449,9 +449,9 @@ namespace Border.Research
         {
             return new[]
             {
-                new ResearchScoreRewardBand(0, 16),
-                new ResearchScoreRewardBand(50, 21),
-                new ResearchScoreRewardBand(80, 26),
+                new ResearchScoreRewardBand(0, 30),
+                new ResearchScoreRewardBand(50, 40),
+                new ResearchScoreRewardBand(80, 50),
             };
         }
 
@@ -742,9 +742,6 @@ namespace Border.Research
         public int ConfiguredEngineNormalResearchCost => balanceConfig.EngineNormalResearchCost;
         public int ConfiguredEngineFocusedResearchCost => balanceConfig.EngineFocusedResearchCost;
         public int ConfiguredNewEnginePresetCost => balanceConfig.NewEnginePresetCost;
-        // 첫 프리셋은 무료 — 프리셋 없이는 어떤 행동도 못 하므로 필수 단계에 요금을 매기면
-        // 시작 자금을 깎는 것과 같다. 비용 표시와 실제 차감이 어긋나지 않게 단일 출처로 둔다.
-        public int NextEnginePresetCost => ActiveEnginePresetCount == 0 ? 0 : balanceConfig.NewEnginePresetCost;
         public int ConfiguredEngineInstallCost => balanceConfig.EngineInstallCost;
         public string LastMessage { get; private set; }
         public LaunchMissionState[] Missions { get; }
@@ -769,8 +766,8 @@ namespace Border.Research
             GameWon = false;
             FinalYear = 0;
             FinalQuarter = 0;
-            ActiveEnginePresetCount = 0;
-            LastMessage = "2018 Q1. 부품 개발에서 첫 엔진 프리셋을 만드세요.";
+            ActiveEnginePresetCount = 1;
+            LastMessage = "2018 Q1. 첫 엔진 프리셋 연구 판단을 시작합니다.";
 
             for (int i = 0; i < Missions.Length; i++)
             {
@@ -799,8 +796,7 @@ namespace Border.Research
                     AttemptCount = 0,
                     BestGrade = ResearchGrade.F,
                     HasBestGrade = false,
-                    // 시작 시 열린 프리셋은 없다 — 첫 프리셋을 만들어야 로켓 설계가 열린다.
-                    Unlocked = false
+                    Unlocked = i == 0
                 };
             }
         }
@@ -899,21 +895,20 @@ namespace Border.Research
                 return ResearchActionResult.EnginePresetLimitReached;
             }
 
-            int cost = NextEnginePresetCost;
-            if (Funds < cost)
+            if (Funds < balanceConfig.NewEnginePresetCost)
             {
-                LastMessage = $"예산 부족. 필요 {cost}, 보유 {Funds}.";
+                LastMessage = $"예산 부족. 필요 {balanceConfig.NewEnginePresetCost}, 보유 {Funds}.";
                 return ResearchActionResult.NotEnoughFunds;
             }
 
-            Funds -= cost;
-            TotalSpentFunds += cost;
+            Funds -= balanceConfig.NewEnginePresetCost;
+            TotalSpentFunds += balanceConfig.NewEnginePresetCost;
             int index = ActiveEnginePresetCount;
             EnginePresets[index].Unlocked = true;
             ActiveEnginePresetCount++;
             pendingPublicPressure = false;
             presetId = EnginePresets[index].PresetId;
-            LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName} 개발 슬롯이 열렸습니다. 비용 {cost}, 시간 소모 없음.";
+            LastMessage = $"{GetEnginePresetConfig(presetId).DisplayName} 개발 슬롯이 열렸습니다. 비용 {balanceConfig.NewEnginePresetCost}, 시간 소모 없음.";
             return ResearchActionResult.Success;
         }
 

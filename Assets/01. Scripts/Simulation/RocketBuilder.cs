@@ -36,6 +36,10 @@ namespace Simulation
         [Tooltip("좌측 패널에 띄울 엔진 프리셋 목록.")]
         [SerializeField] private EnginePresetLibrarySO presetLibrary;
 
+        [Header("Attachment sparks")]
+        [Tooltip("엔진 장착이 확정될 때 접합부에서 한 번 재생할 스파크.")]
+        [SerializeField] private ParticleSystem attachmentSparksPrefab;
+
         [Header("Cinemachine")]
         [Tooltip("설계 단계 카메라. 이 트랜스폼이 궤도 회전·줌의 결과를 받는다.")]
         [SerializeField] private CinemachineCamera designCam;
@@ -251,27 +255,17 @@ namespace Simulation
         }
 
         private SoundHandle _gearSound;
-        private float _lastRotationMotion = float.NegativeInfinity;
-        private const float RotationSoundIdleSeconds = 0.12f;
 
         private void Update()
         {
             RocketPart part = _selected;
             Quaternion before = part != null ? part.transform.localRotation : Quaternion.identity;
             UpdateInput();
-            bool dragging = part != null && part == _selected && _mode == EditMode.Rotate
+            bool rotating = part != null && part == _selected && _mode == EditMode.Rotate
                 && _grabAxis >= 0 && rocket != null && !rocket.Launched
                 && part.transform.IsChildOf(rocket.transform)
-                && Mouse.current != null && Mouse.current.leftButton.isPressed;
-            bool moved = dragging && Quaternion.Angle(before, part.transform.localRotation) > 0.01f;
-            UpdateRotationSoundForMotion(dragging, moved, Time.unscaledTime);
-        }
-
-        private void UpdateRotationSoundForMotion(bool dragging, bool moved, float now)
-        {
-            if (dragging && moved) _lastRotationMotion = now;
-            // Input sampling and angle snapping leave short gaps even during a continuous drag.
-            UpdateRotationSound(dragging && now - _lastRotationMotion < RotationSoundIdleSeconds);
+                && Quaternion.Angle(before, part.transform.localRotation) > 0.01f;
+            UpdateRotationSound(rotating);
         }
 
         private void UpdateRotationSound(bool rotating)
@@ -280,7 +274,6 @@ namespace Simulation
             {
                 _gearSound.Stop();
                 _gearSound = SoundHandle.Invalid;
-                _lastRotationMotion = float.NegativeInfinity;
                 return;
             }
             if (!_gearSound.IsValid && SoundManager.Instance != null)
@@ -926,6 +919,7 @@ namespace Simulation
             else if (_overRocket)
             {
                 rocket.Attach(part, _attachPoint);
+                PlayAttachmentSparks();
                 for (int i = 0; i < 2; i++)
                     SoundManager.Instance?.PlaySfx("engine_attach");
             }
@@ -934,6 +928,22 @@ namespace Simulation
                 Destroy(part.gameObject);
                 Select(null);
             }
+        }
+
+        private void PlayAttachmentSparks()
+        {
+            if (attachmentSparksPrefab == null) return;
+
+            Vector3 local = rocket.transform.InverseTransformPoint(_attachPoint);
+            Vector3 surface = ProjectOntoCapsule(local, _bodyHalfSegment, _bodyRadius, local);
+            var onAxis = new Vector3(0f, Mathf.Clamp(local.y, -_bodyHalfSegment, _bodyHalfSegment), 0f);
+            Vector3 outward = rocket.transform.TransformDirection(surface - onAxis).normalized;
+            Vector3 position = rocket.transform.TransformPoint(surface) + outward * 0.06f;
+            var sparks = Instantiate(attachmentSparksPrefab, position,
+                Quaternion.FromToRotation(Vector3.forward, outward));
+            // 로켓 이동과 독립적으로 남되, 설계 씬을 닫으면 함께 정리한다.
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(sparks.gameObject, gameObject.scene);
+            sparks.Play(true);
         }
 
         // ---- 선택 부품 편집 (축 구속 기즈모) --------------------------------------------------

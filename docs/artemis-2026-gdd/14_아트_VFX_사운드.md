@@ -15,6 +15,31 @@
 
 실제 아르테미스 장비를 정확히 복제할 필요는 없다. 게임 내 기체는 프로젝트를 상징하는 간소화된 창작 디자인으로 통일한다.
 
+### Main 연구실 조명
+
+`Assets/00. Scenes/01_Main.unity`의 연구실은 어두운 밤 작업실로 표현한다.
+따뜻한 회갈색 환경광으로 벽과 가구의 윤곽을 남기고, 엔진 받침대와 오른쪽 작업대에
+호박색 빛을 모은다. 홀로그램 주변의 청록빛과 창가의 약한 푸른빛은 보조광으로 사용한다.
+
+- 환경: `Assets/05. Arts/Material/ResearchLabNightSky.mat`. 기존
+  `Sky/AtmosphereNebulaBlend` 셰이더의 짙은 남색 그라디언트를 사용하며, 노출은 0.25,
+  환경 반사 강도는 0.16이다. 환경광은 Color 모드, RGB `(0.68, 0.64, 0.57)`이다.
+- 조명: `Engine Research Lab` 아래의 `Warm Engine Key`는 강도 8의 스폿라이트,
+  `Warm Workbench Practical`은 강도 3의 포인트라이트다. `Cyan Hologram Bounce`는
+  강도 0.95, `Cool Window Light`는 강도 3.5로 설정했다. 그림자가 있는 세 조명은
+  URP Medium 해상도(현재 PC 설정에서 512)를 사용한다.
+- 포스트프로세싱: `Assets/Settings/ResearchLabVolumeProfile.asset`에 ACES,
+  노출 -0.2 EV, 대비 10, 채도 -5, 색온도 7을 적용한다. Bloom은 임계값 0.7,
+  강도 0.4, Scatter 0.6이며, Vignette 강도는 0.25다.
+- Main Camera의 포스트프로세싱과 디더링을 활성화한다. Global Volume은 연구실 루트의
+  자식으로 두어 연구실을 숨기면 함께 비활성화되고, 복귀하면 다시 적용된다.
+
+Game View와 Play Mode에서 화면을 확인하고, 설계 화면 진입 시 Volume 비활성화와
+연구실 복귀 시 Volume·하늘 복원을 확인했다. 런타임 C# 변경은 없으며, 배치 빌드와
+전체 EditMode/PlayMode 테스트는 실행하지 않았다.
+마지막 Play Mode 종료 때 `SteamAudioManager.ShutDown()`에서 `NullReferenceException`이
+발생했다. 조명 변경과 별개로 오디오 종료 처리는 추가 확인이 필요하다.
+
 ## 2. 필수 3D 에셋
 
 | 우선순위 | 에셋 | 수량 | 재사용 |
@@ -132,7 +157,7 @@ Texture Sheet Animation의 Start Frame을 무작위로 선택하고 Frame over T
 - 미션 아이콘 6개
 - 공개 테스트 아이콘
 - 비공개 테스트 아이콘
-- 등급 배지 S/A/B/C/F
+- 성공·실패 상태 아이콘
 - 잠금 아이콘
 - 연구비 아이콘
 - 시간 또는 달력 아이콘
@@ -191,14 +216,11 @@ ID와 파일의 대응은 아래 표와 같으며, 볼륨과 피치는 1, 공간
 `Assets/04. Audios/SFX/gear.mp3`를 `gear` ID로 등록했다. 볼륨 0.65, 피치 1,
 반복·2D 재생이며, Decompress On Load와 Preload Audio Data를 사용한다.
 `RocketBuilder`는 로켓에 부착된 선택 엔진의 실제 로컬 회전이 바뀌는 프레임에만
-루프를 시작한다. 입력 샘플링·스냅으로 각도가 바뀌지 않는 짧은 프레임은 최대 0.12초까지
-같은 음원으로 이어 재생한다. 그 이상 멈추면 정지하며, 마우스를 놓으면 즉시 정지한다.
-원본 gear 클립 앞에 약 0.067초 무음이 있어 매 프레임 정지·재시작하면 소리가 나기 전에 끊기는 문제를 방지한다.
+루프를 유지한다. 핸들을 잡은 채 멈추거나 스냅으로 각도가 고정되면 즉시 정지한다.
 같은 루프를 매 프레임 다시 시작하지 않으며, 이동·카메라 회전에는 재생하지 않는다.
 모드 변경, 선택 변경·삭제, 화면 비활성화, 포커스 상실과 파괴 시에도 해당 루프를 정지한다.
 
-`RocketBuilderGearAudioTests` Play Mode 테스트 3개로 단일 루프 유지, 짧은 입력 공백 유지,
-0.12초 정지와 마우스 해제 즉시 정지·재시작,
+`RocketBuilderGearAudioTests` Play Mode 테스트 2개로 단일 루프 유지, 즉시 정지·재시작,
 다른 효과음 유지, 비활성화·포커스 상실 정지를 확인했다. Unity 컴파일을 통과했다.
 실제 마우스로 회전 핸들을 드래그하는 전체 조작은 이번 테스트에 포함하지 않았다.
 
@@ -344,7 +366,7 @@ Final verification confirmed.
 1. 카운트다운과 점화
 2. 설계 오류가 보이는가
 3. 사고 원인이 보이는가
-4. 성공·부분 성공·실패 결말 차이
+4. 성공·실패 결말 차이
 5. 최종 미션 성공 보상
 6. 추가 카메라와 장식
 

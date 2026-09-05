@@ -54,7 +54,7 @@ namespace Border.Research
         [SerializeField, Min(0.01f)] private float targetPreviewHeight = 1.25f;
         [SerializeField] private float targetPreviewGroundY;
         [SerializeField] private Vector3 previewLocalEulerAngles = new(-90f, 0f, 0f);
-        [SerializeField] private float engineSpinDegreesPerSecond = 16f;
+        [SerializeField] private float engineSpinDegreesPerSecond = 8f;
         [SerializeField] private bool showEditModePreview = true;
         [SerializeField] private EnginePresetId editModePreviewPresetId = EnginePresetId.Engine01;
         [SerializeField] private EngineVisualArchetype editModePreviewArchetype = EngineVisualArchetype.Balanced;

@@ -36,6 +36,9 @@ namespace Border.Research
                 Debug.LogError("Research test visibility dialog prefab has missing bindings.", this);
                 return;
             }
+            // Activate first, then write all dynamic labels. This prevents the prefab's serialized
+            // placeholder from being restored by UI enable callbacks when the dialog is reopened.
+            gameObject.SetActive(true);
             model = currentModel;
             confirm = onConfirm;
             bool finalMission = missionId == LaunchMissionId.LowPowerZoneHold;
@@ -43,6 +46,7 @@ namespace Border.Research
             privateToggle.SetIsOnWithoutNotify(!finalMission);
             LaunchMissionConfig mission = model.GetConfiguredMissionConfig(missionId);
             missionText.text = $"MISSION {(int)missionId} : {mission.DisplayName}";
+            missionText.ForceMeshUpdate();
             publicDetails.text = Describe(TestVisibility.Public, finalMission);
             privateDetails.text = Describe(TestVisibility.Private, finalMission);
             TMP_Text confirmLabel = confirmButton.GetComponentInChildren<TMP_Text>(true);
@@ -54,7 +58,6 @@ namespace Border.Research
             IsOpen = true;
             confirmButton.onClick.AddListener(Confirm);
             cancelButton.onClick.AddListener(Hide);
-            gameObject.SetActive(true);
             PlayPopIn();
         }
 
