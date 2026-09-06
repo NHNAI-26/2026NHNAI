@@ -34,6 +34,7 @@
 
 - [발사 테스트 미션 예시](launch-test-progression.md)
 - [발사 결과 이벤트 기획](launch-outcome-events.md)
+- [AI 프롬프트 활용 기록](ai-prompt-usage.md)
 
 ### 문서 적용 기준
 
